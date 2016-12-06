@@ -1,0 +1,235 @@
+module vyatta-service-dhcpv6-server-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-dhcpv6-server:1";
+	prefix vyatta-service-dhcpv6-server-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-09-30 {
+		description "use hardware address to identify host in static-mapping";
+	}
+
+	revision 2015-09-16 {
+		description "fix prefix-delegation bug";
+	}
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /service:service {
+		container dhcpv6-server {
+			presence "true";
+			configd:priority "900";
+			configd:help "DHCP for IPv6 (DHCPv6) server";
+			configd:end "/opt/vyatta/share/tmplscripts/service/dhcpv6-server/configd_end.sh";
+			leaf preference {
+				type uint32 {
+					range 0..255 {
+						error-message "Preference must be between 0 and 255";
+					}
+				}
+				configd:help "Preference of this DHCPv6 server compared with others";
+			}
+			container listento {
+				configd:help "force dhcpdv6 listens to interfaces";
+				leaf-list interface {
+					type string;
+					ordered-by "user";
+					configd:help "interfaces dhcpdv6 listens to";
+					configd:allowed "/opt/vyatta/share/tmplscripts/service/dhcpv6-server/interface/configd_allowed.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/service/dhcpv6-server/configd_validate1.cli";
+				}
+			}
+			list static-mapping {
+			     	configd:help "Name of static mapping";
+				key "tagnode";
+				leaf tagnode {
+				     type string;
+				     configd:help "Name of static mapping";
+				}
+				leaf identifier {
+					mandatory true;
+					type union {
+						type string {
+							configd:syntax "/opt/vyatta/share/tmplscripts/service/dhcpv6-server/static-mapping/configd_syntax1.cli";
+							configd:help "DUID: DUID-LLT, DUID-EN, DUID-EL or DUID-UUID";
+						}
+						type types:mac-address;
+					}
+					configd:help "Static mapping identifier: either DUID or mac-address";
+				}
+				leaf ipv6-address {
+					mandatory true;
+					type types:ipv6-address;
+					configd:help "Client IPv6 address for this static mapping";
+				}
+			}
+			list shared-network-name {
+				configd:help "DHCPv6 shared network name [REQUIRED]";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern '[-_a-zA-Z0-9\.]+' {
+							configd:error-message "invalid DHCP pool name \"$VAR(@)\"";
+						}
+					}
+					configd:help "DHCPv6 shared network name [REQUIRED]";
+				}
+				list subnet {
+					configd:help "IPv6 DHCP subnet for this shared network [REQUIRED]";
+					key "tagnode";
+					leaf tagnode {
+						type types:ipv6-prefix;
+						configd:help "IPv6 DHCP subnet for this shared network [REQUIRED]";
+					}
+					leaf description {
+						type string;
+						configd:help "Description of this subnet";
+					}
+					leaf-list domain-search {
+						type string {
+							pattern '[-_a-zA-Z0-9\.]+' {
+								configd:error-message "invalid domain name syntax \"$VAR(@)\"";
+							}
+						}
+						ordered-by "user";
+						configd:help "Domain name for client to search";
+					}
+					leaf-list nisplus-server {
+						type types:ipv6-address;
+						ordered-by "user";
+						configd:help "IPv6 address of a NIS Plus server";
+					}
+					leaf-list nis-server {
+						type types:ipv6-address;
+						ordered-by "user";
+						configd:help "IPv6 address of a NIS server";
+					}
+					container address-range {
+						presence "true";
+						configd:help "Parameters setting ranges for assigning IPv6 addresses";
+						list prefix {
+							configd:help "IPv6 prefix defining range of addresses to assign";
+							key "tagnode";
+							leaf tagnode {
+								type types:ipv6-prefix;
+								configd:help "IPv6 prefix defining range of addresses to assign";
+							}
+							leaf temporary {
+								type empty;
+								configd:help "Address range will be used for temporary addresses";
+							}
+						}
+						list start {
+							configd:help "First in range of consecutive IPv6 addresses to assign";
+							key "tagnode";
+							leaf tagnode {
+								type types:ipv6-address;
+								configd:help "First in range of consecutive IPv6 addresses to assign";
+							}
+							leaf stop {
+								type types:ipv6-address;
+								configd:help "Last in range of consecutive IPv6 addresses";
+							}
+						}
+					}
+					leaf nisplus-domain {
+						type string {
+							pattern '[-_a-zA-Z0-9\.]+' {
+								configd:error-message "invalid NIS Plus domain name syntax \"$VAR(@)\"";
+							}
+						}
+						configd:help "NIS Plus domain name for client to use";
+					}
+					leaf-list sip-server-name {
+						type string {
+							pattern '[-_a-zA-Z0-9\.]+' {
+								configd:error-message "invalid SIP server name syntax \"$VAR(@)\"";
+							}
+						}
+						ordered-by "user";
+						configd:help "SIP server name";
+					}
+					leaf-list name-server {
+						type types:ipv6-address;
+						ordered-by "user";
+						configd:help "IPv6 address of a Recursive DNS Server";
+					}
+					leaf-list sip-server-address {
+						type types:ipv6-address;
+						ordered-by "user";
+						configd:help "IPv6 address of a SIP name server";
+					}
+					container prefix-delegation {
+						configd:help "Parameters relating to IPv6 prefix delegation";
+						list start {
+							configd:help "First in range of IPv6 addresses to be used in prefix delegation";
+							key "startip";
+							leaf startip {
+								type types:ipv6-address;
+								configd:help "First in range of IPv6 addresses to be used in prefix delegation";
+							}
+							leaf stop {
+								mandatory true;
+								type types:ipv6-address;
+								configd:help "Last in range of IPv6 addresses to be used in prefix delegation";
+							}
+							leaf prefix-length {
+								mandatory true;
+								type uint32 {
+									range 0..128;
+								}
+								configd:help "Length in bits of prefixes to be delegated";
+							}
+						}
+					}
+					leaf-list sntp-server {
+						type types:ipv6-address;
+						ordered-by "user";
+						configd:help "IPv6 address of an SNTP Server for client to use";
+					}
+					leaf nis-domain {
+						type string {
+							pattern '[-_a-zA-Z0-9\.]+' {
+								configd:error-message "invalid NIS domain name syntax \"$VAR(@)\"";
+							}
+						}
+						configd:help "NIS domain name for client to use";
+					}
+					container lease-time {
+						presence "true";
+						configd:help "Parameters relating to the lease time";
+						leaf maximum {
+							type uint32;
+							configd:help "Maximum time (in seconds) that will be assigned to a lease";
+						}
+						leaf default {
+							type uint32;
+							configd:help "Default time (in seconds) that will be assigned to a lease";
+						}
+						leaf minimum {
+							type uint32;
+							configd:help "Minimum time (in seconds) that will be assigned to a lease";
+						}
+					}
+				}
+			}
+		}
+	}
+}

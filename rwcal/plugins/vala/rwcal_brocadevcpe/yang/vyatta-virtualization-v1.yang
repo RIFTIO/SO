@@ -1,0 +1,973 @@
+module vyatta-virtualization-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-virtualization:1";
+	prefix vyatta-virtualization-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import ietf-yang-types {
+		prefix ytypes;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		Postal: 130 Holger Way
+			San Jose, CA 95134
+		E-mail: support@Brocade.com
+		Web: www.brocade.com";
+
+	revision 2016-01-29 {
+		description "Remove redundant and unused imports";
+	}
+
+	revision 2015-12-02 {
+		description "Restrict IDE disks to the range <0..3>";
+	}
+
+	revision 2015-05-12 {
+		description "Initial revision";
+	}
+
+	grouping location {
+		leaf location {
+			mandatory true;
+			type string;
+		}
+	}
+
+	grouping source {
+		container source {
+			uses location {
+				refine location {
+					description "Location where the image can be found";
+				}
+			}
+		}
+	}
+
+	grouping target {
+		container target {
+			leaf name {
+				type string;
+				description "Local target name, if no target is specified
+					use remote file name and place file in
+					/var/lib/libvirt";
+			}
+		}
+	}
+	grouping source-target {
+		uses source;
+		uses target;
+	}
+
+     /* RIFT COMMENT
+	grouping deploy-options {
+		leaf-list option {
+			type enumeration {
+				enum force {
+					description "Overwrite existing guest config and disk images.
+
+						This option will cause any existing guests that
+						have conflicting names to be overwritten.
+
+						Likewise, any disk images in conflicting locations
+						will be overwritten by those being deployed.";
+				}
+				enum save {
+					description "Save config if deployment is successful.
+
+						This option causes the entire configuration
+						at the completion of deployment to be saved
+						as the boot-up configuration.
+
+						This will result in unrelated, previously
+						committed but un-saved configuration to be
+						saved as the boot-up configuration.";
+				}
+			}
+		}
+	}
+
+	grouping deploy-output {
+		leaf output {
+			description "Any messages reported during the deployment";
+			type string;
+		}
+	}
+       END OF RIFT COMMENT-1 */
+
+	typedef guest-name {
+		description "The name of a guest";
+		type types:alpha-numeric {
+		     configd:help "Guest name";
+		}
+	}
+       
+        /* RIFT COMMENT-2
+
+	grouping libvirt-xml-deploy-options {
+		container libvirt-xml {
+			uses location {
+				refine location {
+					description "Location where the XML can be found";
+				}
+			}
+		}
+		container image {
+			uses location {
+				refine location {
+					description "Location where the qcow2 image can be found";
+				}
+			}
+		}
+		container iso {
+			uses location {
+				refine location {
+					description "Location where the ISO can be found";
+					mandatory false;
+				}
+			}
+		}
+	}
+
+	rpc deploy-image {
+		description "Deploy a libvirt XML file and images on this device.
+
+			The XML and images must be stored on an accessible server
+			using a supported protocol (HTTP, HTTPS or FTP) or locally";
+
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=deploy-image";
+		input {
+			uses libvirt-xml-deploy-options;
+			uses deploy-options;
+		}
+		output {
+			uses deploy-output;
+		}
+	}
+        END OF RIFT COMMENT-2 */
+
+        /* BEGINNING OF COMMENT-BLOCK-1
+	grouping upgrade-options {
+		leaf-list option {
+			type enumeration {
+				enum keep-old-images {
+					description "Keep old images from the previous guest configuration
+
+						By default, following a successful upgrade, images
+						which were previously used by the guest, and are no 
+						longer used in the new configuration, are deleted.
+
+						This option will prevent old disk images which 
+						are no longer used by the guest configuration from
+						being deleted.";
+				}
+			}
+		}
+	}
+
+	rpc upgrade-xml {
+		description "Upgrade a guest using libvirt XML and, optionally, images.
+
+			The XML and images must be stored on an accessible server
+			using a supported protocol (HTTP, HTTPS or FTP) or locally";
+
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=upgrade-xml";
+		input {
+			uses libvirt-xml-deploy-options {
+				refine image/location {
+					mandatory false;
+				}
+			}
+			uses upgrade-options;
+		}
+		output {
+			uses deploy-output;
+		}
+	}
+         END OF COMMENT-BLOCK-1 */
+
+        /* RIFT-COMMENT
+	rpc deploy-ova {
+		description "Deploy an OVA file on this device.
+
+			The OVA file must be stored on an accessible server using a
+			supported protocol (HTTP, HTTPS or FTP) or locally";
+
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=deploy-ova";
+		input {
+			uses source;
+			leaf deployment-configuration {
+				type string;
+				description "ID of the OVF deployment configuration to use.
+
+					If the OVF contains a DeploymentOptionSection this
+					parameter can be used to choose one of the configurations.
+
+					If the OVF contains a DeploymentOptionSection and
+					this parameter is not used, then the default
+					configuration will be chosen.
+
+					There is no effect if this option is used when the
+					OVF does not have a DeploymentOptionSection.";
+			}
+			uses deploy-options;
+		}
+		output {
+			uses deploy-output;
+		}
+	}
+         END OF RIFT-COMMENT 4 */
+
+	typedef guest-disk-id {
+		description "The ID of a disk attached to a guest";
+		type uint8 {
+			range 0..7;
+		}
+	}
+
+        /* BEGINNING OF COMMENT-BLOCK-2
+	rpc upgrade-images {
+		description "Deploy new disk images on this device
+
+			The images must be stored on an accessible server using a
+			supported protocol (HTTP, HTTPS or FTP) or locally";
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=upgrade-images";
+		input {
+			leaf name {
+				description "The guest name to upgrade disk images for";
+				mandatory true;
+				type guest-name;
+			}
+			list images {
+				description "The list of disks to upgrade images for";
+				min-elements 1;
+				max-elements 8;
+				key disk-id;
+				leaf disk-id {
+					type guest-disk-id;
+				}
+				uses source;
+			}
+			uses upgrade-options;
+		}
+		output {
+			uses deploy-output;
+		}
+	}
+        END OF COMMENT-BLOCK-2 */
+
+	grouping image-management-from {
+		container from {
+			description "Local 'from' path";
+			uses location;
+		}
+	}
+
+	grouping image-management-to {
+		container to {
+			description "Local 'to' path";
+			uses location;
+		}
+	}
+
+	rpc list-images {
+		description "List all images in /var/lib/libvirt/images";
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=list-images";
+		output {
+			list images {
+				description "The list of guest images in /var/lib/libvirt/images";
+				key image;
+				leaf image {
+					description "Relative path of the image under /var/lib/libvirt/images";
+					type string;
+				}
+			}
+		}
+	}
+
+	rpc copy-image {
+		description "Copy an image between local paths
+
+			Any existing file will be overwritten.
+
+			All paths should be relative to /var/lib/libvirt/images.";
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=copy-image";
+		input {
+                        uses image-management-from;
+                        uses image-management-to;
+                        /* RIFT -COMMENT
+			uses image-management-from {
+				refine from {
+					description "Local path of the existing image to copy";
+				}
+			}
+			uses image-management-to {
+				refine to {
+					description "New local path to copy the image to";
+				}
+			}
+                         RIFT -COMMENT */
+		}
+	}
+        /* RIFT-COMMENT-5
+
+	rpc move-image {
+		description "Move an image between local paths
+
+			Any existing file will be overwritten.
+
+			The move will fail if the existing image is still referenced
+			by a guest configuration.
+
+			All paths should be relative to /var/lib/libvirt/images.";
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=move-image";
+		input {
+			uses image-management-from {
+				refine from {
+					description "Local path of the image to move";
+				}
+			}
+			uses image-management-to {
+				refine to {
+					description "Local path where the image should be moved to";
+				}
+			}
+		}
+	}
+        END OF RIFT COMMENT-5 */
+
+	rpc delete-image {
+		description "Delete a local image
+
+			The delete will fail if the image is still referenced by a
+			guest configuration.
+
+			The image path should be relative to /var/lib/libvirt/images";
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=delete-image";
+		input {
+			container image {
+				description "Local path of the image to delete";
+				uses location;
+			}
+		}
+	}
+
+	grouping remote-image-management-options {
+		container remote {
+			description "Remote image URI";
+			uses location;
+		}
+		container local {
+			description "Local image path";
+			uses location;
+		}
+		container authentication {
+			presence "Using authentication";
+			description "Use username/password authentication for the remote operation";
+			leaf username {
+				description "Username for the remote server";
+				must "not(contains(., ':'))" {
+					error-message "username cannot contain colons";
+				}
+				type string;
+				mandatory true;
+			}
+			leaf password {
+				description "Password for the remote server";
+				type string;
+				mandatory true;
+			}
+		}
+		leaf-list option {
+			description "Options for remote image operations";
+			type enumeration {
+				enum disable-verification {
+					description "Disable verification
+
+						When using an SSL enabled protocol this disables
+						certificate verification.";
+				}
+			}
+		}
+	}
+
+	grouping remote-image-management-output {
+		leaf output {
+			description "The result of the operation";
+			type string;
+		}
+	}
+
+	rpc download-image {
+		description "Download an image from a remote server
+
+			Supported protocols include HTTP, HTTPS, FTP, SFTP, SCP.
+
+			Any existing file will be overwritten.
+
+			Host key verification is not performed for SSH based protocols.";
+		configd:call-rpc "curl-wrap.py --download";
+		input {
+                       /* WORKAROUND FOR  REFINE ISSUE
+			uses remote-image-management-options {
+				refine local/location {
+					description "Local path to download the image to
+
+						This should be relative to /var/lib/libvirt/images";
+					mandatory false;
+				}
+				refine remote/location {
+					description "URI specifying the location where the image can be downloaded
+
+						For example:
+							http://server/remote/dir/image
+							ftp://server/remote/dir/image
+							scp://server/remote/dir/image";
+				}
+			} */
+                        uses remote-image-management-options;
+		}
+		output {
+			uses remote-image-management-output;
+		}
+	}
+
+	rpc upload-image {
+		description "Upload an image to a remote server
+
+			Supported protocols include FTP, SFTP, SCP.
+
+			Any existing file will be overwritten.
+
+			Host key verification is not performed for SSH based protocols.";
+		configd:call-rpc "curl-wrap.py --upload";
+		input {
+                       /* WORKAROUND FOR REFINE ISSUE
+			uses remote-image-management-options {
+				refine local/location {
+					description "Path to the local image to upload
+
+						This should be relative to /var/lib/libvirt/images";
+				}
+				refine remote/location {
+					description "URI specifying the location to upload the image to
+
+						For example:
+							ftp://server/remote/dir/path
+							scp://server/remote/dir/path";
+				}
+			}
+                        */
+                      uses remote-image-management-options;
+		}
+		output {
+			uses remote-image-management-output;
+		}
+	}
+
+	rpc start-guest {
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=start-guest";
+		description "Startup a defined guest";
+		input {
+			leaf name {
+				description "Name of the guest to start; must have been previously
+					deployed or otherwise configured.";
+				mandatory true;
+				type guest-name;
+			}
+		}
+	}
+
+	grouping graceful {
+		leaf graceful-timeout {
+			description "The amount of time to wait for
+				graceful shutdown before forcibly killing
+				the guest";
+			type uint16 {
+				range 0..300;
+			}
+			default 300;
+		}
+	}
+
+	rpc stop-guest {
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=stop-guest";
+		description "Shutdown a running guest";
+		input {
+			leaf name {
+				description "Name of guest to stop; must be running";
+				mandatory true;
+				type guest-name;
+			}
+			uses graceful;
+		}
+	}
+
+	rpc restart-guest {
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=restart-guest";
+		description "Restart a running guest";
+		input {
+			leaf name {
+				description "Name of guest to restart; must be running";
+				mandatory true;
+				type guest-name;
+			}
+			uses graceful;
+		}
+	}
+
+	grouping snapshot-request {
+		leaf guest-name {
+			description "Name of guest";
+			type guest-name;
+			mandatory true;
+		}
+		leaf name {
+			description "Name of snapshot";
+			type string;
+			mandatory true;
+		}
+	}
+
+	rpc create-snapshot {
+		description "Create a new guest snapshot";
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=create-snapshot";
+		input {
+			uses snapshot-request;
+			leaf description {
+				description "A description of why this snapshot was created";
+				type string;
+			}
+		}
+	}
+
+	rpc delete-snapshot {
+		description "Delete an existing guest snapshot";
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=delete-snapshot";
+		input {
+			uses snapshot-request;
+		}
+	}
+
+	rpc restore-snapshot {
+		description "Restore an existing guest snapshot";
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=restore-snapshot";
+		input {
+			uses snapshot-request;
+		}
+	}
+
+	rpc generate-mac {
+		description "Generate a random MAC address";
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=generate-mac";
+		output {
+			leaf address {
+				type types:mac-address;
+			}
+		}
+	}
+
+	rpc generate-uuid {
+		description "Generate a random UUID";
+		configd:call-rpc "vyatta-hypervisor --action=rpc -- --rpc=generate-uuid";
+		output {
+			leaf uuid {
+				type ytypes:uuid;
+			}
+		}
+	}
+
+	typedef local-vhost-interface {
+		description "A locally hosted vhost interface";
+		type string {
+			pattern "dp0vhost[0-9]+";
+			configd:pattern-help "<dp0vhostN>";
+		}
+	}
+
+	typedef libvirt-guest-actions {
+		description "Actions that may be performed on a guest";
+		type enumeration {
+			enum "reset" {
+				description "Force reset the guest";
+				configd:help "Reset guest";
+			}
+			enum "poweroff" {
+				description "Force power off the guest";
+				configd:help "Power off guest";
+			}
+			enum "none" {
+				description "Do nothing to the guest";
+				configd:help "Take no action";
+			}
+		}
+	}
+
+	container virtualization {
+		description "Virtualization and guests
+
+			Virtualization and guest parameters.
+			Guest properties are configured via this model.";
+		configd:help "Virtualization and Guests";
+		configd:end "vyatta-hypervisor --action=apply";
+		container guest-state {
+			config false;
+			configd:get-state "/opt/vyatta/sbin/vyatta-hypervisor --action=get-vm-state";
+			description "The state of all configured guests "
+				+ "on the system";
+			list guest {
+				key "name";
+				leaf name {
+					description "Name of the guest";
+					type guest-name;
+				}
+				leaf uuid {
+					description "The unique identifier for this guest";
+					type ytypes:uuid;
+				}
+				leaf state {
+					description "Current running state of the guest";
+					type enumeration {
+						enum nostate;
+						enum running;
+						enum blocked;
+						enum paused;
+						enum shutdown;
+						enum shutoff;
+						enum crashed;
+						enum pmsuspended;
+					}
+				}
+				leaf cpu-count {
+					description "Number of CPUs assigned to this guest";
+					type uint32;
+				}
+				leaf memory-current {
+					description "Amount of memory currently in use by this guest";
+					type uint32;
+				}
+				leaf memory-limit {
+					description "Maximum amount of memory this guest may use";
+					type uint32;
+				}
+				leaf cpu-time {
+					description "Amount of CPU time this guest has used";
+					type uint64;
+				}
+				list snapshots {
+					description "A list of snapshots for this guest";
+					key "name";
+					leaf name {
+						description "Name of this snapshot";
+						type string;
+					}
+					leaf date {
+						description "Date the snapshot was taken";
+						type ytypes:date-and-time;
+					}
+					leaf state {
+						description "State of this snapshot";
+						type string;
+					}
+					leaf description {
+						description "A string describing this snapshot";
+						type string;
+					}
+					leaf parent {
+						description "The snapshot from which this snapshot is derived";
+						type string;
+					}
+				}
+			}
+		}
+
+		leaf snmp-agent {
+			description "Virtualization snmp-agent";
+			configd:help "Virtualization snmp-agent";
+			type boolean;
+			default false;
+		}
+
+		list guest {
+			description "The list of configured guests.";
+			configd:help "Guest";
+			unique "devices/display/port";
+			unique "uuid";
+			key "name";
+			leaf name {
+				description "The name of the guest.
+
+					This is the unique reference for all operations
+					related to this vm. Including any RPCs.";
+				type guest-name;
+			}
+			leaf uuid {
+				configd:help "UUID for this guest";
+				description "UUID for this guest";
+				mandatory true;
+				type ytypes:uuid;
+			}
+			leaf autostart {
+				configd:help "Start at boot up";
+				description "Start the guest at boot up
+
+					If this option is defined, the guest will
+					be started after it is defined, and subsequently started
+					on each time the device boots";
+				type boolean;
+				default true;
+			}
+			leaf cpus {
+				configd:help "Number of CPUs";
+				description "Number of CPUs
+
+					Defines the number of virtual CPUs to assign to this
+					guest";
+				type uint8 {
+					range "1..8";
+				}
+				default 1;
+			}
+			leaf cpuset {
+				configd:help "CPU affinity";
+				description "CPU affinity
+
+					Defines the mapping of virtual CPUs to physical CPUs.";
+				type types:cpu-range;
+			}
+			leaf memory {
+				configd:help "Amount of RAM (MB)";
+				description "Memory allocated to this guest.
+
+					This memory will be pre-reserved on the host system.
+					This means that only the required amount of memory should
+					be reserved.";
+				type uint16 {
+					range "1..6144";
+				}
+				default 1024;
+			}
+			container devices {
+				description "Virtual devices assigned to this vm.
+
+					Each guest may be allocated a number of
+					virtual devices, including video, display, disks and
+					network adapters.";
+				must "count(disk/boot-order) > 0" {
+					description "At least one bootable disk must be defined
+						so the guest will come up.";
+					error-message "Must specify one bootable disk; " +
+						"please set boot-order on at least one disk";
+				}
+				configd:help "Peripheral Devices";
+				container video {
+					description "Video card device.
+
+						Specifies the parameters for the video device
+						by default this will be a QXL device with
+						64MB of video memory";
+					configd:help "Video card";
+					leaf model {
+						description "The type of video device.
+
+							Specifies which type of video device
+							to expose to the guest.";
+						configd:help "Type of graphics card";
+						type enumeration {
+							enum "qxl" {
+								configd:help "QXL accelerated graphics";
+							}
+							enum "cirrus" {
+								configd:help "Unaccelerated Cirrus compatible graphics";
+							}
+							enum "vga" {
+								configd:help "Unaccelerated VGA compatible graphics";
+							}
+						}
+						default "qxl";
+					}
+					leaf memory {
+						description "The amount of video memory";
+						configd:help "Video RAM (KB)";
+						type uint32 {
+							range "1..65536";
+						}
+						default "65536";
+					}
+				}
+				container display {
+					description "Display device
+
+						In addition to the graphics device, one may
+						connect a display that is accessible vi a remote
+						TCP port. Two protocols are supported VNC and spice.
+						Of the two, spice is the faster and more modern
+						protocol, but VNC has clients on more platforms.";
+					presence "Enable remote display";
+					configd:help "Remote display";
+					leaf connection-type {
+						description "The type of remote access connection";
+						configd:help "Remote access connection type";
+						type enumeration {
+							enum "vnc" {
+								configd:help "VNC remote access";
+							}
+							enum "spice" {
+								configd:help "Spice remote access";
+							}
+						}
+						default "vnc";
+					}
+					leaf port {
+						description "TCP port number on which to listen";
+						configd:help "Remote access port number";
+						type uint16 {
+							range 5900..max;
+						}
+						mandatory true;
+					}
+					leaf password {
+						configd:help "Remote access password";
+						description "Password for connection";
+						configd:secret true;
+						type string;
+						mandatory true;
+					}
+					leaf address {
+						configd:help "Remote access IP address";
+						description "IP address on which to listen";
+						type types:ip-address;
+						default "0.0.0.0";
+					}
+				}
+				list disk {
+					description "Virtual disk devices.
+
+						Two types of disks are allowed, disk and cdrom.
+						If the type is disk then the image must be in qcow2
+						format, the deploy-ova RPC will do the necessary
+						disk format conversions. If the disk type is cdrom
+						then the image must be in ISO-9660 format.";
+					configd:help "Virtual disks";
+					must "not(device-type = 'cdrom' and bus-type = 'virtio')" {
+						error-message "CDROM devices cannot be on a virtio bus";
+					}
+					must "not(bus-type = 'ide' and number(id) > 3)" {
+						error-message "IDE disks must be in the range <0..3>";
+					}
+
+					unique boot-order;
+					min-elements 1;
+					max-elements 8;
+					key "id";
+					leaf id {
+						type guest-disk-id;
+					}
+					leaf device-type {
+						description "The type of image that is attached
+							in this slot.";
+						configd:help "Disk type";
+						mandatory true;
+						type enumeration {
+							enum disk {
+								configd:help "Hard disk";
+							}
+							enum cdrom {
+								configd:help "CDROM";
+							}
+						}
+					}
+					container source {
+						description "The name of the disk image.
+
+							All images are expected to be located in
+							/var/lib/libvirt/images.";
+						configd:help "Source parameters";
+						leaf file {
+							configd:help "Storage file";
+							mandatory true;
+							type string;
+							configd:validate "/opt/vyatta/vyatta-hypervisor/validation/unique-disk-image";
+						}
+					}
+					leaf boot-order {
+						description "The order in which this disk will be
+							queried for boot.
+
+							If this is not defined then the disk will
+							be ignored as a boot option in the BIOS.";
+						configd:help "BIOS boot order for this disk";
+						type uint8 {
+							range 1..8;
+						}
+					}
+					leaf bus-type {
+						description "The type of bus to which this disk
+							is attached.
+
+							Virtio is the fastest and the default.
+							Most Linux or BSD based images will support
+							this bus type. If the guest cannot find the
+							disk try SATA or IDE.";
+						configd:help "Bus type";
+						type enumeration {
+							enum "ide"{
+								configd:help "IDE bus";
+							}
+							enum "sata" {
+								configd:help "SATA bus";
+							}
+							enum "virtio" {
+								configd:help "VirtIO bus";
+							}
+						}
+						default "virtio";
+					}
+				}
+				list network {
+					description "Network interfaces attached to this guest.
+
+						Network interfaces are defined as part of the
+						interfaces tree and referenced here.";
+					configd:help "Network interfaces";
+					key "name";
+					ordered-by user;
+					configd:allowed "echo $VAR(/interfaces/vhost/@@)";
+					leaf name {
+						type local-vhost-interface;
+						configd:allowed "echo $VAR(/interfaces/vhost/@@)";
+						configd:validate "/opt/vyatta/vyatta-hypervisor/validation/if-name";
+					}
+					configd:validate "/opt/vyatta/vyatta-hypervisor/validation/unique-vhost-if";
+					/*must "count(../../../vm/devices/network[name=current()]/name) < 2" {
+						error-message "vhost network assigments must be unique";
+					}*/
+					leaf mac-address {
+						mandatory true;
+						type types:mac-address;
+						configd:help "Guest MAC address";
+					}
+				}
+				container watchdog {
+					description "Watchdog device attached to the guest.
+
+						A virtual hardware device that will perform an
+						action if the hardware is not pinged periodically.
+						The hardware should be paired with a software process
+						inside the guest";
+					configd:help "Watchdog device";
+					leaf action {
+						description "Action to take on watchdog trigger.";
+						configd:help "Watchdog action";
+						type libvirt-guest-actions;
+					}
+				}
+			}
+		}
+	}
+}

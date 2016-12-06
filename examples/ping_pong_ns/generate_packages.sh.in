@@ -1,0 +1,140 @@
+#! /bin/bash
+
+set -e
+set -x
+
+SOURCE_DIR=@CMAKE_CURRENT_SOURCE_DIR@
+BINARY_DIR=@CMAKE_CURRENT_BINARY_DIR@
+PROJECT_TOP_DIR=@PROJECT_TOP_DIR@
+QCOW_IMAGE=${RIFT_ROOT}/images/Fedora-x86_64-20-20131211.1-sda.qcow2
+RIFT_QCOW_IMAGE=${RIFT_ROOT}/images/Fedora-x86_64-20-20131211.1-sda.qcow2
+PONG_QCOW_IMAGE=${RIFT_ROOT}/images/Fedora-x86_64-20-20131211.1-sda-pong.qcow2
+PING_QCOW_IMAGE=${RIFT_ROOT}/images/Fedora-x86_64-20-20131211.1-sda-ping.qcow2
+
+# These paths are needed for finding the overrides and so files
+PYTHONPATH=@RIFT_SUBMODULE_SOURCE_ROOT@/rwvcs/ra:@RIFT_SUBMODULE_BINARY_ROOT@/models/plugins/yang:${PYTHONPATH}
+PYTHON3PATH=@RIFT_SUBMODULE_SOURCE_ROOT@/rwvcs/ra:@RIFT_SUBMODULE_BINARY_ROOT@/models/plugins/yang:${PYTHON3PATH}
+LD_LIBRARY_PATH=@RIFT_SUBMODULE_BINARY_ROOT@/models/plugins/yang:@RIFT_SUBMODULE_BINARY_ROOT@/common/plugins/yang:${LD_LIBRARY_PATH}
+
+#Rift Logos
+PING_VNFD_LOGO=${SOURCE_DIR}/rift_logo.png
+PONG_VNFD_LOGO=${SOURCE_DIR}/rift_logo.png
+PING_PONG_NSD_LOGO=${SOURCE_DIR}/rift_logo.png
+
+# Remove any old directories
+rm -rf ${BINARY_DIR}/ping_vnfd
+rm -rf ${BINARY_DIR}/pong_vnfd
+rm -rf ${BINARY_DIR}/ping_pong_nsd
+
+rm -rf ${BINARY_DIR}/ping_vnfd_with_image
+rm -rf ${BINARY_DIR}/pong_vnfd_with_image
+
+
+rm -rf ${BINARY_DIR}/ping_vnfd_aws
+rm -rf ${BINARY_DIR}/pong_vnfd_aws
+rm -rf ${BINARY_DIR}/ping_pong_nsd_aws
+
+rm -rf ${BINARY_DIR}/ping_vnfd_with_epa
+rm -rf ${BINARY_DIR}/pong_vnfd_with_epa
+rm -rf ${BINARY_DIR}/ping_pong_nsd_with_epa
+
+
+# Generate image md5sum
+ping_md5sum="$(md5sum ${PING_QCOW_IMAGE} | cut -f1 -d" ")"
+pong_md5sum="$(md5sum ${PONG_QCOW_IMAGE} | cut -f1 -d" ")"
+
+# Generate the descriptors (in various formats)
+${SOURCE_DIR}/ping_pong_nsd.py --outdir=${BINARY_DIR} --format=yaml --ping-image-md5=${ping_md5sum} --pong-image-md5=${pong_md5sum} --pong-cloud-init=pong_cloud_init.cfg --ping-cloud-init=ping_cloud_init.cfg
+
+
+# create directories for packages with images
+cp -r ${BINARY_DIR}/ping_vnfd ${BINARY_DIR}/ping_vnfd_with_image
+cp -r ${BINARY_DIR}/pong_vnfd ${BINARY_DIR}/pong_vnfd_with_image
+mkdir -p ${BINARY_DIR}/ping_vnfd_with_image/images
+mkdir -p ${BINARY_DIR}/pong_vnfd_with_image/images
+
+### Generate descriptors for AWS
+${SOURCE_DIR}/ping_pong_nsd.py --outdir=${BINARY_DIR}/aws --format=json --aws
+
+### Move the generated artifacts to appropriate directories
+mv ${BINARY_DIR}/aws/ping_vnfd ${BINARY_DIR}/ping_vnfd_aws
+mv ${BINARY_DIR}/aws/pong_vnfd ${BINARY_DIR}/pong_vnfd_aws
+mv ${BINARY_DIR}/aws/ping_pong_nsd ${BINARY_DIR}/ping_pong_nsd_aws
+
+### ReMove the original directories
+rm -rf ${BINARY_DIR}/aws
+
+### Generate descriptors with EPA
+${SOURCE_DIR}/ping_pong_nsd.py --outdir=${BINARY_DIR}/with_epa --format=json --epa --ping-image-md5=${ping_md5sum} --pong-image-md5=${pong_md5sum}
+
+### Move the generated artifacts to appropriate directories
+mv ${BINARY_DIR}/with_epa/ping_vnfd ${BINARY_DIR}/ping_vnfd_with_epa
+mv ${BINARY_DIR}/with_epa/pong_vnfd ${BINARY_DIR}/pong_vnfd_with_epa
+mv ${BINARY_DIR}/with_epa/ping_pong_nsd ${BINARY_DIR}/ping_pong_nsd_with_epa
+
+### ReMove the original directories
+rm -rf ${BINARY_DIR}/with_epa
+
+# copy a dummy image for now
+if [ -e ${PING_QCOW_IMAGE} ]; then
+# Add RIFT Logos
+    mkdir -p ${BINARY_DIR}/ping_vnfd_with_image/icons
+    cp ${PING_VNFD_LOGO} ${BINARY_DIR}/ping_vnfd_with_image/icons/
+
+    cp ${PING_QCOW_IMAGE} ${BINARY_DIR}/ping_vnfd_with_image/images/
+    ${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_vnfd_with_image
+else
+    echo >&2 "Warn: Skipped creating ping_vnfd_with_image due to missing image: ${PING_QCOW_IMAGE}"
+fi
+
+if [ -e ${PONG_QCOW_IMAGE} ]; then
+# Add RIFT Logos
+    mkdir -p ${BINARY_DIR}/pong_vnfd_with_image/icons
+    cp ${PONG_VNFD_LOGO} ${BINARY_DIR}/pong_vnfd_with_image/icons/
+
+    cp ${PONG_QCOW_IMAGE} ${BINARY_DIR}/pong_vnfd_with_image/images/
+    ${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} pong_vnfd_with_image
+else
+    echo >&2 "Warn: Skipped creating pong_vnfd_with_image due to missing image: ${PONG_QCOW_IMAGE}"
+fi
+
+# Add RIFT Logos
+mkdir -p ${BINARY_DIR}/ping_vnfd/icons
+mkdir -p ${BINARY_DIR}/pong_vnfd/icons
+mkdir -p ${BINARY_DIR}/ping_pong_nsd/icons
+
+cp ${PING_VNFD_LOGO}      ${BINARY_DIR}/ping_vnfd/icons/
+cp ${PONG_VNFD_LOGO}      ${BINARY_DIR}/pong_vnfd/icons/
+cp ${PING_PONG_NSD_LOGO}  ${BINARY_DIR}/ping_pong_nsd/icons/
+
+# Generate the tar files
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_vnfd
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} pong_vnfd
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_pong_nsd
+
+
+# Add RIFT Logos
+mkdir -p ${BINARY_DIR}/ping_vnfd_aws/icons
+mkdir -p ${BINARY_DIR}/pong_vnfd_aws/icons
+mkdir -p ${BINARY_DIR}/ping_pong_nsd_aws/icons
+
+cp ${PING_VNFD_LOGO}      ${BINARY_DIR}/ping_vnfd_aws/icons/
+cp ${PONG_VNFD_LOGO}      ${BINARY_DIR}/pong_vnfd_aws/icons/
+cp ${PING_PONG_NSD_LOGO}  ${BINARY_DIR}/ping_pong_nsd_aws/icons/
+
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_vnfd_aws
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} pong_vnfd_aws
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_pong_nsd_aws
+
+# Add RIFT Logos
+mkdir -p ${BINARY_DIR}/ping_vnfd_with_epa/icons
+mkdir -p ${BINARY_DIR}/pong_vnfd_with_epa/icons
+mkdir -p ${BINARY_DIR}/ping_pong_nsd_with_epa/icons
+
+cp ${PING_VNFD_LOGO}      ${BINARY_DIR}/ping_vnfd_with_epa/icons/
+cp ${PONG_VNFD_LOGO}      ${BINARY_DIR}/pong_vnfd_with_epa/icons/
+cp ${PING_PONG_NSD_LOGO}  ${BINARY_DIR}/ping_pong_nsd_with_epa/icons/
+
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_vnfd_with_epa
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} pong_vnfd_with_epa
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_pong_nsd_with_epa

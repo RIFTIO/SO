@@ -1,0 +1,84 @@
+module vyatta-dhcpv6-client-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-dhcpv6-client:1";
+	prefix vyatta-dhcpv6-client-v1;
+
+	import configd-v1 {
+	        prefix configd;
+	}
+	import vyatta-interfaces-v1 {
+	        prefix if;
+	}
+	import vyatta-interfaces-bridge-v1 {
+	        prefix interfaces-bridge;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+	        prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-bonding-v1 {
+	        prefix interfaces-bonding;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	typedef dhcpv6-options {
+		type enumeration {
+			enum "parameters-only" {
+				configd:help "Acquire only config parameters, not address";
+			}
+			enum "temporary" {
+				configd:help "IPv6 \"temporary\" address";
+			}
+			enum "prefix-delegation" {
+				configd:help "IPv6 \"prefix delegation\"";
+			}
+		}
+	}
+
+	grouping dhcpv6-options {
+			leaf dhcpv6-options {
+				type dhcpv6-options;
+				configd:help "DHCPv6 options";
+				configd:end "dhcpv6-client-options $VAR(../@)";
+				configd:validate "/opt/vyatta/share/tmplscripts/interfaces/dhcpv6-client-options/configd_validate1.cli";
+			}
+	}
+
+	grouping dhcpv6-options-vif {
+			leaf dhcpv6-options {
+				type dhcpv6-options;
+				configd:help "DHCPv6 options";
+				configd:end "dhcpv6-client-options $VAR(../../@).$VAR(../@)";
+				configd:validate "/opt/vyatta/share/tmplscripts/interfaces/dhcpv6-client-options/configd_validate1.cli";
+			}
+	}
+
+	augment /if:interfaces/interfaces-bridge:bridge {
+		uses dhcpv6-options;
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane {
+		uses dhcpv6-options;
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif {
+		uses dhcpv6-options-vif;
+	}
+
+	augment /if:interfaces/interfaces-bonding:bonding {
+		uses dhcpv6-options;
+	}
+
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif {
+		uses dhcpv6-options-vif;
+	}
+}

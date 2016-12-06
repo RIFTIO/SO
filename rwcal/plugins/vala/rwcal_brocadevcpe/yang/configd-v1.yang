@@ -1,0 +1,100 @@
+module configd-v1 {
+	namespace "urn:vyatta.com:mgmt:configd:1";
+	prefix configd-v1;
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		 	 San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-01-25 {
+		description "Remove comp_help extension";
+	}
+	revision 2015-12-08 {
+		description "Add get-state and normalize extensions"
+			+ "Add defer-actions";
+	}
+
+	revision 2015-05-20 {
+		description "Remove rpc-script extension and
+			     add call-rpc extension";
+	}
+
+	revision 2014-12-17 {
+		description "Add rpc-script extension";
+	}
+	revision 2014-10-28 {
+		description "Update for 3.2.1R1";
+	}
+
+	revision 2014-05-30 {
+		description "Initial revision.";
+	}
+
+	extension help {
+		argument text;
+	}
+	extension pattern-help {
+		argument text;
+	}
+
+	extension priority {
+		argument priority;
+	}
+
+	extension allowed {
+		argument executable;
+	}
+	extension begin {
+		argument executable;
+	}
+	extension end {
+		argument executable;
+	}
+	extension create {
+		argument executable;
+	}
+	extension delete {
+		argument executable;
+	}
+	extension update {
+		argument executable;
+	}
+	extension subst {
+		argument executable;
+	}
+	extension secret {
+		argument bool;
+	}
+
+	extension validate {
+		argument executable;
+	}
+	extension syntax {
+		argument executable;
+	}
+
+	extension error-message {
+		argument message;
+	}
+
+	extension migration {
+		argument level;
+	}
+
+	extension call-rpc {
+		argument executable;
+	}
+	extension get-state {
+		argument executable;
+	}
+	extension normalize {
+		argument executable;
+	}
+	extension defer-actions {
+		argument executable;
+	}
+}

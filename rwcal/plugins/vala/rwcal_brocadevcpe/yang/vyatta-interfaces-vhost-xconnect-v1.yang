@@ -1,0 +1,45 @@
+module vyatta-interfaces-vhost-xconnect-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-interfaces-vhost-xconnect:1";
+	prefix interfaces-vhost-xconnect;
+
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-vhost-v1 {
+		prefix interfaces-vhost;
+	}
+	import vyatta-interfaces-vhost-vif-v1 {
+		prefix if-vhost-vif;
+	}
+	import vyatta-xconnect-v1 {
+		prefix xconnect;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+                 Postal: 130 Holger Way
+                         San Jose, CA 95134
+                 E-mail: support@Brocade.com
+                 Web: www.brocade.com";
+
+	revision 2015-12-07 {
+		description "Initial revision";
+	}
+
+	augment /if:interfaces/interfaces-vhost:vhost {
+		uses xconnect:xconnect-if-binding;
+	}
+
+	augment /if:interfaces/interfaces-vhost:vhost/if-vhost-vif:vif {
+		uses xconnect:xconnect-if-binding {
+		     	refine xconnect {
+       		     	    configd:end "/opt/vyatta/share/tmplscripts/interfaces/dataplane/vif/xconnect/configd_end.sh";
+       			    configd:validate "/opt/vyatta/share/tmplscripts/interfaces/dataplane/vif/xconnect/configd_validate.cli";
+    			}
+		}
+	}
+}

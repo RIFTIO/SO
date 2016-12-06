@@ -1,0 +1,34 @@
+module vyatta-service-flow-monitoring-bonding-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-flow-monitoring-bonding:1";
+	prefix vyatta-service-flow-monitoring-bonding-v1;
+
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-bonding-v1 {
+		prefix if-bonding;
+	}
+	import vyatta-service-flow-monitoring-v1 {
+		prefix flow-monitoring;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-09-09 {
+		description "Vermont revision of version 1.";
+		configd:migration 1;
+	}
+
+	augment /if:interfaces/if-bonding:bonding {
+		uses flow-monitoring:interface-parameters;
+	}
+}

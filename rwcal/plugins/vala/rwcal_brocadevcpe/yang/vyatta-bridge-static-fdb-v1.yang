@@ -1,0 +1,50 @@
+module vyatta-bridge-static-fdb-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-bridge-static-fdb:1";
+	prefix vyatta-bridge-static-fdb-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-protocols-v1 {
+		prefix protocols;
+	}
+	import vyatta-protocols-static-v1 {
+		prefix prot-static;
+	}
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-07-29 {
+		description "Initial revision";
+	}
+	augment /protocols:protocols/prot-static:static {
+		list bridge-mac {
+			description "Static entry in bridge forwarding database.";
+			configd:help "Static entry in bridge forwarding database";
+			configd:end "vyatta-bridge-static-fdb --end ${COMMIT_ACTION} $VAR(@) $VAR(./interface/@)";
+			key "mac";
+			leaf mac {
+				type types:mac-address;
+				description "MAC address for bridge FDB static entry.";
+				configd:help "MAC address for bridge FDB static entry";
+			}
+			leaf interface {
+				type string {
+					length "2..256";
+				}
+				mandatory true;
+				description "Interface for the bridge FDB static entry.";
+				configd:help "Interface for the bridge FDB static entry";
+				configd:allowed "vyatta-bridge-ports --show-ports";
+			}
+		}
+	}
+}

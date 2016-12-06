@@ -1,0 +1,36 @@
+module vyatta-system-fips-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-system-fips:1";
+	prefix vyatta-system-fips-v1;
+
+	import vyatta-system-v1 {
+		prefix system;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /system:system {
+		container fips {
+			presence "true";
+			configd:help "Enable FIPS mode - this operation is irreversible";
+			leaf enable {
+				type empty;
+				configd:help "Enable FIPS mode - this operation is irreversible";
+				configd:create "vyatta-grub-enable-fips";
+			}
+			configd:validate "/opt/vyatta/share/tmplscripts/system/fips/configd_validate1.cli";
+		}
+	}
+}

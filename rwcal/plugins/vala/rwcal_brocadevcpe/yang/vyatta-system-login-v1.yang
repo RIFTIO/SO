@@ -1,0 +1,217 @@
+module vyatta-system-login-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-system-login:1";
+	prefix vyatta-system-login-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-system-v1 {
+		prefix system;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-12-04 {
+		description "Convert comp_help extension to description.";
+	}
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /system:system {
+		container login {
+			configd:priority "400";
+			configd:help "User login";
+			configd:delete "/opt/vyatta/share/tmplscripts/system/login/configd_delete.sh";
+			configd:end "/opt/vyatta/share/tmplscripts/system/login/configd_end.sh";
+			leaf session-timeout {
+				type uint32 {
+					range 0..1000000 {
+						error-message "Timeout must be between 0 and 1000000";
+					}
+				}
+				configd:help "Idle Session timeout";
+				default "0";
+				configd:update "/opt/vyatta/share/tmplscripts/system/login/session-timeout/configd_update.sh";
+			}
+			list radius-server {
+				configd:help "Radius server authentication";
+				configd:validate "/opt/vyatta/share/tmplscripts/system/login/radius-server/configd_validate1.cli";
+				key "tagnode";
+				leaf tagnode {
+					type types:ipv4-address;
+					configd:help "Radius server authentication";
+				}
+				leaf port {
+					type uint32 {
+						range 1..65535 {
+							error-message "Port number must be in range 1 to 65535";
+						}
+					}
+					configd:help "Radius port [REQUIRED]";
+					default "1812";
+				}
+				leaf secret {
+					type string;
+					configd:help "Secret for radius access [REQUIRED]";
+				}
+				leaf timeout {
+					type uint32 {
+						range 1..30 {
+							error-message "Timeout must be between 1 and 30 seconds";
+						}
+					}
+					configd:help "Timeout for radius session [REQUIRED]";
+					default "2";
+				}
+			}
+			list group {
+				configd:help "Group name";
+				configd:update "/opt/vyatta/share/tmplscripts/system/login/group/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/system/login/group/configd_delete.sh";
+				key "tagnode";
+				leaf tagnode {
+					type string;
+					configd:help "Group name";
+				}
+				leaf description {
+					type string;
+					configd:help "Description";
+				}
+			}
+			list user {
+				configd:help "User account information";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern '[a-zA-Z_][a-zA-Z0-9_-]*' {
+							configd:error-message "Username should only contain lower case letters, digits, underscores or dashes"; 
+						}
+						configd:syntax "/opt/vyatta/share/tmplscripts/system/login/user/configd_syntax1.cli";
+					}
+					configd:help "User account information";
+				}
+				container authentication {
+					configd:help "Authentication password";
+					leaf plaintext-password {
+						type string {
+							configd:syntax "/opt/vyatta/share/tmplscripts/system/login/user/authentication/plaintext-password/configd_syntax.cli";
+						}
+						configd:secret "true";
+						configd:help "Plaintext password for encryption";
+						configd:subst "/opt/vyatta/share/tmplscripts/system/login/user/authentication/plaintext-password/configd_subst1.cli";
+					}
+					list public-keys {
+						configd:help "Remote access public keys";
+						configd:validate "/opt/vyatta/share/tmplscripts/system/login/user/authentication/public-keys/configd_validate1.cli";
+						configd:validate "/opt/vyatta/share/tmplscripts/system/login/user/authentication/public-keys/configd_validate2.cli";
+						key "tagnode";
+						leaf tagnode {
+							type string;
+							configd:help "Remote access public keys";
+						}
+						leaf options {
+							type string;
+							configd:help "Additional public key options";
+						}
+						leaf key {
+							type string {
+								pattern '[0-9A-Za-z\+/=]*' {
+									error-message "Invalid public key character not base-64";
+								}
+							}
+							description "The public key is usually several hundred bytes long (because of the
+								     size of the public key encoding). Use the loadkey tool to read the key
+								     from a URL or file.";
+							configd:help "Public key value (base64-encoded)";
+						}
+						leaf type {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/system/login/user/authentication/public-keys/type/configd_syntax1.cli";
+							}
+							configd:help "Public key type";
+							configd:allowed "/opt/vyatta/share/tmplscripts/system/login/user/authentication/public-keys/type/configd_allowed.sh";
+						}
+					}
+					leaf encrypted-password {
+						type string {
+							configd:syntax "/opt/vyatta/share/tmplscripts/system/login/user/authentication/encrypted-password/configd_syntax1.cli";
+						}
+						configd:secret "true";
+						configd:help "Encrypted password";
+					}
+				}
+				leaf home-directory {
+					type string;
+					configd:help "Home directory";
+				}
+				leaf-list group {
+					type string {
+						pattern '[a-zA-Z_][a-zA-Z0-9_-]*$?' {
+							configd:error-message "Invalid group name $VAR(@)";
+						}
+						configd:syntax "/opt/vyatta/share/tmplscripts/system/login/user/group/configd_syntax1.cli";
+					}
+					ordered-by "user";
+					configd:help "Additional group membership";
+					configd:allowed "/opt/vyatta/share/tmplscripts/system/login/user/group/configd_allowed.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/system/login/user/group/configd_validate1.cli";
+				}
+				leaf level {
+					type enumeration {
+						enum "admin" {
+							configd:help "Administrators";
+						}
+						enum "operator" {
+							configd:help "Operators";
+						}
+						enum "superuser" {
+							configd:help "Superusers";
+						}
+					}
+					configd:help "User privilege level";
+					default "admin";
+					configd:allowed "/opt/vyatta/share/tmplscripts/system/login/user/level/configd_allowed.sh";
+				}
+				leaf full-name {
+					type string {
+						pattern '[^:]*' {
+							error-message "Cannot use ':' in full name";
+						}
+					}
+					configd:help "Full name of the user (use quotes for names with spaces)";
+				}
+			}
+			container banner {
+				configd:help "System login banners";
+				leaf pre-login {
+					type string;
+					description "Pre-login banner
+
+						     Example: '\\n\\n\\tUNAUTHORIZED USE OF THIS SYSTEM\\nIS PROHIBITED!\\n'";
+					configd:help "System login banner pre-login";
+					configd:update "/opt/vyatta/share/tmplscripts/system/login/banner/pre-login/configd_update.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/system/login/banner/pre-login/configd_delete.sh";
+				}
+				leaf post-login {
+					type string;
+					description "Post-login banner
+
+						     Example: '\\n\\n\\tWelcome to Vyatta!\\n'";
+					configd:help "System login banner post-login";
+					configd:update "/opt/vyatta/share/tmplscripts/system/login/banner/post-login/configd_update.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/system/login/banner/post-login/configd_delete.sh";
+				}
+			}
+		}
+	}
+}

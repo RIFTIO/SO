@@ -1,0 +1,101 @@
+module vyatta-service-dhcp-relay-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-dhcp-relay:1";
+	prefix vyatta-service-dhcp-relay-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /service:service {
+		container dhcp-relay {
+			presence "true";
+			configd:priority "910";
+			configd:help "Dynamic Host Configuration Protocol (DHCP) relay agent";
+			configd:end "/opt/vyatta/share/tmplscripts/service/dhcp-relay/configd_end1.cli";
+			leaf-list server {
+				type types:ipv4-address;
+				ordered-by "user";
+				configd:help "DHCP server address";
+			}
+			leaf-list listen-interface {
+				type string;
+				ordered-by "user";
+				configd:help "DHCP relay interface which DHCP clients are attached [REQUIRED]";
+				configd:allowed "/opt/vyatta/share/tmplscripts/service/dhcp-relay/interface/configd_allowed.sh";
+			}
+			leaf-list upstream-interface {
+				type string;
+				ordered-by "user";
+				configd:help "DHCP relay interface which DHCP server is attached [REQUIRED]";
+				configd:allowed "/opt/vyatta/share/tmplscripts/service/dhcp-relay/interface/configd_allowed.sh";
+			}
+
+			container relay-options {
+				presence "true";
+				configd:help "Relay options";
+				leaf relay-agents-packets {
+					type enumeration {
+						enum "append" {
+							configd:help "append own relay options to packet";
+						}
+						enum "replace" {
+							configd:help "replace existing agent option field";
+						}
+						enum "forward" {
+							configd:help "forward packet unchanged";
+						}
+						enum "discard" {
+							configd:help "discard packet (default action if giaddr not set in packet)";
+						}
+					}
+					default "forward";
+					configd:help "Policy to handle incoming DHCPv4 packets which already contain relay agent options";
+				}
+				leaf max-size {
+					type uint32 {
+						range 64..1400 {
+							error-message "max-size must be a value between 64 and 1400";
+						}
+					}
+					default "576";
+					configd:help "Maximum packet size to send to a DHCPv4/BOOTP server";
+				}
+				leaf port {
+					type uint32 {
+						range 1..65535 {
+							error-message "port must be a value between 1 and 65535";
+						}
+					}
+					configd:help "Port number to listen on";
+				}
+				leaf hop-count {
+					type uint32 {
+						range 1..255 {
+							error-message "hop-count must be a value between 1 and 255";
+						}
+					}
+					default "10";
+					configd:help "Policy to discard packets that have reached specified hop-count";
+				}
+			}
+		}
+	}
+}

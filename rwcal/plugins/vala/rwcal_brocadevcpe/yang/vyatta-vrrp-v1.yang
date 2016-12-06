@@ -1,0 +1,279 @@
+module vyatta-vrrp-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-vrrp:1";
+	prefix vyatta-vrrp-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-bonding-v1 {
+		prefix interfaces-bonding;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-06 {
+		description "Initial revision of version 1.";
+	}
+
+	grouping vrrp-configuration {
+		leaf priority {
+			type uint8 {
+				range 1..254;
+			}
+			configd:help "Priority";
+		}
+		container authentication {
+			presence "true";
+			configd:help "Authentication";
+			leaf password {
+				type string {
+					pattern '[^\t\n\r ]{1,8}' {
+						error-message "Password must be 8 characters or less";
+					}
+				}
+				configd:secret "true";
+				configd:help "Password";
+			}
+			leaf type {
+				type enumeration {
+					enum "plaintext-password" {
+						configd:help "Plain text password mode";
+					}
+					enum "ah" {
+						configd:help "IP Authentication Header mode";
+					}
+				}
+				configd:help "Authentication type";
+				configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/authentication/type/configd_allowed.sh";
+			}
+		}
+		leaf hello-source-address {
+			type union {
+				type types:ipv4-address;
+				type types:ipv6-address;
+			}
+			configd:help "Hello source address";
+		}
+		leaf preempt {
+			type boolean;
+			configd:help "Preempt mode";
+			default "true";
+		}
+		leaf disable {
+			type empty;
+			configd:help "VRRP group disabled";
+		}
+		container run-transition-scripts {
+			presence "true";
+			configd:help "Scripts for VRRP state-transitions";
+			leaf master {
+				type string {
+					configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/run-transition-scripts/master/configd_syntax1.cli";
+					configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/run-transition-scripts/master/configd_syntax2.cli";
+				}
+				configd:help "Script to run on VRRP state-transition to master";
+			}
+			leaf backup {
+				type string {
+					configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/run-transition-scripts/backup/configd_syntax1.cli";
+					configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/run-transition-scripts/backup/configd_syntax2.cli";
+				}
+				configd:help "Script to run on VRRP state-transition to backup";
+			}
+			leaf fault {
+				type string {
+					configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/run-transition-scripts/fault/configd_syntax1.cli";
+					configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/run-transition-scripts/fault/configd_syntax2.cli";
+				}
+				configd:help "Script to run on VRRP state-transition to fault";
+			}
+		}
+		leaf preempt-delay {
+			type uint16 {
+				range 0..1000;
+			}
+			configd:help "Preempt delay";
+		}
+		leaf advertise-interval {
+			type uint8 {
+				range 1..255;
+			}
+			configd:help "Advertise interval";
+		}
+		leaf sync-group {
+			type string;
+			configd:help "Add this vrrp group to a sync group";
+		}
+		leaf rfc-compatibility {
+			type empty;
+			configd:help "Enable RFC compatibility";
+		}
+		leaf version {
+			type uint8 {
+				range 2..3;
+			}
+			configd:help "Version 2 is for RFC3768 and version 3 is for RFC5798";
+		}
+		leaf accept {
+			type boolean;
+			configd:help "Accept mode for VRRPv3";
+			default "false";
+		}
+		leaf fast-advertise-interval {
+			type uint16 {
+				range 10..40950;
+			}
+			configd:validate "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/fast-advertise-interval/configd_validate.cli";
+			configd:help "Fast advertise interval in milliseconds. Value should be multiples of 10";
+		}
+		list track-interface {
+			configd:help "Interface to be tracked";
+			configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/track-interface/configd_allowed.sh";
+			key "tagnode";
+			leaf tagnode {
+				type string;
+				configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/track-interface/configd_allowed.sh";
+				configd:help "Interface name";
+			}
+			container weight {
+				presence "true";
+				configd:help "Weight of the tracked interface";
+				leaf value {
+					configd:help "Value to increment or decrement the priority";
+					configd:validate "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/track-interface/weight/value/configd_validate2.cli";
+					type uint8 {
+						range 1..254;
+					}
+				}
+				leaf type {
+					configd:help "Increment or decrement the priority";
+					configd:validate "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/track-interface/weight/type/configd_validate1.cli";
+					type enumeration {
+						enum "increment" {
+							configd:help "Increment the priority";
+						}
+						enum "decrement" {
+							configd:help "Decrement the priority";
+						}
+					}
+				}
+			}
+		}
+		leaf-list virtual-address {
+			type union {
+				type types:ipv4-address {
+					configd:syntax "/opt/vyatta/sbin/vyatta-validate-type ipv4 $VAR(@)";
+				}
+				type types:ipv6-address {
+					configd:syntax "/opt/vyatta/sbin/vyatta-validate-type ipv6 $VAR(@)";
+				}
+			}
+			ordered-by "user";
+			configd:help "Virtual address for IPv4 or IPv6 [REQUIRED]";
+		}
+	}
+
+	grouping itf-vrrp {
+		container vrrp {
+			configd:help "Virtual Router Redundancy Protocol (VRRP)";
+			configd:priority "800";
+			configd:end "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/configd_end.sh";
+			list vrrp-group {
+				configd:help "VRRP group number";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/configd_delete.sh";
+				key "tagnode";
+				leaf tagnode {
+					type uint32 {
+						range 1..255 {
+							error-message "VRRP group must be between 1-255";
+						}
+					}
+					configd:help "VRRP group number";
+				}
+				leaf description {
+					type string;
+					configd:help "Description";
+				}
+				container notify {
+					presence "true";
+					configd:help "Protocol to notify on VRRP state transition";
+					leaf bgp {
+						type empty;
+						configd:help "Notify bgp daemon on VRRP state transition";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/vrrp/vrrp-group/notify/bgp/configd_delete.sh";
+					}
+					leaf ipsec {
+						type empty;
+						configd:help "Enable ipsec restart/stop on VRRP state transition";
+					}
+				}
+				uses vrrp-configuration;
+			}
+		}
+	}
+	grouping itf-vif-vrrp {
+		container vrrp {
+			configd:help "Virtual Router Redundancy Protocol (VRRP)";
+			configd:priority "800";
+			configd:end "/opt/vyatta/share/tmplscripts/interfaces/all/vif/vrrp/configd_end.sh";
+			list vrrp-group {
+				configd:help "VRRP group number";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/vif/vrrp/vrrp-group/configd_delete.sh";
+				key "tagnode";
+				leaf tagnode {
+					type uint32 {
+						range 1..255 {
+							error-message "VRRP group must be between 1-255";
+						}
+					}
+					configd:help "VRRP group number";
+				}
+				leaf description {
+					type string;
+					configd:help "Description";
+				}
+				container notify {
+					presence "true";
+					configd:help "Protocol to notify on VRRP state transition";
+					leaf bgp {
+						type empty;
+						configd:help "Notify bgp daemon on VRRP state transition";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/vif/vrrp/vrrp-group/notify/bgp/configd_delete.sh";
+					}
+					leaf ipsec {
+						type empty;
+						configd:help "Enable ipsec restart/stop on VRRP state transition";
+					}
+				}
+				uses vrrp-configuration;
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane {
+		uses itf-vrrp;
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif {
+		uses itf-vif-vrrp;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding {
+		uses itf-vrrp;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif {
+		uses itf-vif-vrrp;
+	}
+}

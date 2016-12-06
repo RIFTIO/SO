@@ -1,0 +1,149 @@
+module vyatta-interfaces-bridge-spanning-tree-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-interfaces-bridge-spanning-tree:1";
+	prefix vyatta-interfaces-bridge-stp-v1;
+
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-tunnel-v1 {
+		prefix interfaces-tunnel;
+	}
+	import vyatta-interfaces-bonding-v1 {
+		prefix interfaces-bonding;
+	}
+	import vyatta-interfaces-l2tpeth-v1 {
+		prefix interfaces-l2tpeth;
+	}
+	import vyatta-interfaces-bridge-v1 {
+		prefix interfaces-bridge;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-11-18 {
+		description "Port cost range changed";
+	}
+
+	grouping spanning-tree-port {
+		leaf cost {
+			type union {
+				type uint32 {
+					range 1..200000000;
+				}
+				type enumeration {
+					enum "auto" {
+						description "Determine port cost from line speed.";
+						configd:help "Determine port cost from line speed";
+					}
+				}
+			}
+			default "auto";
+			description "Spanning Tree port cost.";
+			configd:help "Spanning Tree port cost";
+		}
+		leaf priority {
+			type uint8 {
+				range 0..15;
+			}
+			default "8";
+			description "Spanning Tree port priority.";
+			configd:help "Spanning Tree port priority";
+		}
+		leaf bpdu-guard {
+			type empty;
+			description "Bring the port down if a BPDU is received on the port.";
+			configd:help "Enable Spanning Tree BPDU guard";
+		}
+		leaf root-block {
+			type empty;
+			description "Restrict the ports role to that of Designated port.
+ If the port receives a superior BPDU then change the port state to Listening (STP) or
+ Discarding (RSTP) state.";
+			configd:help "Restrict ports ability to take Spanning Tree root role";
+		}
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-bridge:bridge-group {
+		uses spanning-tree-port;
+	}
+	augment /if:interfaces/interfaces-tunnel:tunnel/interfaces-bridge:bridge-group {
+		uses spanning-tree-port;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bridge:bridge-group {
+		uses spanning-tree-port;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:vif/interfaces-bridge:bridge-group {
+		uses spanning-tree-port;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-bridge:bridge-group {
+		uses spanning-tree-port;
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif/interfaces-bridge:bridge-group {
+		uses spanning-tree-port;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif/interfaces-bridge:bridge-group {
+		uses spanning-tree-port;
+	}
+
+	augment /if:interfaces/interfaces-bridge:bridge {
+		container spanning-tree {
+			presence "Enable Spanning Tree Protocol";
+			description "Enable Spanning Tree Protocol.";
+			configd:help "Spanning Tree configuration";
+			configd:create "vyatta-bridge-stp --bridge=$VAR(../@) --action=create";
+			configd:delete "vyatta-bridge-stp --bridge=$VAR(../@) --action=delete";
+			must "2 * (forwarding-delay - 1) >= max-age" {
+				error-message "Bridge timers don't meet 2 * (Bridge Forward Delay - 1 second) >= Bridge Max Age";
+			}
+
+			leaf forwarding-delay {
+				type uint8 {
+					range 4..30;
+				}
+				default "15";
+				description "Forwarding delay in seconds.";
+				configd:help "Forwarding delay in seconds";
+				configd:update "vyatta-bridge-stp --bridge=$VAR(../../@) --action=set_fwddly --val=$VAR(@)";
+			}
+			leaf hello-time {
+				type uint8 {
+					range 1..10;
+				}
+				default "2";
+				description "Hello packet advertisement interval in seconds.";
+				configd:help "Hello packet advertisement interval in seconds";
+				configd:update "vyatta-bridge-stp --bridge=$VAR(../../@) --action=set_hello --val=$VAR(@)";
+			}
+			leaf max-age {
+				type uint8 {
+					range 6..40;
+				}
+				configd:help "Interval in seconds at which neighbor bridges are removed";
+				default "20";
+				description "Interval in seconds at which neighbor bridges are removed.";
+				configd:update "vyatta-bridge-stp --bridge=$VAR(../../@) --action=set_maxage --val=$VAR(@)";
+			}
+			leaf priority {
+				type uint8 {
+					range 0..15;
+				}
+				configd:help "Bridge priority";
+				default "8";
+				description "Bridge priority.";
+				configd:update "vyatta-bridge-stp --bridge=$VAR(../../@) --action=set_priority --val=$VAR(@)";
+			}
+		}
+	}
+}

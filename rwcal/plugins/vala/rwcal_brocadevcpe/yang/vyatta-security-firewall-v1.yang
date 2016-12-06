@@ -1,0 +1,522 @@
+module vyatta-security-firewall-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-security-firewall:1";
+	prefix vyatta-security-firewall-v1;
+
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-loopback-v1 {
+		prefix interfaces-loopback;
+	}
+	import vyatta-interfaces-bridge-v1 {
+		prefix interfaces-bridge;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-l2tpeth-v1 {
+		prefix interfaces-l2tpeth;
+	}
+	import vyatta-interfaces-openvpn-v1 {
+		prefix interfaces-openvpn;
+	}
+	import vyatta-interfaces-tunnel-v1 {
+		prefix interfaces-tunnel;
+	}
+	import vyatta-interfaces-vti-v1 {
+		prefix interfaces-vti;
+	}
+	import vyatta-interfaces-bonding-v1 {
+		prefix interfaces-bonding;
+	}
+	import vyatta-security-v1 {
+		prefix security;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-fw-types-v1 {
+		prefix fw-types;
+	}
+	import vyatta-npf-v1 {
+		prefix npf;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+			 San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-04-07 {
+		description "Addition of CPP local firewall option." +
+			    "Remove use of bash in action scripts.";
+	}
+	revision 2015-10-08 {
+		description "Initial revision of version 1.";
+	}
+
+	grouping rule-fw {
+		uses npf:rule-common;
+		uses npf:ethertype;
+		uses npf:fragment;
+		uses npf:marking;
+		uses npf:policing;
+		uses npf:action-fw-pbr;
+		leaf state {
+			type enumeration {
+				enum "enable" {
+					description "Enable holding state if matching the firewall rule";
+					configd:help "Enable holding state if matching the firewall rule";
+				}
+				enum "disable" {
+					description "Disable holding state if matching the firewall rule";
+					configd:help "Disable holding state if matching the firewall rule";
+				}
+			}
+			description "Enable or disable holding state for the firewall rule";
+			configd:help "Enable or disable holding state for the firewall rule";
+			default "disable";
+		}
+	}
+
+	grouping firewall-if-parameters {
+		container firewall {
+			configd:help "Firewall options";
+			configd:end "end-npf-if $VAR(../) $VAR(../@) firewall";
+			configd:validate "check-not-zone-if $VAR(../@)";
+			configd:validate "check-l2tpeth-sess";
+			leaf-list out {
+				type fw-types:rule-name {
+					configd:help "Ruleset name";
+				}
+				ordered-by "user";
+				configd:help "Ruleset for forwarded packets on outbound interface";
+				configd:allowed "echo $VAR(/security/firewall/name/@@)";
+				configd:validate "check-fw-ruleset-exists";
+			}
+			leaf-list in {
+				type fw-types:rule-name {
+					configd:help "Ruleset name";
+				}
+				ordered-by "user";
+				configd:help "Ruleset for forwarded packets on inbound interface";
+				configd:allowed "echo $VAR(/security/firewall/name/@@)";
+				configd:validate "check-fw-ruleset-exists";
+			}
+                        /* RIFT change
+			leaf-list local {
+				type leafref {
+                                        // RIFT Change
+					path "/security:security/vyatta-security-firewall-v1:firewall/name/ruleset-name";
+					// path "/security:security/firewall/name/ruleset-name";
+				}
+				ordered-by "user";
+				configd:help "Ruleset for packets terminated on router";
+				description "Ruleset for packets terminated on router";
+			}
+                        */
+		}
+	}
+
+	grouping firewall-vif-if-parameters {
+		uses firewall-if-parameters {
+			refine firewall {
+				configd:end "end-npf-if $VAR(../../) '$VAR(../../@) vif $VAR(../@)' firewall";
+				configd:validate "check-not-zone-if $VAR(../../@).$VAR(../@)";
+			}
+		}
+	}
+
+	augment /security:security {
+		container firewall {
+			configd:priority "310";
+			configd:help "Firewall";
+			configd:validate "validate-fw-groups --variant firewall";
+			configd:begin "vyatta-dp-npf.pl --cmd=reload-stop";
+			configd:end "/opt/vyatta/share/tmplscripts/security/firewall/configd_end.sh";
+			leaf tcp-strict {
+				type empty;
+				configd:help "Enable tcp strict stateful firewall rule";
+				configd:create "vyatta-dp-npf.pl --cmd=update-global-tcp-strict";
+				configd:delete "vyatta-dp-npf.pl --cmd=update-global-tcp-strict";
+			}
+			leaf broadcast-ping {
+				type enumeration {
+					enum "enable" {
+						configd:help "Allow broadcast IPv4 ICMP echo requests";
+					}
+					enum "disable" {
+						configd:help "Do not allow broadcast IPv4 ICMP echo requests";
+					}
+				}
+				configd:help "Policy for handling broadcast IPv4 ICMP echo requests";
+				default "disable";
+				configd:update "set-ping broadcasts $VAR(@)";
+				configd:delete "set-ping broadcasts disable";
+			}
+			leaf all-ping {
+				type enumeration {
+					enum "enable" {
+						configd:help "Allow IPv4 ICMP echo requests";
+					}
+					enum "disable" {
+						configd:help "Do not allow IPv4 ICMP echo requests";
+					}
+				}
+				configd:help "Policy for handling of all IPv4 ICMP echo requests";
+				default "enable";
+				configd:update "set-ping all $VAR(@)";
+				configd:delete "set-ping all enable";
+			}
+			leaf syn-cookies {
+				type enumeration {
+					enum "enable" {
+						configd:help "Allow TCP SYN cookies with IPv4";
+					}
+					enum "disable" {
+						configd:help "Do not allow TCP SYN cookies with IPv4";
+					}
+				}
+				configd:help "Policy for using TCP SYN cookies with IPv4";
+				default "enable";
+				configd:update "set-syn-cookies $VAR(@)";
+				configd:delete "set-syn-cookies enable";
+			}
+			list name {
+				configd:help "Firewall ruleset";
+				configd:delete "vyatta-dp-npf.pl --cmd=delete-group --group=$VAR(@)";
+				configd:end "end-fw-ruleset $VAR(@)";
+				key "ruleset-name";
+				leaf ruleset-name {
+					type fw-types:rule-name {
+						configd:help "Ruleset name";
+					}
+				}
+				leaf description {
+					type string;
+					configd:help "Ruleset description";
+				}
+				list rule {
+					configd:help "Rule number";
+					key "tagnode";
+					leaf tagnode {
+						type fw-types:rule-number;
+					}
+					uses rule-fw;
+				}
+				leaf default-action {
+					type enumeration {
+						enum "drop" {
+							configd:help "Drop if no prior rules are hit";
+						}
+						enum "accept" {
+							configd:help "Accept if no prior rules are hit";
+						}
+					}
+					configd:help "Default-action for ruleset";
+					configd:end "vyatta-dp-npf.pl --cmd=update-default --group='$VAR(../@)'";
+				}
+				leaf default-log {
+					type empty;
+					configd:help "Default-log for ruleset";
+					configd:end "vyatta-dp-npf.pl --cmd=update-default --group='$VAR(../@)'";
+				}
+			}
+			container session-log {
+				configd:help "Session logging";
+				container tcp {
+					configd:help "TCP";
+					leaf close-wait {
+						type empty;
+						configd:help "close-wait state";
+						configd:end "set-sess-log tcp $VAR(@)";
+					}
+					leaf established {
+						type empty;
+						configd:help "established state";
+						configd:end "set-sess-log tcp $VAR(@)";
+					}
+					leaf syn-sent {
+						type empty;
+						configd:help "syn-sent state";
+						configd:end "set-sess-log tcp $VAR(@)";
+					}
+					leaf fin-received {
+						type empty;
+						configd:help "fin-received state";
+						configd:end "set-sess-log tcp $VAR(@)";
+					}
+					leaf fin-sent {
+						type empty;
+						configd:help "fin-sent state";
+						configd:end "set-sess-log tcp $VAR(@)";
+					}
+					leaf closing {
+						type empty;
+						configd:help "closing state";
+						configd:end "set-sess-log tcp $VAR(@)";
+					}
+					leaf simsyn-sent {
+						type empty;
+						configd:help "simsyn-sent state";
+						configd:end "set-sess-log tcp $VAR(@)";
+					}
+					leaf time-wait {
+						type empty;
+						configd:help "time-wait state";
+						configd:end "set-sess-log tcp $VAR(@)";
+					}
+					leaf last-ack {
+						type empty;
+						configd:help "last-ack state";
+						configd:end "set-sess-log tcp $VAR(@)";
+					}
+					leaf syn-received {
+						type empty;
+						configd:help "syn-received state";
+						configd:end "set-sess-log tcp $VAR(@)";
+					}
+					leaf fin-wait {
+						type empty;
+						configd:help "fin-wait state";
+						configd:end "set-sess-log tcp $VAR(@)";
+					}
+					leaf timeout {
+						type empty;
+						configd:help "time-out state";
+						configd:end "set-sess-log tcp $VAR(@)";
+					}
+				}
+				container icmp {
+					configd:help "ICMP";
+					leaf established {
+						type empty;
+						configd:help "established state";
+						configd:end "set-sess-log icmp $VAR(@)";
+					}
+					leaf closed {
+						type empty;
+						configd:help "closed state";
+						configd:end "set-sess-log icmp $VAR(@)";
+					}
+					leaf timeout {
+						type empty;
+						configd:help "timeout state";
+						configd:end "set-sess-log icmp $VAR(@)";
+					}
+					leaf new {
+						type empty;
+						configd:help "new state";
+						configd:end "set-sess-log icmp $VAR(@)";
+					}
+				}
+				container other {
+					configd:help "protocols other than TCP, UDP or ICMP";
+					leaf established {
+						type empty;
+						configd:help "established state";
+						configd:end "set-sess-log other $VAR(@)";
+					}
+					leaf closed {
+						type empty;
+						configd:help "closed state";
+						configd:end "set-sess-log other $VAR(@)";
+					}
+					leaf timeout {
+						type empty;
+						configd:help "timeout state";
+						configd:end "set-sess-log other $VAR(@)";
+					}
+					leaf new {
+						type empty;
+						configd:help "new state";
+						configd:end "set-sess-log other $VAR(@)";
+					}
+				}
+				container udp {
+					configd:help "UDP";
+					leaf established {
+						type empty;
+						configd:help "established state";
+						configd:end "set-sess-log udp $VAR(@)";
+					}
+					leaf closed {
+						type empty;
+						configd:help "closed state";
+						configd:end "set-sess-log udp $VAR(@)";
+					}
+					leaf timeout {
+						type empty;
+						configd:help "timeout state";
+						configd:end "set-sess-log udp $VAR(@)";
+					}
+					leaf new {
+						type empty;
+						configd:help "new state";
+						configd:end "set-sess-log udp $VAR(@)";
+					}
+				}
+			}
+			container global-state-policy {
+				configd:help "Configure global state parameters for firewall";
+				configd:end "/opt/vyatta/share/tmplscripts/security/firewall/global-state-policy/configd_end.sh";
+				leaf tcp {
+					type empty;
+					configd:help "enable tcp state monitoring for firewall";
+				}
+				leaf icmp {
+					type empty;
+					configd:help "enable icmp state monitoring for firewall";
+				}
+				leaf udp {
+					type empty;
+					configd:help "enable udp state monitoring for firewall";
+				}
+			}
+			leaf config-trap {
+				type enumeration {
+					enum "enable" {
+						configd:help "Enable sending SNMP trap on firewall configuration change";
+					}
+					enum "disable" {
+						configd:help "Disable sending SNMP trap on firewall configuration change";
+					}
+				}
+				configd:help "SNMP trap generation on firewall configuration changes";
+				default "disable";
+			}
+		}
+		container zone-policy {
+			configd:priority "315";
+			configd:help "Zone-policy";
+			configd:end "vyatta-dp-npf-zone.pl";
+			list zone {
+				configd:help "Zone name";
+				configd:end "vyatta-dp-npf-snmptrap.pl --level='security zone-policy zone $VAR(@)'";
+				key "input-zone-name";
+				leaf input-zone-name {
+					type fw-types:zone-name {
+						configd:help "Zone name";
+					}
+				}
+				leaf description {
+					type string;
+					configd:help "Zone description";
+				}
+				leaf-list interface {
+					type string {
+						configd:syntax "/opt/vyatta/share/tmplscripts/security/zone-policy/zone/interface/configd_syntax.cli";
+					}
+					ordered-by "user";
+					configd:help "Interface associated with zone";
+					configd:allowed "/opt/vyatta/share/tmplscripts/security/zone-policy/zone/interface/configd_allowed.sh";
+					configd:validate "check-interface-exists.pl $VAR(@)";
+					min-elements 1;
+				}
+                                /* RIFT change
+				leaf default-action {
+					type enumeration {
+						enum "accept" {
+							configd:help "Accept packets leaving this zone";
+						}
+						enum "drop" {
+							configd:help "Drop packets leaving this zone";
+						}
+					}
+					configd:help "Default-action for traffic leaving this zone";
+					default "drop";
+				}
+                                */
+				list to {
+					configd:help "Output zone to filter traffic";
+					configd:allowed "echo $VAR(/security/zone-policy/zone/@@)";
+					configd:validate "check-policy-exists";
+					configd:validate "/opt/vyatta/share/tmplscripts/security/zone-policy/zone/to/configd_validate.cli";
+					min-elements 1;
+					key "output-zone-name";
+					leaf output-zone-name {
+						type fw-types:zone-name {
+							configd:help "Output zone name";
+						}
+						configd:allowed "echo $VAR(/security/zone-policy/zone/@@)";
+					}
+					leaf-list firewall {
+						type fw-types:rule-name {
+							configd:help "Ruleset name";
+						}
+						configd:help "Ruleset for forwarded packets from Input zone to Output zone";
+						ordered-by "user";
+						configd:allowed "echo $VAR(/security/firewall/name/@@)";
+						configd:validate "check-fw-ruleset-exists";
+						min-elements 1;
+					}
+				}
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-bridge:bridge {
+		uses firewall-if-parameters {
+			augment firewall {
+				leaf-list l2 {
+					type fw-types:rule-name {
+						configd:help "Ruleset name";
+					}
+					ordered-by "user";
+					configd:help "Ruleset for forwarded packets on bridge interface";
+					configd:allowed "echo $VAR(/security/firewall/name/@@)";
+					configd:validate "check-fw-ruleset-exists";
+				}
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane {
+		uses firewall-if-parameters;
+	}
+	augment /if:interfaces/interfaces-loopback:loopback {
+                /* RIFT change
+		container firewall {
+			configd:help "Firewall options";
+			description "Firewall options";
+			configd:end "end-npf-if $VAR(../) $VAR(../@) firewall";
+			leaf-list local {
+				type leafref {
+					path "/security:security/firewall/name/ruleset-name";
+				}
+				ordered-by "user";
+				configd:help "Ruleset for packets terminated on router";
+				description "Ruleset for packets terminated on router";
+				must "(../../interfaces-loopback:tagnode = 'lo')" {
+					error-message "Local firewall can only be applied to lo.";
+				}
+			}
+		}
+                */
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif {
+		uses firewall-vif-if-parameters;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth {
+		uses firewall-if-parameters;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:vif {
+		uses firewall-vif-if-parameters;
+	}
+	augment /if:interfaces/interfaces-openvpn:openvpn {
+		uses firewall-if-parameters;
+	}
+	augment /if:interfaces/interfaces-tunnel:tunnel {
+		uses firewall-if-parameters;
+	}
+	augment /if:interfaces/interfaces-vti:vti {
+		uses firewall-if-parameters;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding {
+		uses firewall-if-parameters;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif {
+		uses firewall-vif-if-parameters;
+	}
+}

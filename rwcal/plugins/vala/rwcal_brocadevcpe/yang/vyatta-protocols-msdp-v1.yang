@@ -1,0 +1,276 @@
+module vyatta-protocols-msdp-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-protocols-msdp:1";
+	prefix vyatta-protocols-msdp-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-protocols-v1 {
+		prefix protocols;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+	
+	revision 2015-07-28 {
+		description "Initial revision, replacing vyatta-protocols-msdp";
+		configd:migration 1;
+	}
+
+	typedef prefix-list-name {
+		type string {
+			pattern '[-a-zA-Z0-9.]+' {
+				error-message "prefix-list name must be alpha-numeric";
+			}
+		}
+	}
+
+	// TODO this could/should be provided in vyatta-types
+	typedef non-loop-ipv4-address {
+		type types:ipv4-address {
+			pattern '(([0-9]|[1-9][0-9]|1([0-13-9][0-9]|2[0-68-9])|2[0-4][0-9]|25[0-5])\.).+';
+			configd:help "IPv4 Address, except localhost";
+			configd:pattern-help "!<127.x.x.x>";
+		}
+	}
+
+	grouping filter-lists {
+		leaf access-list {
+			type uint32 {
+				range "100..199 | 2000..2699";
+			}
+			configd:allowed "/opt/vyatta/share/tmplscripts/protocols/msdp/access-list_allowed.sh";
+		}
+		leaf rp-list {
+			type prefix-list-name;
+			configd:allowed "/opt/vyatta/share/tmplscripts/protocols/msdp/prefix-list_allowed.sh";
+		}
+	}
+
+	grouping export-grouping {
+		container export {
+			uses filter-lists {
+				refine access-list {
+					configd:help "Filter cache entry advertisements by (S,G)";
+				}
+				refine rp-list {
+					configd:help "prefix-list filtering cache entry advertisements by RP address";
+				}
+			}
+		}
+	}
+	
+	grouping import-grouping {
+		container import {
+			uses filter-lists {
+				refine access-list {
+					configd:help "Filter creation of cache entries by (S,G)";
+				}
+				refine rp-list {
+					configd:help "prefix-list filtering cache entry creation by RP address";
+				}
+			}
+		}
+	}
+	
+	grouping peer-list {
+		leaf-list peer {
+			type non-loop-ipv4-address;
+			ordered-by "user";
+			configd:help "IP address of a peer in the group";
+			configd:allowed "/opt/vyatta/share/tmplscripts/protocols/msdp/peer_allowed.sh";
+		}
+	}
+	
+	// The common parameters for both peer and peer-group configuration
+	grouping common-peer-parameters {
+		leaf holdtime {
+			type uint32 {
+				range 3..75;
+			}
+			configd:help "Wait time for keep alive messages before declaring the peer down";
+		}
+		leaf connect-retry {
+			type uint32 {
+				range 1..60;
+			}
+			configd:help "Period between attempts to re-establish peer connection";
+		}
+		leaf shutdown {
+			type empty;
+			configd:help "Administratively shut down the peer";
+		}
+		leaf keepalive {
+			type uint32 {
+				range 1..60;
+			}
+			configd:help "Period at which keep alive messages will be sent";
+		}
+		uses export-grouping;
+		uses import-grouping;
+	}
+
+	augment /protocols:protocols {
+		container msdp {
+			configd:priority 790;
+			configd:help "Multicast Source Discovery Protocol (MSDP)";
+			configd:validate "vyatta-msdp-validate";
+			configd:end "vyatta-msdp-configure";
+			list peer {
+				configd:help "Configure an MSDP peer";
+				configd:validate "vyatta-msdp-validate peer $VAR(@)";
+				key "address";
+				leaf address {
+					type non-loop-ipv4-address;
+				}
+			
+				uses common-peer-parameters {
+					refine holdtime {
+						default 75;
+					}
+					refine connect-retry {
+						default 30;
+					}
+					refine keepalive {
+						default 60;
+					}
+					refine export {
+						configd:help "Configure which (S,G)s will be advertised to the peer";
+					}
+					refine import {
+						configd:help "Configure which (S,G)s which will be accepted from the peer";
+					}
+				}
+				
+				container default-peer {
+					presence "Peer is configured as a default";
+					configd:help "Skip RPF check for SA messages from this peer";
+					leaf priority {
+						type uint32 {
+							range 1..2000;
+						}
+						configd:help "Configure priority for default peer";
+					}
+					leaf prefix-list {
+						type prefix-list-name;
+						configd:help "Specify RP prefixes that the peer will be default for";
+						configd:allowed "/opt/vyatta/share/tmplscripts/protocols/msdp/prefix-list_allowed.sh";
+					}
+				}
+				
+				leaf local-address {
+					type non-loop-ipv4-address;
+					configd:help "IPv4 address used for the connection to the MSDP peer";
+				}
+				
+				leaf password {
+					type string {
+						length 1..80;
+					}
+					configd:secret "true";
+					configd:help "Password for the peer";
+				}
+			}
+			
+			
+			list peer-group {
+				configd:help "Configure an MSDP peer-group (peers share common parameters)";
+				configd:validate "vyatta-msdp-validate peer-group $VAR(@)";
+				key "name";
+				leaf name {
+					type string;
+				}
+				uses peer-list;
+				
+				// Refine the help messages so they are correct for a peer group
+				uses common-peer-parameters {
+					refine holdtime {
+						configd:help "Wait time for keep alive messages before declaring a peer down";
+					}
+					refine shutdown {
+						configd:help "Administratively shut down all peers in the group";
+					}
+					refine export {
+						configd:help "Configure which (S,G)s will be advertised to members of the peer group";
+					}					
+					refine import {
+						configd:help "Configure which (S,G)s which will be accepted from members of the peer group";
+					}
+				}
+			}
+			
+			uses export-grouping {
+				refine export {
+					configd:help "Configure which (S,G)s may be advertised to any peer";
+				}
+			}
+			uses import-grouping {
+				refine import {
+					configd:help "Configure which (S,G)s may be accepted from any peer";
+				}
+			}
+			leaf originated-id {
+				type non-loop-ipv4-address;
+				configd:help "Override RP address sent in SA messages";
+			}
+			
+			list mesh-group {
+				configd:help "Configure MSDP peers to be members of a mesh group";
+				configd:validate "vyatta-msdp-validate mesh-group $VAR(@)";
+				key "name";
+				leaf name {
+					type string;
+				}
+				uses peer-list {
+					refine peer {
+						min-elements 1;
+					}
+				}
+			}
+			
+			leaf-list log {
+				configd:help "Configure MSDP logging";
+				type enumeration {
+					enum all {
+						configd:help "Enable all logs";
+					}
+					enum bgp {
+						configd:help "Enable bgp logs";
+					}
+					enum cache {
+						configd:help "Enable cache logs";
+					}
+					enum events {
+						configd:help "Enable events logs";
+					}
+					enum fsm {
+						configd:help "Enable fsm logs";
+					}
+					enum other {
+						configd:help "Enable other logs";
+					}
+					enum packet {
+						configd:help "Enable packet logs";
+					}
+					enum pim {
+						configd:help "Enable pim logs";
+					}
+					enum rpfcheck {
+						configd:help "Enable rpfcheck logs";
+					}
+					enum snmp {
+						configd:help "Enable snmp logs";
+					}
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,403 @@
+module vyatta-service-twamp-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-twamp:1";
+	prefix vyatta-service-twamp-v1;
+
+	import ietf-inet-types {
+		prefix inet;
+	}
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import ietf-yang-types {
+		prefix ietf;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-01-07 {
+		description "Add twping rpc.";
+	}
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	typedef session-num {
+		type uint16 {
+			range 1..64 {}
+		}
+	}
+
+	typedef timeout {
+		type uint16 {
+			range 1..3600 {}
+		}
+	}
+
+	// Same as types:ip-prefix, but normalising the prefixes so
+	// that they don't have addresses inconsistent with mask
+	typedef ip-prefix {
+		type union {
+			type types:ipv4-prefix {
+				configd:normalize "normalize ipv4-prefix";
+			}
+			type types:ipv6-prefix {
+				configd:normalize "normalize ipv6-prefix";
+			}
+		}
+	}
+
+
+	rpc twping {
+		description "Measure the round trip time using TWAMP";
+
+		typedef time-interval-ms {
+			description "Floating point value representing a time interval";
+			type decimal64 {
+				fraction-digits 12;
+			}
+			units "milliseconds";
+		}
+
+		grouping min-max-time {
+			leaf min {
+				description "Minimum time observed during the sample period";
+				type time-interval-ms;
+			}
+			leaf max {
+				description "Maximum time observed during the sample period";
+				type time-interval-ms;
+			}
+		}
+		grouping addr-port {
+			leaf address {
+				description "IP address or domain name";
+				type union {
+					type types:ip-address;
+					type types:domain-name;
+				}
+			}
+			leaf port {
+				description "Port number";
+				type inet:port-number;
+			}
+		}
+		grouping time-stats {
+			uses min-max-time;
+			leaf median {
+				description "Median time observed during the sample period";
+				type time-interval-ms;
+			}
+			leaf error {
+				description "Calculated error for timing values";
+				type time-interval-ms;
+			}
+			leaf pdv {
+				description "Packet Delay Variation";
+				type time-interval-ms;
+			}
+		}
+		grouping hops {
+			leaf diff-num-ttl {
+				description "A count of how many different hop count values were observed during the test.";
+				type uint32;
+			}
+			leaf min {
+				description "Minimum number of hops taken by a test packet";
+				type uint32;
+			}
+			leaf max {
+				description "Maximum number of hops taken by a test packet";
+				type uint32;
+			}
+		}
+		input {
+			leaf host {
+				description "IP address or domain name of the test reflector";
+				type union {
+					type types:ip-address;
+					type types:domain-name;
+				}
+				mandatory true;
+			}
+			leaf count {
+				description "Number of test packets to send";
+				type uint32 {
+					range 1..1000;
+				}
+				default 100;
+			}
+			leaf padding {
+				description "Size of the padding to add to each test packet";
+				type uint32 {
+					range 0..65000;
+				}
+				units "bytes";
+			}
+			leaf session-count {
+				description "Number of test sessions to create and use";
+				type uint32 {
+					range 1..65535;
+				}
+				default 1;
+			}
+			leaf test-dscp-value {
+				description "RFC 2474 style DSCP value for TOS byte in test packets";
+				type uint32 {
+					range 0..63;
+				}
+				default 0;
+			}
+			leaf control-port {
+				description "Port to be used for the server control connection";
+				type inet:port-number {
+					range 1..65535;
+				}
+				default 862;
+			}
+			leaf interval {
+				description "Mean average time between
+					     each test packet sent";
+				type decimal64 {
+					fraction-digits 12;
+					range 0.0..max;
+				}
+				units "seconds";
+			}
+			container port-range {
+				must "start <= end" {
+					error-message
+					    "port-range start must be lower than or equal to port-range end";
+				}
+				must "(end - start + 1) >= ../session-count" {
+					description
+					    "Each session uses a different port
+					     number, therefore, there must be
+					     at least as many available ports
+					     in the port-range as sessions that
+					     are going to be opened";
+					error-message "Size of the port-range must be at least as large as session-count";
+				}
+				leaf start {
+					description "The lowest port number that can be used during the test";
+					type inet:port-number {
+						range 1..65535;
+					}
+					default 8760;
+				}
+				leaf end {
+					description "The highest port number that can be used during the test";
+					type inet:port-number {
+						range 1..65535;
+					}
+					default 8960;
+				}
+			}
+			container authentication {
+				presence "Enables authentication";
+				leaf mode {
+					description "Authentication mode";
+					type enumeration {
+						enum "authenticate";
+						enum "encrypt";
+						enum "mixed";
+					}
+					default "authenticate";
+				}
+				leaf user {
+					description "User name";
+					type string {
+						length 1..16;
+					}
+					mandatory true;
+				}
+				leaf passphrase {
+					description "Passphrase for user";
+					type string {
+						length 1..1024;
+					}
+					mandatory true;
+				}
+			}
+		}
+
+		output {
+			list results {
+				key sid;
+				leaf sid {
+					description "Session Identifier";
+					type string;
+				}
+				container source {
+					description "Source address that test packets originated from";
+					uses addr-port;
+				}
+				container destination {
+					description "Destination address of the test reflector";
+					uses addr-port;
+				}
+				container packets {
+					leaf time-of-first {
+						description "Time that the first test packet was sent";
+						type ietf:date-and-time;
+					}
+					leaf time-of-last {
+						description "Time that the last test packet was sent";
+						type ietf:date-and-time;
+					}
+					leaf num-pkts-sent {
+						description "Number of test packets that were sent";
+						type uint32;
+					}
+					leaf num-pkts-lost {
+						description "Number of test packets that were lost";
+						type uint32;
+					}
+					leaf send-duplicates {
+						description "Number of duplicate test packets received by the reflector";
+						type uint32;
+					}
+					leaf reflect-duplicates {
+						description "Number of duplicate test packets received by the sender";
+						type uint32;
+					}
+				}
+
+				container round-trip-time {
+					description "Total round trip time, from when the test packet is sent " +
+						"from the test client, until it is received back from the reflector";
+					uses time-stats;
+				}
+
+				container send-time {
+					description "Wire time for test packets to go from sender to reflector";
+					uses time-stats;
+				}
+				container reflect-time {
+					description "Wire time for test packets to go from the reflector, back to the sender";
+					uses time-stats;
+				}
+				container reflector-processing-time {
+					description "Time taken to process test packets within the reflector";
+					uses min-max-time;
+				}
+				container send-hops {
+					description "Number of hops taken by the test packets going from the sender to the reflector.";
+					uses hops;
+				}
+				container reflect-hops {
+					description "Number of hops taken by the test packets going from the reflector back to the sender";
+					uses hops;
+				}
+			}
+		}
+		configd:call-rpc "twamp-ping-rpc";
+	}
+
+	augment /service:service {
+		container twamp {
+			configd:help "Two-Way Active Measurement Protocol";
+			
+			container server {
+				presence "Signifies the TWAMP server is enabled";
+				configd:help "Server configuration";
+				configd:end "twampd-config.pl";
+				
+				leaf-list client-list {
+					type ip-prefix;
+					configd:help "List of clients that can connect to the server, by default any clients";
+				}
+				
+				leaf-list mode {
+					type enumeration {
+						enum "no-unauthenticated" {
+							configd:help "Disable support for unauthenticated sessions";
+						}
+						enum "no-mixed" {
+							configd:help "Disable support for mixed mode sessions";
+						}
+						enum "no-authenticated" {
+							configd:help "Disable support for authenticated sessions";
+						}
+						enum "no-encrypted" {
+							configd:help "Disable support for encrypted sessions";
+						}
+					}
+					configd:help "TWAMP authentication mode, by default all modes available";
+				}
+				
+				list user {
+					key "name";
+					leaf name {
+						type string {
+							length 1..16;
+						}
+						configd:help "User identity";
+					}
+					leaf password {
+						type string {
+							length 1..1024;
+						}
+						mandatory true;
+						configd:help "Password used to derive AES key";
+						configd:validate "/opt/vyatta/share/tmplscripts/service/twamp/server/user/password/password_validate.cli";
+						configd:secret "true";
+					}
+					configd:help "Configure user for mixed, authenticated and encrypted modes";
+				}
+				
+				leaf maximum-connections {
+					type session-num {}
+					default "16";
+					configd:help "Maximum number of control sessions supported per Twamp server <1-64>, by default 16";
+				}
+				
+				leaf maximum-sessions-per-connection {
+					type session-num {}
+					default "8";
+					configd:help "Maximum number of test sessions per control session <1-64>, by default 8";
+				}
+				
+				leaf server-inactivity-timeout {
+					type timeout {}
+					default "900";
+					configd:help "Control session inactivity timeout in seconds <1-3600>, by default 900";
+				}
+					
+				leaf test-inactivity-timeout {
+					type timeout {}
+					default "900";
+					configd:help "Test session inactivity timeout in seconds <1-3600>, by default 900";
+				}
+				
+				leaf port {
+					type inet:port-number {
+						range 1..65535 {}
+					}
+					default "862";
+					configd:help "Server TCP port for control session <1-65535>, by default 862";
+				}
+					
+				leaf dscp-value {
+					type uint8 {
+						range 0..63 {}
+					}
+					default "0";
+					configd:help "Base 10 value of dscp byte in ip header in control packets sent from server <0-63>, by default 0";
+				}
+			}
+		}
+	}
+}

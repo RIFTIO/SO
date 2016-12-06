@@ -1,0 +1,30 @@
+module vyatta-interfaces-bridge-policy-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-interfaces-bridge-policy:1";
+	prefix interfaces-bridge-policy;
+
+	import vyatta-policy-v1 {
+		prefix policy;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-bridge-v1 {
+		prefix interfaces-bridge;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		 	 San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-10-05 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /if:interfaces/interfaces-bridge:bridge {
+		uses policy:policy-binding;
+	}
+}

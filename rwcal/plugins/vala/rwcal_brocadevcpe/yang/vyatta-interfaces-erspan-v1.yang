@@ -1,0 +1,107 @@
+module vyatta-interfaces-erspan-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-interfaces-erspan:1";
+	prefix vyatta-interfaces-erspan-v1;
+
+	import vyatta-dscp-v1 {
+		prefix dscp;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-09-09 {
+		description "Initial revision";
+	}
+
+	augment /if:interfaces {
+		list erspan {
+			configd:priority "381";
+			configd:end "vyatta-interfaces-tunnel-erspan --erspan_tunnel=$VAR(@)";
+			configd:help "ERSPAN GRE interface";
+			description "ERSPAN GRE interface";
+			key "ifname";
+			leaf ifname {
+				type types:interface-ifname {
+					pattern 'erspan[0-9]+';
+					configd:pattern-help "<erspanN>";
+				}
+				configd:help "ERSPAN GRE interface";
+				description "ERSPAN GRE interface";
+			}
+			leaf description {
+				type string {
+					length "1..256";
+				}
+				configd:help "ERSPAN GRE interface description";
+				description "ERSPAN GRE interface description";
+			}
+			leaf disable {
+				type empty;
+				configd:help "Disable interface";
+				description "Disable interface";
+			}
+			leaf local-ip {
+				type types:ipv4-address;
+				configd:help "Local IP address for ERSPAN interface";
+				description "Local IP address for ERSPAN interface";
+				mandatory true;
+			}
+			leaf mtu {
+				type uint16 {
+					range 68..8024;
+				}
+				configd:priority "382";
+				configd:help "Maximum Transmission Unit (MTU)";
+				default "1500";
+				description "Maximum Transmission Unit (MTU)";
+			}
+			leaf remote-ip {
+				type types:ipv4-address;
+				configd:help "Remote IP address for ERSPAN interface";
+				description "Remote IP address for ERSPAN interface";
+				mandatory true;
+			}
+			container ip {
+				configd:help "IPv4 specific ERSPAN tunnel parameters";
+				description "IPv4 specific ERSPAN tunnel parameters";
+				leaf ttl {
+					type uint8;
+					configd:help "Time to live field";
+					description "Time to live field";
+					default "255";
+				}
+				leaf tos {
+					type union {
+						type dscp:dscp-name;
+						type enumeration {
+							enum "inherit" {
+								configd:help "Inherit from original IP header";
+							}
+						}
+						type string {
+							pattern '0x[0-9a-fA-F]{1,2}';
+							configd:pattern-help "<0x00-0xFF>";
+						}
+					}
+					configd:help "Type of Service (TOS)";
+					description "Type of Service (TOS)";
+					default "inherit";
+				}
+			}
+		}
+	}
+}

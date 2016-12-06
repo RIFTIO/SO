@@ -1,0 +1,363 @@
+module vyatta-npf-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-npf:1";
+	prefix vyatta-npf-v1;
+
+	import configd-v1 {
+		prefix configd;
+	}
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+
+	import vyatta-fw-types-v1 {
+		prefix fw-types;
+	}
+
+	import vyatta-dscp-v1 {
+		prefix dscp;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-03-28 {
+		description "Remove use of bash in action scripts";
+	}
+	revision 2015-10-15 {
+		description "Initial revision.";
+	}
+
+	typedef bandwidth-suffix {
+		type string {   /* Number followed by suffix */
+			pattern '((10|([0-9](\.([0-9]+))?))[gG][iI]?(bit|bps)?)|'
+				+ '([0-9]+(\.([0-9]+))?(([KMBkm][iI]?)?(bit|bps))?)';
+			configd:pattern-help "<<number><suffix>>
+   Suffixes are either 'bit' for bits-per-second or 'bps' for bytes-per-second.
+   These can be preceded by a decimal (K,M,G) or binary (Ki,Mi,Gi)
+   multiplier. No suffix implies Kbit (1000 bits per second).
+";
+		}
+	}
+
+	typedef burst-size {
+		type uint32 {
+			/* Arbitrary maximum: 312500000 is 100ms at 25 Mbits/sec */
+			range 1..312500000;
+		}
+		description "Burst size in bytes";
+		configd:help "Burst size in bytes";
+	}
+
+	grouping burst {
+		leaf burst {
+			type burst-size;
+			description "Burst size in bytes";
+			configd:help "Burst size in bytes";
+		}
+	}
+
+	typedef ratelimit-suffix {
+		type string {   /* Number followed by suffix */
+			pattern '[1-9][0-9]*(\.([0-9]+))?([KMkm]?pps)?';
+			configd:pattern-help "<number><suffix>
+   Suffixes can be one of pps, (K|k)pps or (M|m)pps for a multiplier.";
+			configd:help "Rate-limit in packets/second";
+			configd:syntax "rate-check.pl $VAR(@)";
+		}
+	}
+
+	grouping marking {
+		container mark {
+			description "Packet marking action";
+			configd:help "Packet marking action";
+			leaf dscp {
+				type dscp:dscp-name-or-value;
+				description "DSCP value to be marked";
+				configd:help "DSCP value to be marked";
+			}
+			leaf pcp {
+				type uint8 {
+					range 0..7;
+				}
+				description "802.1 priority code point to apply";
+				configd:help "802.1 priority code point to apply";
+			}
+		}
+	}
+
+	grouping policing {
+		container police {
+			must "bandwidth or ratelimit" {
+				error-message "One of 'bandwidth' or 'ratelimit' (not both) must be set";
+			}
+			description "Packet rate limiting";
+			configd:help "Packet rate limiting";
+			leaf bandwidth {
+				must "not(../ratelimit)" {
+					error-message "Both 'bandwidth' and 'ratelimit' cannot be set";
+				}
+				type bandwidth-suffix;
+				description "Bandwidth limit";
+				configd:help "Bandwidth limit";
+			}
+			leaf ratelimit {
+				// This cannot be set if bandwidth is set -
+				// the check is done on the bandwidth node.
+				type ratelimit-suffix;
+				description "Ratelimit in packets/second.";
+				configd:help "Ratelimit in packets/second.";
+			}
+			uses burst;
+			container then {
+				description "Result for packets over police limit";
+				configd:help "Result for packets over police limit";
+                                /* RIFT addition
+				leaf action {
+					type enumeration {
+						enum "drop" {
+							description "Drop if overlimit";
+							configd:help "Drop if overlimit";
+						}
+					}
+					description "Police action";
+					configd:help "Police action";
+				}
+                                */
+				uses marking;
+			}
+		}
+	}
+
+	grouping ethertype {
+		leaf ethertype {
+			type string {
+				configd:syntax "/opt/vyatta/share/tmplscripts/security/firewall/ethertype/ethertype/configd_syntax.cli";
+			}
+			description "Ethertype to match (name or hex or decimal)";
+			configd:help "Ethertype to match (name or hex or decimal)";
+			configd:allowed "/opt/vyatta/share/tmplscripts/security/firewall/ethertype/ethertype/configd_allowed.sh";
+		}
+	}
+
+	grouping fragment {
+		leaf fragment {
+			type empty;
+			description "Match on fragmented packets";
+			configd:help "Match on fragmented packets";
+		}
+	}
+
+	grouping rule-icmp-numeric {
+		list type {
+			description "Choose a type (and optional code) by number";
+			configd:help "Choose a type (and optional code) by number";
+			key type-number;
+			leaf type-number {
+				type fw-types:icmp-type-number;
+				description "ICMP type value";
+				configd:help "ICMP type value";
+			}
+			max-elements 1;
+			leaf code {
+				type fw-types:icmp-code-number;
+				description "ICMP code value";
+				configd:help "ICMP code value";
+			}
+		}
+	}
+
+	grouping rule-icmpv4 {
+		container icmp {
+			must "not(../protocol) or (../protocol = 'icmp') or (../protocol = 1)" {
+				error-message "'icmp' options can only be used if protocol is ICMP or not set";
+			}
+			must "not(../tcp) and not(../ipv6-route) and not(../icmpv6)" {
+				error-message "Options 'tcp', 'icmp', 'icmpv6' and 'ipv6-route' are mutually exclusive";
+			}
+			description "ICMP for IPv4";
+			configd:help "ICMP for IPv4";
+			leaf name {
+				type fw-types:icmpv4-symbolic;
+				description "Choose a type (and optional code) by name";
+				configd:help "Choose a type (and optional code) by name";
+			}
+			uses rule-icmp-numeric;
+			leaf group {
+				type fw-types:group-name;
+				configd:pattern-help "<icmp-group name>";
+				configd:help "Defined IPv4 ICMP group";
+				configd:allowed "echo $VAR(/resources/group/icmp-group/@@)";
+			}
+		}
+	}
+
+	grouping rule-icmpv6 {
+		container icmpv6 {
+			must "not(../protocol) or (../protocol = 'ipv6-icmp') or (../protocol = 58)" {
+				error-message "'icmpv6' options can only be used if protocol is ICMPv6 or not set";
+			}
+			must "not(../tcp) and not(../ipv6-route) and not(../icmp)" {
+				error-message "Options 'tcp', 'icmp', 'icmpv6' and 'ipv6-route' are mutually exclusive";
+			}
+			description "ICMP for IPv6";
+			configd:help "ICMP for IPv6";
+			leaf name {
+				type fw-types:icmpv6-symbolic;
+				description "Choose a type (and optional code) by name";
+				configd:help "Choose a type (and optional code) by name";
+			}
+			uses rule-icmp-numeric;
+			leaf group {
+				type fw-types:group-name;
+				configd:pattern-help "<icmpv6-group name>";
+				configd:help "Defined IPv6 ICMP group";
+				configd:allowed "echo $VAR(/resources/group/icmpv6-group/@@)";
+			}
+		}
+	}
+
+	grouping action-fw-pbr {
+		leaf action {
+			type enumeration {
+				enum "accept" {
+					description "Accept packets matching this rule";
+					configd:help "Accept packets matching this rule";
+				}
+				enum "drop" {
+					description "Drop packets matching this rule";
+					configd:help "Drop packets matching this rule";
+				}
+			}
+			mandatory true;
+			description "Rule action";
+			configd:help "Rule action";
+		}
+	}
+
+	grouping rule-common {
+		uses rule-icmpv4;
+		uses rule-icmpv6;
+		leaf description {
+			type string;
+			description "Rule description";
+			configd:help "Rule description";
+		}
+		leaf disable {
+			type empty;
+			description "Disable rule";
+			configd:help "Disable rule";
+		}
+		leaf protocol {
+			type string {
+				configd:syntax "/opt/vyatta/share/tmplscripts/security/firewall/rule-common/protocol/configd_syntax.cli";
+			}
+			description "Protocol to match (name or number)";
+			configd:help "Protocol to match (name or number)";
+			configd:allowed "/opt/vyatta/share/tmplscripts/security/firewall/rule-common/protocol/configd_allowed.sh";
+		}
+		container source {
+			description "Source parameters";
+			configd:help "Source parameters";
+			leaf mac-address {
+				type types:mac-address;
+				description "Source MAC address";
+				configd:help "Source MAC address";
+			}
+			leaf address {
+				type fw-types:fw-address;
+				description "Source IP address, subnet, or address-group";
+				configd:help "Source IP address, subnet, or address-group";
+				configd:allowed "echo $VAR(/resources/group/address-group/@@)";
+			}
+			leaf port {
+				type fw-types:fw-port;
+				description "Source port or port-group";
+				configd:help "Source port or port-group";
+				configd:allowed "echo $VAR(/resources/group/port-group/@@)";
+				must	"(../../protocol = 'tcp') or (../../protocol = 6) or ../../tcp or " +
+					"(../../protocol = 'udp') or (../../protocol = 17)"			{
+					error-message "A port can only be specified when the protocol is TCP or UDP";
+				}
+			}
+		}
+		container destination {
+			description "Destination parameters";
+			configd:help "Destination parameters";
+			leaf mac-address {
+				type types:mac-address;
+				description "Destination MAC address";
+				configd:help "Destination MAC address";
+			}
+			leaf address {
+				type fw-types:fw-address;
+				description "Destination IP address, subnet, or address-group";
+				configd:help "Destination IP address, subnet, or address-group";
+				configd:allowed "echo $VAR(/resources/group/address-group/@@)";
+			}
+			leaf port {
+				type fw-types:fw-port;
+				description "Destination port or port-group";
+				configd:help "Destination port or port-group";
+				configd:allowed "echo $VAR(/resources/group/port-group/@@)";
+				must	"(../../protocol = 'tcp') or (../../protocol = 6) or ../../tcp or " +
+					"(../../protocol = 'udp') or (../../protocol = 17)" {
+					error-message "A port can only be specified when the protocol is TCP or UDP";
+				}
+			}
+		}
+		container tcp {
+			must "not(../protocol) or (../protocol = 'tcp') or (../protocol = 6)" {
+				error-message "'tcp' options can only be used if protocol is TCP or not set";
+			}
+			must "not(../icmp) and not(../icmpv6) and not(../ipv6-route)" {
+				error-message "Options 'tcp', 'icmp', 'icmpv6' and 'ipv6-route' are mutually exclusive";
+			}
+			description "TCP parameters";
+			configd:help "TCP parameters";
+			leaf flags {
+				type fw-types:tcp-flags;
+				configd:help "Match TCP flags";
+			}
+		}
+		container ipv6-route {
+			must "not(../protocol) or (../protocol = 'ipv6-route') or (../protocol = 43)" {
+				error-message "'ipv6-route' options can only be used if protocol is IPv6-ROUTE or not set";
+			}
+			must "not(../icmp) and not(../icmpv6) and not(../tcp)" {
+				error-message "Options 'tcp', 'icmp', 'icmpv6' and 'ipv6-route' are mutually exclusive";
+			}
+			description "IPv6 route";
+			configd:help "IPv6 route";
+			leaf type {
+				type uint8 {
+					range 0..255;
+				}
+				description "IPv6 route type";
+				configd:help "IPv6 route type";
+			}
+		}
+		leaf dscp {
+			type dscp:dscp-name-or-value;
+			description "DSCP value to match in an incoming IP header";
+			configd:help "DSCP value to match in an incoming IP header";
+		}
+		leaf pcp {
+			type uint8 {
+				range 0..7;
+			}
+			description "802.1 priority code point to match (0 to 7)";
+			configd:help "802.1 priority code point to match (0 to 7)";
+		}
+		leaf log {
+			type empty;
+			description "Enable logging for rule";
+			configd:help "Enable logging for rule";
+		}
+	}
+}

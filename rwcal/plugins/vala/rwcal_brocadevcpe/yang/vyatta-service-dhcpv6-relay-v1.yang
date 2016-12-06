@@ -1,0 +1,83 @@
+module vyatta-service-dhcpv6-relay-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-dhcpv6-relay:1";
+	prefix vyatta-service-dhcpv6-relay-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /service:service {
+		container dhcpv6-relay {
+			presence "true";
+			configd:priority "900";
+			configd:help "DHCPv6 Relay Agent parameters";
+			configd:end "/opt/vyatta/share/tmplscripts/service/dhcpv6-relay/configd_end.sh";
+			list upstream-interface {
+				configd:allowed "/opt/vyatta/share/tmplscripts/service/dhcpv6-relay/upstream-interface/configd_allowed.sh";
+				configd:help "Interface for DHCPv6 Relay Agent forward requests out";
+				key "tagnode";
+				leaf tagnode {
+					type string;
+					configd:allowed "/opt/vyatta/share/tmplscripts/service/dhcpv6-relay/upstream-interface/configd_allowed.sh";
+					configd:help "Interface for DHCPv6 Relay Agent forward requests out";
+				}
+				leaf address {
+					type types:ipv6-address;
+					configd:help "IPv6 address to forward requests to";
+				}
+			}
+			leaf max-hop-count {
+				type uint32 {
+					range 1..255 {
+						error-message "Must be between 1 and 255";
+					}
+				}
+				configd:help "Maximum hop count for which requests will be processed";
+			}
+			list listen-interface {
+				configd:allowed "/opt/vyatta/share/tmplscripts/service/dhcpv6-relay/listen-interface/configd_allowed.sh";
+				configd:help "Interface for DHCPv6 Relay Agent to listen for requests";
+				key "tagnode";
+				leaf tagnode {
+					type string;
+					configd:allowed "/opt/vyatta/share/tmplscripts/service/dhcpv6-relay/listen-interface/configd_allowed.sh";
+					configd:help "Interface for DHCPv6 Relay Agent to listen for requests";
+				}
+				leaf address {
+					type types:ipv6-address;
+					configd:help "IPv6 address on listen-interface listen for requests on";
+				}
+			}
+			leaf listen-port {
+				type uint32 {
+					range 1..65535 {
+						error-message "Must be between 1 and 65535";
+					}
+				}
+				configd:help "UDP port to listen for requests on";
+			}
+			leaf use-interface-id-option {
+				type empty;
+				configd:help "Option to set DHCPv6 interface-ID option";
+			}
+		}
+	}
+}

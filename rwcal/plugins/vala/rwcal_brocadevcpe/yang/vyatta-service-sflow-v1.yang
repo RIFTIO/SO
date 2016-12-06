@@ -1,0 +1,99 @@
+module vyatta-service-sflow-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-sflow:1";
+	prefix vyatta-service-sflow-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix if-dataplane;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /service:service {
+		container sflow {
+			presence "true";
+			configd:help "sflow configuration for dataplane";
+			leaf polling-interval {
+				type uint32 {
+					range 0..65535 {
+						error-message "Sampling rate must be between o and 65535";
+					}
+				}
+				default "20";
+				configd:help "sFlow polling interval";
+				configd:delete "vyatta-sflow.pl --cmd=disable --proto=polling-interval --state=$VAR(@) --param=0";
+				configd:update "vyatta-sflow.pl --cmd=enable --proto=polling-interval --state=$VAR(@) --param=0";
+			}
+			leaf sampling-rate {
+				type uint32 {
+					range 512..65535 {
+						error-message "Sampling rate must be between 512 and 65535";
+					}
+				}
+				default "2048";
+				configd:help "sFlow sampling rate";
+				configd:delete "vyatta-sflow.pl --cmd=disable --proto=sampling-rate --state=$VAR(@) --param=0";
+				configd:update "vyatta-sflow.pl --cmd=enable --proto=sampling-rate --state=$VAR(@) --param=0";
+			}
+			leaf agent-address {
+				type union {
+					type types:ipv4-address;
+					type types:ipv6-address;
+				}
+				configd:priority "400";
+				configd:help "Agent address";
+				configd:delete "vyatta-sflow.pl --cmd=disable --proto=agent-address --state=$VAR(@) --param=0";
+				configd:update "vyatta-sflow.pl --cmd=enable --proto=agent-address --state=$VAR(@) --param=0";
+			}
+			list server-address {
+				configd:help "sFlow server address";
+				key "addr";
+				max-elements "4";
+				leaf addr {
+					type union {
+						type types:ipv4-address;
+						type types:ipv6-address;
+					}
+				}
+				leaf server-port {
+					type uint16;
+					mandatory true;
+					configd:help "sFlow server UDP port";
+					configd:delete "vyatta-sflow.pl --cmd=disable --proto=server --state=$VAR(../@) --param=$VAR(@)";
+					configd:update "vyatta-sflow.pl --cmd=enable --proto=server --state=$VAR(../@) --param=$VAR(@)";
+				}
+			}
+		}
+	}
+
+	augment /if:interfaces/if-dataplane:dataplane {
+		leaf sflow {
+			type empty;
+			configd:help "Enable/Disable sflow for interface";
+			configd:delete "vplane-sflow.pl --cmd=disable --intf=$VAR(../@) --type=$VAR(..)";
+			configd:update "vplane-sflow.pl --cmd=enable --intf=$VAR(../@) --type=$VAR(..)";
+			configd:validate "/opt/vyatta/share/tmplscripts/interfaces/dataplane/sflow/configd_validate.cli";
+		}
+	}
+}

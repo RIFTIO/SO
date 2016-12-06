@@ -1,0 +1,131 @@
+module vyatta-interfaces-bridge-rstp-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-interfaces-bridge-rstp:1";
+	prefix interfaces-bridge-rstp;
+
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-tunnel-v1 {
+		prefix interfaces-tunnel;
+	}
+	import vyatta-interfaces-bonding-v1 {
+		prefix interfaces-bonding;
+	}
+	import vyatta-interfaces-l2tpeth-v1 {
+		prefix interfaces-l2tpeth;
+	}
+	import vyatta-interfaces-bridge-v1 {
+		prefix interfaces-bridge;
+	}
+	import vyatta-interfaces-bridge-spanning-tree-v1 {
+		prefix interfaces-bridge-stp;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+
+	grouping rstp-port {
+		leaf admin-edge {
+			type empty;
+			description "Port is connected to a LAN that has no other bridges attached.
+Transition directly to the forwarding state.";
+			configd:help "Enable Spanning Tree admin edge mode";
+		}
+		leaf auto-edge {
+			type empty;
+			description "Automatically determine if port is connected to a LAN that has
+no other bridges attached. A port attached to a LAN with no other bridges attached may transition
+directly to the forwarding state.";
+			configd:help "Enable Spanning Tree automatic admin edge detection";
+		}
+		leaf restrict-tcn {
+			type empty;
+			description "Restricts the ports ability to propagate received topology
+ change notifications.";
+			configd:help "Restrict propagation of Spanning Tree topology change notifications";
+		}
+		leaf network-port {
+			type empty;
+			description "Detect unidirectional link on point-to-point link where RSTP
+ is enabled. The port is in an inconsistent state (Listening or Discarding)
+ until a BPDU is received from the peer.  network-port must be configured
+ on both ends of the link.  Bridge assurance is operational only when
+ network-port is configured and the operational status is point-to-point and
+ the version is RSTP.";
+			configd:help "Enable Spanning Tree uni-directional link detection";
+		}
+		leaf point-to-point {
+			configd:help "Set point-to-point operational status";
+			description "Set the ports point-to-point operational status. Auto means
+ p2p operational status is determined from port duplex mode.  Bridge
+ assurance is operational only when network-port is configured and the
+ operational status is point-to-point and the version is RSTP.";
+			type enumeration {
+				enum "auto" {
+					description "Determine point-to-point from duplex setting";
+					configd:help "Determine point-to-point from duplex setting";
+				}
+				enum "on";
+				enum "off";
+			}
+			default "auto";
+		}
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-bridge:bridge-group {
+		uses rstp-port;
+	}
+	augment /if:interfaces/interfaces-tunnel:tunnel/interfaces-bridge:bridge-group {
+		uses rstp-port;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bridge:bridge-group {
+		uses rstp-port;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:vif/interfaces-bridge:bridge-group {
+		uses rstp-port;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-bridge:bridge-group {
+		uses rstp-port;
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif/interfaces-bridge:bridge-group {
+		uses rstp-port;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif/interfaces-bridge:bridge-group {
+		uses rstp-port;
+	}
+
+	augment /if:interfaces/interfaces-bridge:bridge/interfaces-bridge-stp:spanning-tree {
+		leaf tx-hold-count {
+			type uint8 {
+				range 1..10;
+			}
+			default "6";
+			description "Maximum number of BPDUs transmitted during hello-time period.";
+			configd:help "Maximum number of BPDUs transmitted during hello-time period";
+			configd:update "vyatta-bridge-stp --bridge=$VAR(../../@) --action=set_txhold --val=$VAR(@)";
+		}
+		leaf version {
+			type enumeration {
+				enum "stp";
+				enum "rstp";
+			}
+			configd:help "Spanning Tree version";
+			default "rstp";
+			description "Spanning Tree version.  If rstp (802.1w) is configured the
+ operational version will revert to stp (802.1d) if an stp BPDU is received.";
+			configd:update "vyatta-bridge-stp --bridge=$VAR(../../@) --action=set_version --val=$VAR(@)";
+		}
+	}
+}

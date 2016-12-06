@@ -1,0 +1,183 @@
+module vyatta-policy-pbr-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-policy-pbr:1";
+	prefix vyatta-policy-pbr-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-l2tpeth-v1 {
+		prefix interfaces-l2tpeth;
+	}
+	import vyatta-interfaces-bonding-v1 {
+		prefix interfaces-bonding;
+	}
+	import vyatta-policy-v1 {
+		prefix policy;
+	}
+	import vyatta-policy-route-v1 {
+		prefix policy-route;
+	}
+	import vyatta-interfaces-policy-v1 {
+		prefix interfaces-policy;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-fw-types-v1 {
+		prefix fw-types;
+	}
+	import vyatta-npf-v1 {
+		prefix npf;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-01-31 {
+		description "Make table-ID optional, so it can be omitted when the action is 'drop'.
+			     Refine npf:action-fw-pbr, adding a 'must' to check the
+			     action, address-family, and table configs.";
+	}
+
+	revision 2015-12-07 {
+		description "Remove references to 'firewall' from configd:help in PBR yang.";
+	}
+
+	revision 2015-09-30 {
+		description "Initial revision.";
+	}
+
+	typedef policy-name-suffix {
+		type types:alpha-numeric {
+			length "1..28";
+		}
+	}
+
+	grouping rule-pbr {
+		uses npf:rule-common;
+		uses npf:action-fw-pbr {
+			refine action {
+				must "../address-family and ((current() = 'drop') or ../table)" {
+					error-message "Both 'address-family' and 'table' must be specified for 'accept'. " +
+						      "'address-family' must be specified for 'drop'.";
+				}
+			}
+		}
+		leaf table {
+			type uint32 {
+				range 1..128;
+			}
+			description "Policy Based Routing Table ID";
+			configd:help "Policy Based Routing Table ID";
+		}
+		leaf address-family {
+			type enumeration {
+				enum "ipv4" {
+					description "IPv4 address family";
+					configd:help "IPv4 address family";
+				}
+				enum "ipv6" {
+					description "IPv6 address family";
+					configd:help "IPv6 address family";
+				}
+			}
+			mandatory true;
+			description "Address family for this ruleset";
+			configd:help "Address family for this ruleset";
+		}
+	}
+
+	grouping pbr-if-parameters {
+		container route {
+			configd:help "PBR Options";
+			configd:end "end-npf-if $VAR(../../) $VAR(../../@) route";
+			leaf-list pbr {
+				type policy-name-suffix {
+					configd:help "PBR ruleset name";
+				}
+				ordered-by "user";
+				configd:help "Ruleset for PBR routed packets on inbound interface";
+				configd:allowed "echo $VAR(/policy/route/pbr/@@)";
+				configd:validate "check-pbr-ruleset-exists";
+			}
+		}
+	}
+
+	grouping pbr-vif-if-parameters {
+		uses pbr-if-parameters {
+			refine route {
+				configd:end "end-npf-if $VAR(../../../) '$VAR(../../../@) vif $VAR(../../@)' route";
+			}
+		}
+	}
+
+	augment /policy:policy/policy-route:route {
+		list pbr {
+			configd:priority "310";
+			configd:help "PBR group";
+			configd:validate "validate-fw-groups --variant=route";
+			configd:delete "vyatta-dp-npf.pl --variant=route --cmd=delete-group --group=$VAR(@)";
+			configd:begin "vyatta-dp-npf.pl --variant=route --cmd=reload-stop";
+			configd:end "end-pbr-ruleset $VAR(@)";
+			key "tagnode";
+			leaf tagnode {
+				type policy-name-suffix {
+					configd:help "PBR group";
+				}
+			}
+			leaf description {
+				type string;
+				configd:help "Ruleset description";
+			}
+			list rule {
+				configd:help "Rule number";
+				key "tagnode";
+				leaf tagnode {
+					type fw-types:rule-number;
+				}
+				uses rule-pbr;
+			}
+			leaf config-trap {
+				type enumeration {
+					enum "enable" {
+						configd:help "Enable sending SNMP trap on policy configuration change";
+					}
+					enum "disable" {
+						configd:help "Disable sending SNMP trap on policy configuration change";
+					}
+				}
+				configd:help "SNMP trap generation on policy configuration changes";
+				default "disable";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-policy:policy {
+		uses pbr-if-parameters;
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif/interfaces-policy:policy {
+		uses pbr-vif-if-parameters;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-policy:policy {
+		uses pbr-if-parameters;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:vif/interfaces-policy:policy {
+		uses pbr-vif-if-parameters;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-policy:policy {
+		uses pbr-if-parameters;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif/interfaces-policy:policy {
+		uses pbr-vif-if-parameters;
+	}
+}

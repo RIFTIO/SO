@@ -1,0 +1,386 @@
+module vyatta-protocols-bfd-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-protocols-bfd:1";
+	prefix vyatta-protocols-bfd-v1;
+
+	import vyatta-protocols-v1 {
+		prefix protocols;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}   
+	import vyatta-service-snmp-v1 {
+		prefix service-snmp;
+	} 
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-bonding-v1 {
+		prefix interfaces-bonding;
+	}
+	import vyatta-protocols-static-v1 {
+		prefix protocols-static;
+	}
+	import vyatta-protocols-bgp-v1 {
+		prefix protocols-bgp;
+	}
+	import vyatta-protocols-ospf-v1 {
+		prefix protocols-ospf;
+	}
+	import vyatta-protocols-ospfv3-v1 {
+		prefix protocols-ospfv3;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-05-09 {
+		description "Revised and added configd priority values";
+	}
+
+	revision 2015-09-23 {
+		description "Initial revision of version 1";
+	}
+
+	/* Defining Groupings, these groupings, akin to macros will be substituted where ever called */
+	grouping ip-bfd-fallover {
+		container fall-over {
+			description "This container is present only when fall-over is configured.";
+			configd:help "Fall-over detection";
+			leaf bfd {
+				type empty;
+				configd:help "Bidirectional Forwarding Detection (BFD)";
+				configd:create "/opt/vyatta/share/tmplscripts/interfaces/all/ip/ospf/fall-over/bfd/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ip/ospf/fall-over/bfd/configd_delete.sh";
+			}
+		}
+	}
+
+	grouping ipv6-bfd-fallover {
+		container fall-over {
+			description "This container is present only when fall-over is configured.";
+			configd:help "Fall-over detection";
+			leaf bfd {
+				type empty;
+				configd:help "Bidirectional Forwarding Detection (BFD)";
+				configd:create "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/fall-over/bfd/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/fall-over/bfd/configd_delete.sh";
+			}
+		}
+	}
+
+	grouping proto-bfd-fallover {
+		container fall-over {
+			description "This container is present only when fall-over is configured.";
+			configd:help "Fall-over detection";
+			leaf bfd {
+				type empty;
+				configd:help "Bidirectional Forwarding Detection (BFD)";
+				configd:create "/opt/vyatta/share/tmplscripts/protocols/all/fall-over/bfd/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/all/fall-over/bfd/configd_delete.sh";
+			}
+		}
+	}
+
+	grouping interface-template {
+		container bfd {
+			configd:priority "997";
+			description "Configures BFD parameter template on interface.";
+			configd:help "Bidirectional Forwarding Detection (BFD)";
+			leaf template {
+				type string {
+					length "1..512";
+				}
+				configd:help "Template name";
+				configd:allowed  "/opt/vyatta/sbin/vyatta-bfd.pl --list-template-names";
+				configd:validate "/opt/vyatta/share/tmplscripts/interfaces/all/bfd/configd_validate.sh";
+				configd:create "/opt/vyatta/share/tmplscripts/interfaces/all/bfd/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/bfd/configd_delete.sh";
+			}
+		}
+	}
+
+	/* Augmenting protocols-static */
+	augment /protocols:protocols/protocols-static:static/protocols-static:route/protocols-static:next-hop {
+		container fall-over {
+			description "This container is present only when fall-over is configured.";
+			configd:help "Enable fall-over detection for IPv4 static route";
+			leaf bfd {
+				type empty;
+				configd:help "BFD - Bi-directional Forwarding Detection";
+			}
+		}
+	}
+
+	augment /protocols:protocols/protocols-static:static/protocols-static:route6/protocols-static:next-hop {
+		container fall-over {
+			description "This container is present only when fall-over is configured.";
+			configd:help "Enable fall-over detection for IPv6 static route";
+			leaf bfd {
+				type empty;
+				configd:help "BFD - Bi-directional Forwarding Detection";
+			}
+		}
+	}
+
+	/* Augmenting protocols-bgp */
+	augment /protocols:protocols/protocols-bgp:bgp/protocols-bgp:neighbor {
+		container fall-over {
+			description "This container is present only when fall-over is configured.";
+			configd:help "Fall-over detection";
+			leaf bfd {
+				type empty;
+				configd:help "Bidirectional Forwarding Detection (BFD)";
+			}
+		}
+	}
+
+	/* Augmenting protocols */
+	augment /protocols:protocols/protocols-ospf:ospf/protocols-ospf:area/protocols-ospf:virtual-link {
+		uses proto-bfd-fallover;
+	}
+
+	augment /protocols:protocols/protocols-ospfv3:ospfv3/protocols-ospfv3:area/protocols-ospfv3:virtual-link {
+		uses proto-bfd-fallover;
+	}
+
+	augment /protocols:protocols/protocols-ospfv3:ospfv3/protocols-ospfv3:process/protocols-ospfv3:area/protocols-ospfv3:virtual-link {
+		uses proto-bfd-fallover;
+	}
+
+	/* Augmenting IP interfaces */
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:ip/protocols-ospf:ospf {
+		uses ip-bfd-fallover;
+	}
+
+	/* Augmenting interface level parameter template */
+	augment /if:interfaces/interfaces-dataplane:dataplane {
+		uses interface-template;
+	}
+
+	/* Augmenting interface level parameter template */
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif {
+		uses interface-template;
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif/interfaces-dataplane:ip/protocols-ospf:ospf {
+		uses ip-bfd-fallover;
+	}
+
+	/* Augmenting IPv6 interfaces */
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:ipv6/protocols-ospfv3:ospfv3 {
+		uses ipv6-bfd-fallover;
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif/interfaces-dataplane:ipv6/protocols-ospfv3:ospfv3 {
+		uses ipv6-bfd-fallover;
+	}
+
+	/* Augmenting bonding interfaces */
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:ip/protocols-ospf:ospf {
+		uses ip-bfd-fallover;
+	}
+
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:ipv6/protocols-ospfv3:ospfv3 {
+		uses ipv6-bfd-fallover;
+	}
+
+	augment /if:interfaces/interfaces-bonding:bonding {
+		uses interface-template;
+	}
+
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif/interfaces-bonding:ip/protocols-ospf:ospf {
+		uses ip-bfd-fallover;
+	}
+
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif/interfaces-bonding:ipv6/protocols-ospfv3:ospfv3 {
+		uses ipv6-bfd-fallover;
+	}
+
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif {
+		uses interface-template;
+	}
+
+	/* Augmenting trap notifications */
+	augment /service:service/service-snmp:snmp/service-snmp:notification {
+		container bfd {
+			configd:help "BFD Notifications";
+			leaf all {
+				type empty;
+				configd:help "BFD Notifications";
+				configd:create "vtysh -c \"configure terminal\" -c \"bfd notification all\"";
+				configd:delete "vtysh -c \"configure terminal\" -c \"no bfd notification\"";
+			}
+		}
+	}
+
+	/* BFD commands' definition */
+	augment /protocols:protocols {
+		container bfd {
+			description "The BFD node need not exist if neither BFD templates nor BFD destinations are configured";
+			presence "true";
+			configd:priority "990";
+			configd:help "BFD protocol";
+			configd:end "/opt/vyatta/share/tmplscripts/protocols/bfd/configd_end.sh";
+			list template {
+				configd:priority "995";
+				configd:help "Template name.";
+				key "tagnode";
+				leaf tagnode {
+					type string;
+					configd:help "Template name.";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/bfd/template/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/bfd/template/configd_delete.sh";
+				}
+				container auth {
+					description "This container is present only authentication is enabled.";
+					configd:priority "996";
+					configd:help "Authentication";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/bfd/template/auth/configd_delete.sh";
+					container simple {
+						description "This container is present only when simple text password is configured.";
+						configd:help "Simple Password";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/bfd/template/auth/simple/configd_validate.sh";
+						leaf key {
+							configd:help "Authentication key chain";
+							configd:secret "true";
+							type string {
+								pattern '[^\t\n\r ]{1,16}' {
+									error-message "Simple password must be 16 characters or less";
+								}
+							}
+							configd:create "/opt/vyatta/share/tmplscripts/protocols/bfd/template/auth/simple/key/configd_create.sh";
+						}
+					}
+				}
+				leaf minimum-tx {
+					configd:priority "996";
+					configd:help "Minimum transmit interval ( in milliseconds )";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/bfd/template/minimum-tx/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/bfd/template/minimum-tx/configd_delete.sh";
+					type uint32 {
+						range 20..10000;
+					}
+					default "300";
+				}
+				leaf minimum-rx {
+					configd:priority "996";
+					configd:help "Minimum receive interval ( in milliseconds )";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/bfd/template/minimum-rx/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/bfd/template/minimum-rx/configd_delete.sh";
+					type uint32 {
+						range 20..10000;
+					}
+					default "300";
+				}
+				leaf multiplier {
+					configd:priority "996";
+					configd:help "Detect Multiplier";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/bfd/template/multiplier/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/bfd/template/multiplier/configd_delete.sh";
+					type uint32 {
+						range 1..100;
+					}
+					default "3";
+				}
+			}
+			list destination {
+				configd:priority "999";
+				configd:help "Destination Address";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/bfd/destination/configd_validate.sh";
+				configd:delete   "/opt/vyatta/share/tmplscripts/protocols/bfd/destination/configd_delete.sh";
+				key "tagnode";
+				leaf tagnode {
+					configd:help "Destination Address";
+					type union {
+						type types:ipv4-address;
+						type types:ipv6-address;
+					}
+				}
+				list source {
+					configd:help "Source Address";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/bfd/destination/source/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/bfd/destination/source/configd_delete.sh";
+					key "tagnode";
+					leaf tagnode {
+						configd:help "Source Address";
+						type union {
+							type types:ipv4-address;
+							type types:ipv6-address;
+							type enumeration {
+								enum "any";
+							}
+						}
+					}
+					leaf helper-session {
+						type empty;
+						configd:help     "Helper Session";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/bfd/destination/source/helper-session/configd_validate.sh";
+						configd:create   "/opt/vyatta/share/tmplscripts/protocols/bfd/destination/source/helper-session/configd_create.sh";
+						configd:delete   "/opt/vyatta/share/tmplscripts/protocols/bfd/destination/source/helper-session/configd_delete.sh";
+					}
+					leaf template {
+						type string;
+						configd:help     "Template name";
+						configd:allowed  "/opt/vyatta/sbin/vyatta-bfd.pl --list-template-names";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/bfd/destination/source/template/configd_validate.sh";
+						configd:create   "/opt/vyatta/share/tmplscripts/protocols/bfd/destination/source/template/configd_create.sh";
+						configd:delete   "/opt/vyatta/share/tmplscripts/protocols/bfd/destination/source/template/configd_delete.sh";
+					}
+				}
+			}
+            container log {
+                configd:help "BFD logging parameters";
+                leaf all {
+                    type empty;
+                    configd:help "Enable all BFD logs";
+                    configd:create "/opt/vyatta/share/tmplscripts/protocols/bfd/log/configd_create.sh";
+                    configd:delete "/opt/vyatta/share/tmplscripts/protocols/bfd/log/configd_delete.pl $VAR(@)";
+                }   
+                leaf event {
+                    type empty;
+                    configd:help "Enable BFD event logs";
+                    configd:create "/opt/vyatta/share/tmplscripts/protocols/bfd/log/configd_create.sh";
+                    configd:delete "/opt/vyatta/share/tmplscripts/protocols/bfd/log/configd_delete.pl $VAR(@)";
+                }   
+                leaf ipc-error {
+                    type empty;
+                    configd:help "Enable BFD ipc-error logs";
+                    configd:create "/opt/vyatta/share/tmplscripts/protocols/bfd/log/configd_create.sh";
+                    configd:delete "/opt/vyatta/share/tmplscripts/protocols/bfd/log/configd_delete.pl $VAR(@)";
+                }   
+                leaf ipc-event {
+                    type empty;
+                    configd:help "Enable BFD ipc-event logs";
+                    configd:create "/opt/vyatta/share/tmplscripts/protocols/bfd/log/configd_create.sh";
+                    configd:delete "/opt/vyatta/share/tmplscripts/protocols/bfd/log/configd_delete.pl $VAR(@)";
+                }   
+                leaf packet {
+                    type empty;
+                    configd:help "Enable BFD packet logs";
+                    configd:create "/opt/vyatta/share/tmplscripts/protocols/bfd/log/configd_create.sh";
+                    configd:delete "/opt/vyatta/share/tmplscripts/protocols/bfd/log/configd_delete.pl $VAR(@)";
+                }
+                leaf session {
+                    type empty;
+                    configd:help "Enable BFD session logs";
+                    configd:create "/opt/vyatta/share/tmplscripts/protocols/bfd/log/configd_create.sh";
+                    configd:delete "/opt/vyatta/share/tmplscripts/protocols/bfd/log/configd_delete.pl $VAR(@)";
+                }
+            }   
+		}
+	}
+}

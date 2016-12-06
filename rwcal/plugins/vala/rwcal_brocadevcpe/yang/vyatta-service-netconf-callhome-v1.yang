@@ -1,0 +1,77 @@
+module vyatta-service-netconf-callhome-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-netconf-callhome:1";
+	prefix service-netconf-callhome;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import vyatta-service-netconf-v1 {
+		prefix netconf;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	description
+		"Call-home allows for a device to initiate a secure connection with
+		 configured remote management system(s) for additional
+		 configuration or simply to register its presence.";
+
+	revision 2015-11-26 {
+		description "Initial release of v1.";
+	}
+
+	augment /service:service/netconf:netconf {
+		configd:end "/opt/vyatta/share/tmplscripts/service/netconf/callhome_end.sh";
+		container call-home {
+			description "Configure call-home service";
+			configd:help "Configure call-home service";
+			list netconf-client {
+				key host;
+				configd:help "List of NETCONF clients";
+				description "List of NETCONF clients the NETCONF server is to initiate SSH call-home connections to.";
+				leaf host {
+					type types:host {
+						configd:help "Client IP address or host name";
+					}
+					description "Client IP address or host name";
+				}
+				leaf port {
+					type types:port;
+					default 7777;
+					description "IP port for client";
+					configd:help "IP port for client";
+				}
+				leaf disable {
+					type empty;
+					description "Disable client";
+					configd:help "Disable client";
+				}
+			}
+		}
+		leaf call-home-status {
+			config false;
+			type enumeration {
+				enum "failed";
+				enum "succeeded";
+				enum "started";
+				enum "not-started";
+				enum "unknown";
+			}
+			description "Status of the call-home operation";
+			configd:help "Status of the call-home operation";
+			configd:get-state "/usr/sbin/chclient -g";
+		}
+	}
+}

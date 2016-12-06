@@ -1,0 +1,246 @@
+module vyatta-system-syslog-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-system-syslog:1";
+	prefix vyatta-system-syslog-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-system-v1 {
+		prefix system;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	typedef remote-host {
+		type union {
+			type types:hostname-port;
+			type types:ipv4-addr-port;
+			type types:ipv6-addr-port;
+		}
+	}
+
+	typedef facility {
+		type enumeration {
+			enum "auth" {
+				configd:help "Authentication and authorization";
+			}
+			enum "authpriv" {
+				configd:help "Non-system authorization";
+			}
+			enum "cron" {
+				configd:help "Cron daemon";
+			}
+			enum "dataplane" {
+				configd:help "Dataplane (local6)";
+			}
+			enum "daemon" {
+				configd:help "System daemons";
+			}
+			enum "kern" {
+				configd:help "Kernel";
+			}
+			enum "lpr" {
+				configd:help "Line printer spooler";
+			}
+			enum "mail" {
+				configd:help "Mail subsystem";
+			}
+			enum "mark" {
+				configd:help "Timestamp";
+			}
+			enum "news" {
+				configd:help "USENET subsystem";
+			}
+			enum "protocols" {
+				configd:help "Routing protocols (local7)";
+			}
+			enum "security" {
+				configd:help "Authentication and authorization";
+			}
+			enum "sensors" {
+				configd:help "Hardware sensors";
+			}
+			enum "syslog" {
+				configd:help "Authentication and authorization";
+			}
+			enum "user" {
+				configd:help "Application processes";
+			}
+			enum "uucp" {
+				configd:help "UUCP subsystem";
+			}
+			enum "local0" {
+				configd:help "Local facility 0";
+			}
+			enum "local1" {
+				configd:help "Local facility 1";
+			}
+			enum "local2" {
+				configd:help "Local facility 2";
+			}
+			enum "local3" {
+				configd:help "Local facility 3";
+			}
+			enum "local4" {
+				configd:help "Local facility 4";
+			}
+			enum "local5" {
+				configd:help "Local facility 5";
+			}
+			enum "local6" {
+				configd:help "Local facility 6";
+			}
+			enum "local7" {
+				configd:help "Local facility 7";
+			}
+			enum "all" {
+				configd:help "All facilities excluding \"mark\"";
+			}
+		}
+	}
+
+	typedef level {
+		type enumeration {
+			enum "emerg" {
+				configd:help "Emergency messages";
+			}
+			enum "alert" {
+				configd:help "Urgent messages";
+			}
+			enum "crit" {
+				configd:help "Critical messages ";
+			}
+			enum "err" {
+				configd:help "Error messages";
+			}
+			enum "warning" {
+				configd:help "Warning messages";
+			}
+			enum "notice" {
+				configd:help "Messages for further investigation";
+			}
+			enum "info" {
+				configd:help "Informational messages";
+			}
+			enum "debug" {
+				configd:help "Debug messages";
+			}
+		}
+	}
+
+	grouping facility {
+		list facility {
+			configd:help "Facility for system logging";
+			key "tagnode";
+			leaf tagnode {
+				type facility;
+				configd:help "Facility for system logging";
+			}
+			leaf level {
+				type level;
+				configd:help "Logging level";
+				default "err";
+				configd:create "/opt/vyatta/share/tmplscripts/system/syslog/global/facility/level/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/system/syslog/global/facility/level/configd_delete.sh";
+			}
+		}
+	}
+
+	grouping archive {
+		container archive {
+			configd:help "Log file size and rotation characteristics";
+			leaf files {
+				type uint32;
+				configd:help "Number of saved files";
+				default "5";
+			}
+			leaf size {
+				type uint32;
+				configd:help "Size of log files (kbytes)";
+				default "250";
+			}
+		}
+	}
+
+	grouping facility-archive {
+		uses facility;
+		uses archive;
+	}
+
+	augment /system:system {
+		container syslog {
+			presence "true";
+			configd:priority "400";
+			configd:help "System logging daemon";
+			configd:end "/opt/vyatta/share/tmplscripts/system/syslog/configd_end.sh";
+			container global {
+				presence "true";
+				configd:help "Logging to system standard location";
+				configd:validate "/opt/vyatta/share/tmplscripts/system/syslog/global/configd_validate1.cli";
+				uses facility-archive;
+			}
+			list host {
+				configd:help "Logging to a remote host";
+				configd:validate "/opt/vyatta/share/tmplscripts/system/syslog/host/configd_validate1.cli";
+				key "tagnode";
+				leaf tagnode {
+					type remote-host;
+				}
+				uses facility;
+				leaf facility-override {
+					description "Override replaces facility field in all logs to host.";  
+ 					type facility;
+					configd:help "Override replaces log entry facility field";
+                  
+				}
+			}
+			list file {
+				configd:help "Logging to a file";
+				configd:validate "/opt/vyatta/share/tmplscripts/system/syslog/file/configd_validate1.cli";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern "[-a-zA-Z0-9_.]+" {
+							configd:error-message "invalid file name $VAR(@)";
+						}
+					}
+					configd:help "Logging to a file";
+				}
+				uses facility-archive;
+			}
+			list user {
+				configd:help "Logging to specific user's terminal";
+				configd:validate "/opt/vyatta/share/tmplscripts/system/syslog/user/configd_validate1.cli";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern "[a-zA-Z_][a-zA-Z0-9_-]*" {
+							configd:error-message "invalid user name $VAR(@)";
+						}
+					}
+					configd:help "Logging to specific user's terminal";
+				}
+				uses facility;
+			}
+			container console {
+				presence "true";
+				configd:help "Logging to system console";
+				configd:validate "/opt/vyatta/share/tmplscripts/system/syslog/console/configd_validate1.cli";
+				uses facility;
+			}
+		}
+	}
+}

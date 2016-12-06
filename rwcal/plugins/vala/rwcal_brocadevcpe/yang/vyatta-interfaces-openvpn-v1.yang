@@ -1,0 +1,338 @@
+module vyatta-interfaces-openvpn-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-interfaces-openvpn:1";
+	prefix vyatta-interfaces-openvpn-v1;
+
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /if:interfaces {
+		list openvpn {
+			configd:priority "460";
+			configd:help "OpenVPN tunnel interface name";
+			configd:end "/opt/vyatta/share/tmplscripts/interfaces/openvpn/configd_end.sh";
+			key "tagnode";
+			leaf tagnode {
+				type string {
+					pattern "vtun[0-9]+" {
+						error-message "OpenVPN tunnel interface must be named \"vtun<num>\"";
+					}
+					configd:pattern-help "<vtunN>";
+				}
+				configd:help "OpenVPN tunnel interface name";
+			}
+			leaf client-cert-not-required {
+				type empty;
+				configd:help "Client certificates not required";
+				configd:validate "/opt/vyatta/share/tmplscripts/interfaces/openvpn/client-cert-not-required/configd_validate1.cli";
+			}
+			container auth {
+				presence "true";
+				configd:help "OpenVPN authentication method";
+				configd:end "/opt/vyatta/share/tmplscripts/interfaces/openvpn/auth/configd_end.sh";
+				leaf-list ldap {
+					type string;
+					ordered-by "user";
+					configd:help "Service-User LDAP profile name";
+					configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/openvpn/auth/ldap/configd_allowed.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/interfaces/openvpn/auth/ldap/configd_validate1.cli";
+				}
+				container local {
+					presence "true";
+					configd:help "Local Service User Authentication";
+					leaf-list group {
+						type string;
+						ordered-by "user";
+						configd:help "Service-user group name";
+						configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/openvpn/auth/local/group/configd_allowed.sh";
+						configd:validate "/opt/vyatta/share/tmplscripts/interfaces/openvpn/auth/local/group/configd_validate1.cli";
+					}
+					leaf-list user {
+						type string;
+						ordered-by "user";
+						configd:help "Service User";
+						configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/openvpn/auth/local/user/configd_allowed.sh";
+						configd:validate "/opt/vyatta/share/tmplscripts/interfaces/openvpn/auth/local/user/configd_validate1.cli";
+					}
+				}
+			}
+			leaf description {
+				type string;
+				configd:help "Description for the interface";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/openvpn/description/configd_delete.sh";
+			}
+			leaf local-host {
+				type types:ipv4-address;
+				configd:help "Local IP address to accept connections (all if not set)";
+			}
+			leaf hash {
+				type enumeration {
+					enum "md5" {
+						configd:help "MD5 algorithm";
+					}
+					enum "sha1" {
+						configd:help "SHA-1 algorithm";
+					}
+					enum "sha256" {
+						configd:help "SHA-256 algorithm";
+					}
+					enum "sha512" {
+						configd:help "SHA-512 algorithm";
+					}
+				}
+				configd:help "Hashing algorithm option";
+			}
+			leaf disable {
+				type empty;
+				configd:help "Interface to be disabled";
+			}
+			container server {
+				presence "true";
+				configd:help "Server-mode options";
+				list client {
+					configd:help "Client-specific settings";
+					key "tagnode";
+					leaf tagnode {
+						type string;
+						configd:help "Client-specific settings";
+					}
+					leaf ip {
+						type types:ipv4-address;
+						configd:help "IP address of the client";
+					}
+					leaf-list subnet {
+						type types:ipv4-prefix;
+						ordered-by "user";
+						configd:help "Subnet belonging to the client";
+					}
+					leaf disable {
+						type empty;
+						configd:help "Option to disable client connection";
+					}
+					leaf-list push-route {
+						type types:ipv4-prefix;
+						ordered-by "user";
+						configd:help "Route to be pushed to the client";
+					}
+				}
+				leaf-list name-server {
+					type types:ipv4-address;
+					ordered-by "user";
+					configd:help "Domain Name Server (DNS)";
+				}
+				leaf subnet {
+					type types:ipv4-prefix;
+					configd:help "Server-mode subnet (from which client IPs are allocated)";
+				}
+				leaf max-connections {
+					type uint32 {
+						range 1..4096 {
+							error-message "must be between 1-4096";
+						}
+					}
+					configd:help "Number of maximum client connections";
+				}
+				leaf-list push-route {
+					type types:ipv4-prefix;
+					ordered-by "user";
+					configd:help "Route to be pushed to all clients";
+				}
+				leaf topology {
+					type enumeration {
+						enum "point-to-point" {
+							configd:help (null);
+						}
+						enum "subnet" {
+							configd:help (null);
+						}
+					}
+					configd:help "Topology for clients";
+				}
+				leaf domain-name {
+					type string {
+						configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/openvpn/server/domain-name/configd_syntax1.cli";
+					}
+					configd:help "DNS suffix to be pushed to all clients";
+				}
+			}
+			leaf device-type {
+				type string {
+					configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/openvpn/device-type/configd_syntax1.cli";
+				}
+				configd:help "OpenVPN interface device-type";
+			}
+			leaf shared-secret-key-file {
+				type string {
+					configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/openvpn/shared-secret-key-file/configd_syntax1.cli";
+				}
+				configd:help "File containing the secret key shared with remote end of tunnel";
+			}
+			leaf encryption {
+				type enumeration {
+					enum "des" {
+						configd:help "DES algorithm";
+					}
+					enum "3des" {
+						configd:help "DES algorithm with triple encryption";
+					}
+					enum "bf128" {
+						configd:help "Blowfish algorithm with 128-bit key";
+					}
+					enum "bf256" {
+						configd:help "Blowfish algorithm with 256-bit key";
+					}
+					enum "aes128" {
+						configd:help "AES algorithm with 128-bit key";
+					}
+					enum "aes192" {
+						configd:help "AES algorithm with 192-bit key";
+					}
+					enum "aes256" {
+						configd:help "AES algorithm with 256-bit key";
+					}
+				}
+				configd:help "Data encryption algorithm option";
+			}
+			leaf-list remote-host {
+				type string;
+				ordered-by "user";
+				configd:help "Remote host to connect to (dynamic if not set)";
+			}
+			leaf remote-port {
+				type uint32 {
+					range 1..65535 {
+						error-message "Port must be between 1 and 65535";
+					}
+				}
+				configd:help "Remote port number to connect to";
+			}
+			leaf-list openvpn-option {
+				type string;
+				ordered-by "user";
+				configd:help "Additional OpenVPN options";
+			}
+			leaf local-address {
+				type string;
+				configd:help "Local IP address or network address";
+			}
+			leaf remote-address {
+				type types:ipv4-address;
+				configd:help "IP address of remote end of tunnel";
+			}
+			container tls {
+				presence "true";
+				configd:help "Transport Layer Security (TLS) options";
+				leaf dh-file {
+					type string {
+						configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/openvpn/tls/dh-file/configd_syntax1.cli";
+					}
+					configd:help "File containing Diffie Hellman parameters (server only)";
+				}
+				leaf role {
+					type enumeration {
+						enum "active" {
+							configd:help "Initiate TLS negotiation actively";
+						}
+						enum "passive" {
+							configd:help "Waiting for TLS connections passively";
+						}
+					}
+					configd:help "Role in TLS negotiation";
+				}
+				leaf ca-cert-file {
+					type string {
+						configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/openvpn/tls/ca-cert-file/configd_syntax1.cli";
+					}
+					configd:help "File containing certificate for Certificate Authority (CA)";
+				}
+				leaf cert-file {
+					type string {
+						configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/openvpn/tls/cert-file/configd_syntax1.cli";
+					}
+					configd:help "File containing certificate for this host";
+				}
+				leaf key-file {
+					type string {
+						configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/openvpn/tls/key-file/configd_syntax1.cli";
+					}
+					configd:help "File containing this host's private key";
+				}
+				leaf crl-file {
+					type string {
+						configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/openvpn/tls/crl-file/configd_syntax1.cli";
+					}
+					configd:help "File containing certificate revocation list (CRL) for this host";
+				}
+			}
+			leaf mode {
+				type enumeration {
+					enum "site-to-site" {
+						configd:help "Site-to-site mode";
+					}
+					enum "client" {
+						configd:help "Client in client-server mode";
+					}
+					enum "server" {
+						configd:help "Server in client-server mode";
+					}
+				}
+				configd:help "OpenVPN mode of operation";
+			}
+			container replace-default-route {
+				presence "true";
+				configd:help "OpenVPN tunnel to be used as the default route";
+				leaf local {
+					type empty;
+					configd:help "Tunnel endpoints are on the same subnet";
+				}
+			}
+			leaf protocol {
+				type enumeration {
+					enum "udp" {
+						configd:help "UDP";
+					}
+					enum "tcp-passive" {
+						configd:help "TCP and accepts connections passively";
+					}
+					enum "tcp-active" {
+						configd:help "TCP and initiates connections actively";
+					}
+				}
+				configd:help "OpenVPN communication protocol";
+			}
+			leaf local-port {
+				type uint32 {
+					range 1..65535 {
+						error-message "Port must be between 1 and 65535";
+					}
+				}
+				configd:help "Local port number to accept connections";
+			}
+			container ip {
+				configd:help "IPv4 parameters";
+			}
+			container ipv6 {
+				presence "true";
+				configd:help "IPv6 parameters";
+			}
+		}
+	}
+}

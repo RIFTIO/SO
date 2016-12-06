@@ -1,0 +1,73 @@
+module vyatta-virtualization-probe-action-v1 {
+    namespace "urn:vyatta.com:mgmt:vyatta-virtualization-probe-action:1";
+    prefix vyatta-virtualization-probe-action-v1;
+
+    import configd-v1 {
+        prefix configd;
+    }
+    import vyatta-virtualization-v1 {
+        prefix virtualization;
+    }
+    import vyatta-services-v1 {
+        prefix service;
+    }
+    import vyatta-service-probe-v1 {
+        prefix probe;
+    }
+
+    organization "Brocade Communications Systems, Inc.";
+    contact
+        "Brocade Communications Systems, Inc.
+        Postal: 130 Holger Way
+            San Jose, CA 95134
+        E-mail: support@Brocade.com
+        Web: www.brocade.com";
+
+    revision 2015-10-06 {
+        description "Initial revision";
+    }
+
+    augment /service:service/probe:probes/probe:probe/probe:action {
+        container virtualization {
+            description "Take action on guests";
+            configd:help "Take action on guests";
+            list guest {
+                description "The list of guests to take action on";
+                configd:help "Guest name";
+                configd:allowed "vyatta-hypervisor-op --cmd=list-vms";
+                key "name";
+                leaf name {
+                    description "The guest name";
+                    configd:help "Guest name";
+                    must "/virtualization:virtualization/virtualization:guest/virtualization:name = ." {
+                        error-message "Guest must be configured in order to take actions on it";
+                    }
+                    type virtualization:guest-name;
+                }
+                leaf startup-wait {
+                    description "Minutes to wait after guest start before probing
+
+                        This should be configured to a value that is greater
+                        than the time it takes for the guest to boot and for
+                        its services to become available.
+
+                        If this value is less than the start up time of
+                        the guest then the action may be performed before
+                        the guest ever gets a chance to finish booting";
+                    configd:help "Time to wait after guest start before probing (minutes)";
+                    type uint8 {
+                        range 1..30;
+                    }
+                    default 5;
+                    units "minutes";
+                }
+                leaf action {
+                    description "The action to take on the guest after a probe failure";
+                    configd:help "Action to take on guest after probe failure";
+                    mandatory true;
+                    type virtualization:libvirt-guest-actions;
+                }
+            }
+        }
+    }
+}

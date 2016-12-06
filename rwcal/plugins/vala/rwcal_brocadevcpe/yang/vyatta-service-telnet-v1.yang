@@ -1,0 +1,60 @@
+module vyatta-service-telnet-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-telnet:1";
+	prefix vyatta-service-telnet-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /service:service {
+		container telnet {
+			presence "true";
+			configd:priority "500";
+			configd:help "Enable/disable Network Virtual Terminal Protocol (TELNET) protocol";
+			configd:delete "/opt/vyatta/sbin/vyatta_update_telnet disable";
+			configd:end "/opt/vyatta/share/tmplscripts/service/telnet/configd_end.sh";
+			leaf allow-root {
+				type empty;
+				configd:help "Enable root login over telnet";
+				configd:create "/opt/vyatta/share/tmplscripts/service/telnet/allow-root/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/service/telnet/allow-root/configd_delete.sh";
+			}
+			leaf port {
+				type uint32 {
+					range 1..65535 {
+						error-message "Port number must be in range 1 to 65535";
+					}
+				}
+				default "23";
+				configd:delete "/opt/vyatta/sbin/vyatta_update_telnet disable";
+				configd:help "Port for TELNET service";
+			}
+			leaf listen-address {
+				type union {
+					type types:ipv4-address;
+					type types:ipv6-address;
+				}
+				configd:delete "/opt/vyatta/sbin/vyatta_update_telnet disable";
+				configd:help "Local addresses telnet should listen on";
+			}
+		}
+	}
+}

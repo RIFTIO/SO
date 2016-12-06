@@ -1,0 +1,133 @@
+
+/*
+ * 
+ *   Copyright 2016 RIFT.IO Inc
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ *
+ */
+
+
+
+/**
+ * @file rw-nsm.yang
+ * @author Rajesh Velandy
+ * @date 2015/10/07
+ * @brief NSM  yang
+ */
+
+module rw-nsm
+{
+  namespace "http://riftio.com/ns/riftware-1.0/rw-nsm";
+  prefix "rw-nsm";
+
+  import rw-pb-ext {
+    prefix "rwpb";
+  }
+
+  import rw-cli-ext {
+    prefix "rwcli";
+  }
+
+  import ietf-inet-types {
+    prefix "inet";
+  }
+
+  import rw-nsd {
+    prefix "rw-nsd";
+  }
+  import nsd {
+    prefix "nsd";
+  }
+  import rw-nsr {
+    prefix "rw-nsr";
+  }
+  import vld {
+    prefix "vld";
+  }
+  import rw-vlr {
+    prefix "rw-vlr";
+  }
+  import rw-vns {
+    prefix "rw-vns";
+  }
+  import rw-vnfd {
+    prefix "rw-vnfd";
+  }
+  import vnfd {
+    prefix "vnfd";
+  }
+  import rw-vnfr {
+    prefix "rw-vnfr";
+  }
+
+  import rw-yang-types {
+    prefix "rwt";
+  }
+
+  import rw-launchpad {
+    prefix "rw-launchpad";
+  }
+
+  import rw-cloud {
+    prefix "rw-cloud";
+  }
+
+  import rw-sdn {
+    prefix "rw-sdn";
+  }
+
+  import rw-config-agent {
+    prefix "rw-config-agent";
+  }
+
+  revision 2015-10-07 {
+    description
+      "Initial revision.";
+  }
+
+  grouping cm-endpoint {
+    leaf cm-ip-address {
+      type inet:ip-address;
+      description "IP Address";
+      default "127.0.0.1";
+    }
+    leaf cm-port {
+      type inet:port-number;
+      description "Port Number";
+      default 2022;
+    }
+    leaf cm-username {
+      description "RO endpoint username";
+      type string;
+      default "admin";
+    }
+    leaf cm-password {
+      description "RO endpoint password";
+      type string;
+      default "admin";
+    }
+  }
+
+  container ro-config {
+    description "Resource Orchestrator endpoint ip address";
+    rwpb:msg-new "roConfig";
+    rwcli:new-mode "ro-config";
+
+    container cm-endpoint {
+      description "Service Orchestrator endpoint ip address";
+      rwpb:msg-new "SoEndpoint";
+      uses cm-endpoint;
+    }
+  }
+}

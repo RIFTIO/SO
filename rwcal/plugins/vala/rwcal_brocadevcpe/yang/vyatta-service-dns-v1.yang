@@ -1,0 +1,138 @@
+module vyatta-service-dns-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-dns:1";
+	prefix vyatta-service-dns-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /service:service {
+		container dns {
+			presence "true";
+			configd:help "Domain Name Server (DNS) parameters";
+			container forwarding {
+				presence "true";
+				configd:priority "918";
+				configd:help "DNS forwarding";
+				configd:validate "/opt/vyatta/share/tmplscripts/service/dns/forwarding/configd_validate1.cli";
+				configd:end "/opt/vyatta/share/tmplscripts/service/dns/forwarding/configd_end.sh";
+				leaf-list dhcp {
+					type string;
+					ordered-by "user";
+					configd:help "Use nameservers received from DHCP server for specified interface";
+					configd:allowed "/opt/vyatta/share/tmplscripts/service/dns/forwarding/dhcp/configd_allowed.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/service/dns/forwarding/dhcp/configd_validate1.cli";
+				}
+				leaf cache-size {
+					type uint32 {
+						range 0..10000 {
+							error-message "Cache size must be between 0 and 10000";
+						}
+					}
+					default "150";
+					configd:help "DNS forwarding cache size";
+				}
+				leaf-list listen-on {
+					type string;
+					ordered-by "user";
+					configd:help "Interface to listen for DNS queries [REQUIRED]";
+					configd:allowed "/opt/vyatta/share/tmplscripts/service/dns/forwarding/listen-on/configd_allowed.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/service/dns/forwarding/listen-on/configd_validate1.cli";
+				}
+				leaf-list name-server {
+					type types:ipv4-address;
+					ordered-by "user";
+					configd:help "DNS server to forward queries";
+				}
+				leaf system {
+					type empty;
+					configd:help "DNS forwarding to system nameservers";
+					configd:validate "/opt/vyatta/share/tmplscripts/service/dns/forwarding/system/configd_validate1.cli";
+				}
+				list domain {
+					configd:help "DNS domain to forward to a local server";
+					configd:validate "/opt/vyatta/share/tmplscripts/service/dns/forwarding/domain/configd_validate1.cli";
+					key "tagnode";
+					leaf tagnode {
+						type string;
+						configd:help "DNS domain to forward to a local server";
+					}
+					leaf server {
+						type types:ipv4-address;
+						configd:help "DNS server to forward queries";
+					}
+				}
+			}
+			container dynamic {
+				presence "true";
+				configd:priority "919";
+				configd:help "Dynamic DNS";
+				configd:validate "/opt/vyatta/share/tmplscripts/service/dns/dynamic/configd_validate1.cli";
+				list interface {
+					configd:help "Interface to send DDNS updates for [REQUIRED]";
+					configd:allowed "/opt/vyatta/share/tmplscripts/service/dns/dynamic/interface/configd_allowed.sh";
+					configd:end "/opt/vyatta/share/tmplscripts/service/dns/dynamic/interface/configd_end.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/service/dns/dynamic/interface/configd_validate1.cli";
+					configd:validate "/opt/vyatta/share/tmplscripts/service/dns/dynamic/interface/configd_validate2.cli";
+					key "tagnode";
+					leaf tagnode {
+						type string;
+						configd:help "Interface to send DDNS updates for [REQUIRED]";
+						configd:allowed "/opt/vyatta/share/tmplscripts/service/dns/dynamic/interface/configd_allowed.sh";
+					}
+					list service {
+						configd:help "Service being used for Dynamic DNS [REQUIRED]";
+						configd:allowed "/opt/vyatta/share/tmplscripts/service/dns/dynamic/interface/service/configd_allowed.sh";
+						configd:validate "/opt/vyatta/share/tmplscripts/service/dns/dynamic/interface/service/configd_validate1.cli";
+						configd:validate "/opt/vyatta/share/tmplscripts/service/dns/dynamic/interface/service/configd_validate2.cli";
+						configd:validate "/opt/vyatta/share/tmplscripts/service/dns/dynamic/interface/service/configd_validate3.cli";
+						key "tagnode";
+						leaf tagnode {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/service/dns/dynamic/interface/service/configd_syntax1.cli";
+							}
+							configd:help "Service being used for Dynamic DNS [REQUIRED]";
+							configd:allowed "/opt/vyatta/share/tmplscripts/service/dns/dynamic/interface/service/configd_allowed.sh";
+						}
+						leaf password {
+							type string;
+							configd:secret "true";
+							configd:help "Password for DDNS service [REQUIRED]";
+						}
+						leaf login {
+							type string;
+							configd:help "Login for DDNS service [REQUIRED]";
+						}
+						leaf server {
+							type string;
+							configd:help "Server to send DDNS update to (IP address|hostname)";
+						}
+						leaf-list host-name {
+							type string;
+							ordered-by "user";
+							configd:help "Hostname registered with DDNS service [REQUIRED]";
+						}
+					}
+				}
+			}
+		}
+	}
+}

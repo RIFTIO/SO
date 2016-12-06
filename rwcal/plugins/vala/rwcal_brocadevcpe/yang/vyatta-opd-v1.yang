@@ -1,0 +1,39 @@
+module vyatta-opd-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-opd:1";
+	prefix vyatta-opd-v1;
+
+	import configd-v1 {
+		prefix configd;
+	}
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	rpc command {
+		configd:call-rpc "oprpc";
+		input {
+			leaf command {
+				type enumeration {
+					enum show;
+				}
+				default show;
+			}
+			leaf args {
+				type string;
+			}
+		}
+		output {
+			leaf output {
+				type string;
+			}
+		}
+	}
+}

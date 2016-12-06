@@ -1,0 +1,231 @@
+module vyatta-security-vpn-l2tp-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-security-vpn-l2tp:1";
+	prefix vyatta-security-vpn-l2tp-v1;
+
+	import vyatta-security-v1 {
+		prefix security;
+	}
+	import vyatta-security-vpn-ipsec-v1 {
+		prefix security-vpn-ipsec;
+	}
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /security:security/security-vpn-ipsec:vpn {
+		container l2tp {
+			presence "true";
+			configd:help "Layer 2 Tunneling Protocol (L2TP) Virtual Private Network (VPN)";
+			container remote-access {
+				presence "true";
+				configd:help "Remote access L2TP VPN";
+				container authentication {
+					presence "true";
+					configd:help "Authentication for remote access L2TP VPN";
+					list radius-server {
+						configd:help "IP address of radius server";
+						key "tagnode";
+						leaf tagnode {
+							type types:ipv4-address;
+							configd:help "IP address of radius server";
+						}
+						leaf key {
+							type string;
+							configd:help "Key for accessing the specified server";
+						}
+					}
+					container local-users {
+						presence "true";
+						configd:help "Local user authentication for remote access L2TP VPN";
+						list username {
+							configd:help "User name for authentication";
+							key "tagnode";
+							leaf tagnode {
+								type string;
+								configd:help "User name for authentication";
+							}
+							leaf password {
+								type string;
+								configd:secret "true";
+								configd:help "Password for authentication";
+							}
+							leaf disable {
+								type empty;
+								configd:help "Option to disable L2TP remote-access user";
+							}
+							leaf static-ip {
+								type types:ipv4-address;
+								configd:help "Static IP address";
+							}
+						}
+					}
+					leaf mode {
+						type enumeration {
+							enum "local" {
+								configd:help "Use username/password in the configuration";
+							}
+							enum "radius" {
+								configd:help "Use Radius server";
+							}
+						}
+						configd:help "Authentication mode for remote access L2TP VPN";
+					}
+				}
+				leaf description {
+					type string;
+					configd:help "Description for L2TP remote-access settings";
+				}
+				leaf mtu {
+					type uint32 {
+						range 128..16384 {
+							error-message "MTU must be between 128 and 16384 bytes";
+						}
+					}
+					configd:help "Maximum Transmission Unit (MTU)";
+				}
+				container server-ip-pool {
+					presence "true";
+					configd:help "Pool of IP addresses for the Server";
+					leaf stop {
+						type types:ipv4-address;
+						configd:help "Last IP address in the pool";
+					}
+					leaf start {
+						type types:ipv4-address;
+						configd:help "First IP address in the pool";
+					}
+				}
+				container ipsec-settings {
+					presence "true";
+					configd:help "Internet Protocol Security (IPsec) for remote access L2TP VPN";
+					container authentication {
+						presence "true";
+						configd:help "IPsec authentication settings";
+						leaf pre-shared-secret {
+							type string;
+							configd:secret "true";
+							configd:help "Pre-shared secret for IPsec";
+						}
+						container x509 {
+							presence "true";
+							configd:help "X.509 certificate";
+							leaf server-cert-file {
+								type string {
+									configd:syntax "/opt/vyatta/share/tmplscripts/security/vpn/l2tp/remote-access/ipsec-settings/authentication/x509/server-cert-file/configd_syntax1.cli";
+								}
+								configd:help "File containing the X.509 certificate for the remote access VPN server (this host)";
+							}
+							leaf ca-cert-file {
+								type string {
+									configd:syntax "/opt/vyatta/share/tmplscripts/security/vpn/l2tp/remote-access/ipsec-settings/authentication/x509/ca-cert-file/configd_syntax1.cli";
+								}
+								configd:help "File containing the X.509 certificate for the Certificate Authority (CA)";
+							}
+							leaf server-key-file {
+								type string {
+									configd:syntax "/opt/vyatta/share/tmplscripts/security/vpn/l2tp/remote-access/ipsec-settings/authentication/x509/server-key-file/configd_syntax1.cli";
+								}
+								configd:help "File containing the private key for the X.509 certificate for the remote access VPN server (this host)";
+							}
+							leaf server-key-password {
+								type string;
+								configd:secret "true";
+								configd:help "Password that protects the private key";
+							}
+							leaf crl-file {
+								type string {
+									configd:syntax "/opt/vyatta/share/tmplscripts/security/vpn/l2tp/remote-access/ipsec-settings/authentication/x509/crl-file/configd_syntax1.cli";
+								}
+								configd:help "File containing the X.509 Certificate Revocation List (CRL)";
+							}
+						}
+						leaf mode {
+							type enumeration {
+								enum "pre-shared-secret" {
+									configd:help "Use pre-shared secret for IPsec authentication";
+								}
+								enum "x509" {
+									configd:help "Use X.509 certificate for IPsec authentication";
+								}
+							}
+							configd:help "Authentication mode for IPsec";
+						}
+					}
+					leaf ike-lifetime {
+						type uint32 {
+							range 30..86400 {
+								error-message "must between 30-86400 seconds";
+							}
+						}
+						configd:help "IKE lifetime";
+						default "3600";
+					}
+				}
+				leaf outside-address {
+					type types:ipv4-address;
+					configd:help "Outside IP address to which VPN clients will connect";
+				}
+				leaf outside-nexthop {
+					type types:ipv4-address;
+					configd:help "Nexthop IP address for reaching the VPN clients";
+				}
+				leaf dhcp-interface {
+					type string;
+					configd:help "DHCP interface to listen on";
+					configd:allowed "/opt/vyatta/share/tmplscripts/security/vpn/l2tp/remote-access/dhcp-interface/configd_allowed.sh";
+				}
+				container dns-servers {
+					presence "true";
+					configd:help "Domain Name Service (DNS) server";
+					leaf server-1 {
+						type types:ipv4-address;
+						configd:help "Primary DNS server";
+					}
+					leaf server-2 {
+						type types:ipv4-address;
+						configd:help "Secondary DNS server";
+					}
+				}
+				container wins-servers {
+					presence "true";
+					configd:help "Windows Internet Name Service (WINS) server settings";
+					leaf server-1 {
+						type types:ipv4-address;
+						configd:help "Primary WINS server";
+					}
+					leaf server-2 {
+						type types:ipv4-address;
+						configd:help "Secondary WINS server";
+					}
+				}
+				container client-ip-pool {
+					presence "true";
+					configd:help "Pool of IP address to be assigned to remote clients";
+					leaf stop {
+						type types:ipv4-address;
+						configd:help "Last IP address in the pool";
+					}
+					leaf start {
+						type types:ipv4-address;
+						configd:help "First IP address in the pool";
+					}
+				}
+			}
+		}
+	}
+}

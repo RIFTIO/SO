@@ -1,0 +1,277 @@
+module vyatta-service-nat-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-nat:1";
+	prefix vyatta-service-nat-v1;
+
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-types-v1 {
+		prefix types;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+			 San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-09-29 {
+		description "Initial revision.";
+	}
+
+	augment /service:service {
+		container nat {
+			presence "true";
+			configd:priority "310";
+			configd:help "Network Address Translation (NAT)";
+			configd:end "/opt/vyatta/share/tmplscripts/service/nat/configd_end.sh";
+			container ipv6-to-ipv4 {
+				presence "true";
+				configd:help "IPv6 to IPv4 NAT settings";
+				configd:end "vyatta-dp-npf-nat.pl --type=ipv6-to-ipv4";
+				list rule {
+					configd:help "Rule number for NAT";
+					configd:validate "/opt/vyatta/share/tmplscripts/service/nat/ipv6-to-ipv4/rule/configd_validate1.cli";
+					key "tagnode";
+					leaf tagnode {
+						type uint32 {
+							range 1..9999 {
+								error-message "Rule number must be between 1 and 9999.";
+							}
+						}
+					}
+					leaf inbound-interface {
+						type string;
+						configd:allowed "vyatta-interfaces.pl --show dataplane,bonding";
+						configd:help "Interface to initiate a IPv6 to IPv4 session";
+					}
+					container source {
+						configd:help "Source IPv6 prefix";
+						leaf prefix {
+							configd:help "Source IPv6 prefix [supported prefixes are 32,40,48,56,64 and 96]";
+							type types:ipv6-prefix {
+								configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/ipv6-to-ipv4/rule/source/prefix/configd_syntax1.cli";
+							}
+						}
+					}
+					container destination {
+						configd:help "Destination IPv6 prefix";
+						leaf prefix {
+							configd:help "Destination IPv6 prefix [supported prefixes are 32,40,48,56,64 and 96]";
+							type types:ipv6-prefix {
+								configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/ipv6-to-ipv4/rule/destination/prefix/configd_syntax1.cli";
+							}
+						}
+					}				     
+				}
+			}
+			container source {
+				presence "true";
+				configd:help "Source NAT settings";
+				configd:end "vyatta-dp-npf-nat.pl --type=source";
+				list rule {
+					configd:help "Rule number for NAT";
+					configd:validate "/opt/vyatta/share/tmplscripts/service/nat/source/rule/configd_validate0.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/service/nat/source/rule/configd_validate1.cli";
+					key "tagnode";
+					leaf tagnode {
+						type uint32 {
+							range 1..9999 {
+								error-message "Rule number must be between 1 and 9999.";
+							}
+						}
+						configd:help "Rule number for NAT";
+					}
+					leaf description {
+						type string;
+						configd:help "Rule description";
+					}
+					leaf exclude {
+						type empty;
+						configd:help "Exclude from NAT";
+						configd:validate "/opt/vyatta/share/tmplscripts/service/nat/source/rule/exclude/configd_validate1.cli";
+					}
+					leaf disable {
+						type empty;
+						configd:help "Disable NAT rule";
+					}
+					container source {
+						presence "true";
+						configd:help "NAT source parameters";
+						leaf address {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/source/rule/source/address/configd_syntax1.cli";
+							}
+							configd:help "Source IPv4 address, subnet, or address-group";
+							configd:allowed "/opt/vyatta/share/tmplscripts/service/nat/source/rule/source/address/configd_allowed.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/service/nat/source/rule/source/address/configd_validate1.cli";
+						}
+						leaf port {
+							type string;
+							configd:help "Source port or port-group";
+							configd:allowed "/opt/vyatta/share/tmplscripts/service/nat/source/rule/source/port/configd_allowed.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/service/nat/source/rule/source/port/configd_validate1.cli";
+						}
+					}
+					leaf log {
+						type empty;
+						configd:help "Enable logging for NAT rule";
+					}
+					container destination {
+						presence "true";
+						configd:help "NAT destination parameters";
+						leaf address {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/source/rule/destination/address/configd_syntax1.cli";
+							}
+							configd:help "Destination IPv4 address, subnet, or address-group";
+							configd:allowed "/opt/vyatta/share/tmplscripts/service/nat/source/rule/destination/address/configd_allowed.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/service/nat/source/rule/destination/address/configd_validate1.cli";
+						}
+						leaf port {
+							type string;
+							configd:help "Destination port or port-group";
+							configd:allowed "/opt/vyatta/share/tmplscripts/service/nat/source/rule/destination/port/configd_allowed.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/service/nat/source/rule/destination/port/configd_validate1.cli";
+						}
+					}
+					container translation {
+						presence "true";
+						configd:help "Outside NAT IP (used by source NAT only)";
+						leaf address {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/source/rule/translation/address/configd_syntax1.cli";
+							}
+							configd:help "Translated IP address or range";
+							configd:allowed "/opt/vyatta/share/tmplscripts/service/nat/source/rule/translation/address/configd_allowed.sh";
+						}
+						leaf port {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/source/rule/translation/port/configd_syntax1.cli";
+							}
+							configd:help "Translated port";
+						}
+					}
+					leaf outbound-interface {
+						type string;
+						configd:help "Outbound interface for NAT traffic";
+						configd:allowed "vyatta-interfaces.pl --show dataplane,bonding";
+					}
+					leaf protocol {
+						type string {
+							configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/source/rule/protocol/configd_syntax1.cli";
+							configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/source/rule/protocol/configd_syntax2.cli";
+						}
+						configd:help "Protocol to NAT";
+						configd:allowed "/opt/vyatta/share/tmplscripts/service/nat/source/rule/protocol/configd_allowed.sh";
+					}
+				}
+			}
+			container destination {
+				presence "true";
+				configd:help "Destination NAT settings";
+				configd:end "vyatta-dp-npf-nat.pl --type=destination";
+				list rule {
+					configd:help "Rule number for NAT";
+					configd:validate "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/configd_validate0.sh";
+					key "tagnode";
+					leaf tagnode {
+						type uint32 {
+							range 1..9999 {
+								error-message "Rule number must be between 1 and 9999.";
+							}
+						}
+						configd:help "Rule number for NAT";
+					}
+					leaf description {
+						type string;
+						configd:help "Rule description";
+					}
+					leaf exclude {
+						type empty;
+						configd:help "Exclude from NAT";
+						configd:validate "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/exclude/configd_validate1.cli";
+					}
+					leaf disable {
+						type empty;
+						configd:help "Disable NAT rule";
+					}
+					leaf inbound-interface {
+						type string;
+						configd:help "Inbound interface of NAT traffic";
+						configd:allowed "vyatta-interfaces.pl --show dataplane,bonding";
+					}
+					container source {
+						presence "true";
+						configd:help "NAT source parameters";
+						leaf address {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/source/address/configd_syntax1.cli";
+							}
+							configd:help "Source IPv4 address, subnet, or address-group";
+							configd:allowed "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/source/address/configd_allowed.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/source/address/configd_validate1.cli";
+						}
+						leaf port {
+							type string;
+							configd:help "Source port or port-group";
+							configd:allowed "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/source/port/configd_allowed.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/source/port/configd_validate1.cli";
+						}
+					}
+					leaf log {
+						type empty;
+						configd:help "Enable logging for NAT rule";
+					}
+					container destination {
+						presence "true";
+						configd:help "NAT destination parameters";
+						leaf address {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/destination/address/configd_syntax1.cli";
+							}
+							configd:help "Destination IPv4 address, subnet, or address-group";
+							configd:allowed "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/destination/address/configd_allowed.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/destination/address/configd_validate1.cli";
+						}
+						leaf port {
+							type string;
+							configd:help "Destination port or port-group";
+							configd:allowed "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/destination/port/configd_allowed.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/destination/port/configd_validate1.cli";
+						}
+					}
+					container translation {
+						presence "true";
+						configd:help "Inside NAT IP (used by destination NAT only)";
+						leaf address {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/translation/address/configd_syntax1.cli";
+							}
+							configd:help "Translated IP address or range";
+						}
+						leaf port {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/translation/port/configd_syntax1.cli";
+							}
+							configd:help "Translated port";
+						}
+					}
+					leaf protocol {
+						type string {
+							configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/protocol/configd_syntax1.cli";
+							configd:syntax "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/protocol/configd_syntax2.cli";
+						}
+						configd:help "Protocol to NAT";
+						configd:allowed "/opt/vyatta/share/tmplscripts/service/nat/destination/rule/protocol/configd_allowed.sh";
+					}
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,472 @@
+module vyatta-protocols-static-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-protocols-static:1";
+	prefix vyatta-protocols-static-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-protocols-v1 {
+		prefix protocols;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2014-08-06 {
+		description "Initial revision of version 1";
+	}
+
+	augment /protocols:protocols {
+		container static {
+			presence "true";
+			configd:priority "450";
+			configd:help "static route parameters";
+			list table {
+				configd:help "Policy route table number";
+				key "tagnode";
+				leaf tagnode {
+					type uint32 {
+						range 1..128 {
+							error-message "Table value must be in the range (1-128)";
+						}
+					}
+					configd:help "Policy route table number";
+				}
+				list route {
+					configd:help "Static route";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/route/configd_validate1.cli";
+					key "tagnode";
+					leaf tagnode {
+						type types:ipv4-prefix {
+							configd:syntax "/opt/vyatta/share/tmplscripts/protocols/static/table/route/configd_syntax1.cli";
+						}
+						configd:help "Static route";
+					}
+					list next-hop {
+						configd:help "Next-hop router [REQUIRED]";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/route/next-hop/configd_validate.sh";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/static/table/route/next-hop/configd_end.sh";
+						key "tagnode";
+						leaf tagnode {
+							type types:ipv4-address;
+							configd:help "Next-hop router [REQUIRED]";
+						}
+						leaf disable {
+							type empty;
+							configd:help "Disable IPv4 next-hop static route";
+						}
+						leaf interface {
+							type string;
+							configd:help "Outgoing interface";
+							configd:allowed "/opt/vyatta/sbin/vyatta-interfaces.pl --show all";
+						}
+						leaf distance {
+							type uint32 {
+								range 1..255 {
+									error-message "Must be between (1-255)";
+								}
+							}
+							configd:help "Distance value for this route";
+						}
+					}
+					container blackhole {
+						presence "true";
+						configd:help "Silently discard pkts when matched";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/route/blackhole/configd_validate1.cli";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/static/table/route/blackhole/configd_end.sh";
+						leaf distance {
+							type uint32 {
+								range 1..255 {
+									error-message "Must be between (1-255)";
+								}
+							}
+							configd:help "Distance value for this route";
+						}
+					}
+					container unreachable {
+						presence "Indicates an unreachable route";
+						configd:help "Discard packets with ICMP unreachable";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/static/table/route/unreachable/configd_end.sh";
+						leaf distance {
+							type uint32 {
+								range 1..255 {
+									error-message "Must be between (1-255)";
+								}
+							}
+							configd:help "Distance value for this route";
+						}
+					}
+				}
+				list route6 {
+					configd:help "Static IPv6 route";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/route6/configd_validate1.cli";
+					key "tagnode";
+					leaf tagnode {
+						type types:ipv6-prefix {
+							configd:syntax "/opt/vyatta/share/tmplscripts/protocols/static/table/route6/configd_syntax1.cli";
+						}
+						configd:help "Static IPv6 route";
+					}
+					list next-hop {
+						configd:help "Next-hop IPv6 router [REQUIRED]";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/route/next-hop/configd_validate.sh";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/static/table/route6/next-hop/configd_end.sh";
+						key "tagnode";
+						leaf tagnode {
+							type types:ipv6-address {
+								configd:syntax "/opt/vyatta/share/tmplscripts/protocols/static/table/route6/next-hop/configd_syntax1.cli";
+							}
+							configd:help "Next-hop IPv6 router [REQUIRED]";
+						}
+						leaf disable {
+							type empty;
+							configd:help "Disable IPv6 next-hop static route";
+						}
+						leaf interface {
+							type string;
+							configd:help "Outgoing interface";
+							configd:allowed "/opt/vyatta/sbin/vyatta-interfaces.pl --show all";
+						}
+						leaf distance {
+							type uint32 {
+								range 1..255 {
+									error-message "Must be between (1-255)";
+								}
+							}
+							configd:help "Distance value for this route";
+						}
+					}
+					container blackhole {
+						presence "true";
+						configd:help "Silently discard pkts when matched";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/route6/blackhole/configd_validate1.cli";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/static/table/route6/blackhole/configd_end.sh";
+						leaf distance {
+							type uint32 {
+								range 1..255 {
+									error-message "Must be between (1-255)";
+								}
+							}
+							configd:help "Distance value for this route";
+						}
+					}
+					container unreachable {
+						presence "Indicates an unreachable route";
+						configd:help "Discard packets with ICMP unreachable";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/static/table/route6/unreachable/configd_end.sh";
+						leaf distance {
+							type uint32 {
+								range 1..255 {
+									error-message "Must be between (1-255)";
+								}
+							}
+							configd:help "Distance value for this route";
+						}
+					}
+				}
+				list interface-route {
+					configd:help "Interface based static route";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route/configd_validate1.cli";
+					key "tagnode";
+					leaf tagnode {
+						type types:ipv4-prefix {
+							configd:syntax "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route/configd_syntax1.cli";
+						}
+						configd:help "Interface based static route";
+					}
+					list next-hop-interface {
+						configd:help "Next-hop interface [REQUIRED]";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route/next-hop-interface/configd_validate.sh";
+						configd:allowed "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route/next-hop-interface/configd_allowed.sh";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route/next-hop-interface/configd_end.sh";
+						key "tagnode";
+						leaf tagnode {
+							type types:interface-ifname;
+							configd:help "Next-hop interface [REQUIRED]";
+							configd:allowed "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route/next-hop-interface/configd_allowed.sh";
+						}
+						leaf disable {
+							type empty;
+							configd:help "Disable IPv4 interface static route";
+						}
+						leaf distance {
+							type uint32 {
+								range 1..255 {
+									error-message "Must be between (1-255)";
+								}
+							}
+							configd:help "Distance value for this route";
+						}
+					}
+				}
+				list interface-route6 {
+					configd:help "Interface based static route";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route6/configd_validate1.cli";
+					key "tagnode";
+					leaf tagnode {
+						type types:ipv6-prefix {
+							configd:syntax "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route6/configd_syntax1.cli";
+						}
+						configd:help "Interface based static route";
+					}
+					list next-hop-interface {
+						configd:help "Next-hop interface [REQUIRED]";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route/next-hop-interface/configd_validate.sh";
+						configd:allowed "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route6/next-hop-interface/configd_allowed.sh";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route6/next-hop-interface/configd_end.sh";
+						key "tagnode";
+						leaf tagnode {
+							type types:interface-ifname;
+							configd:help "Next-hop interface [REQUIRED]";
+							configd:allowed "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route6/next-hop-interface/configd_allowed.sh";
+						}
+						leaf disable {
+							type empty;
+							configd:help "Disable IPv6 interface static route";
+						}
+						leaf distance {
+							type uint32 {
+								range 1..255 {
+									error-message "Must be between (1-255)";
+								}
+							}
+							configd:help "Distance value for this route";
+						}
+					}
+				}
+
+			}
+			list route {
+				configd:help "Static route";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/route/configd_validate1.cli";
+				key "tagnode";
+				leaf tagnode {
+					type types:ipv4-prefix {
+						configd:syntax "/opt/vyatta/share/tmplscripts/protocols/static/route/configd_syntax1.cli";
+					}
+					configd:help "Static route";
+				}
+				list next-hop {
+					configd:help "Next-hop router [REQUIRED]";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/route/next-hop/configd_validate.sh";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/static/route/next-hop/configd_end.sh";
+					key "tagnode";
+					leaf tagnode {
+						type types:ipv4-address {
+							configd:syntax "/opt/vyatta/share/tmplscripts/protocols/static/route/next-hop/configd_syntax1.cli";
+						}
+						configd:help "Next-hop router [REQUIRED]";
+					}
+					leaf disable {
+						type empty;
+						configd:help "Disable IPv4 next-hop static route";
+					}
+					leaf interface {
+						type string;
+						configd:help "Outgoing interface";
+						configd:allowed "/opt/vyatta/sbin/vyatta-interfaces.pl --show all ";
+					}
+					leaf distance {
+						type uint32 {
+							range 1..255 {
+								error-message "Must be between (1-255)";
+							}
+						}
+						configd:help "Distance value for this route";
+					}
+				}
+				container blackhole {
+					presence "Indicates a blackhole route";
+					configd:help "Silently discard pkts when matched";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/route/blackhole/configd_validate1.cli";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/static/route/blackhole/configd_end.sh";
+					leaf distance {
+						type uint32 {
+							range 1..255 {
+								error-message "Must be between (1-255)";
+							}
+						}
+						configd:help "Distance value for this route";
+					}
+				}
+				container unreachable {
+					presence "Indicates an unreachable route";
+					configd:help "Discard packets with ICMP unreachable";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/static/route/unreachable/configd_end.sh";
+					leaf distance {
+						type uint32 {
+							range 1..255 {
+								error-message "Must be between (1-255)";
+							}
+						}
+						configd:help "Distance value for this route";
+					}
+				}
+			}
+			list arp {
+				configd:help "Static ARP translation";
+				configd:end "/opt/vyatta/share/tmplscripts/protocols/static/arp/configd_end.sh";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/arp/configd_validate.cli";
+				key "tagnode";
+				leaf tagnode {
+					type types:ipv4-address;
+					configd:help "Static ARP translation";
+				}
+				leaf hwaddr {
+					type types:mac-address;
+					configd:help "Hardware protocol (e.g. MAC) address to translate to";
+				}
+				leaf interface {
+					type string;
+					configd:help "Outgoing interface";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/static/arp/interface/configd_allowed.sh";
+				}
+			}
+			list route6 {
+				configd:help "Static IPv6 route";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/route6/configd_validate1.cli";
+				key "tagnode";
+				leaf tagnode {
+					type types:ipv6-prefix {
+						configd:syntax "/opt/vyatta/share/tmplscripts/protocols/static/route6/configd_syntax1.cli";
+					}
+					configd:help "Static IPv6 route";
+				}
+				list next-hop {
+					configd:help "Next-hop IPv6 router [REQUIRED]";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/route/next-hop/configd_validate.sh";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/static/route6/next-hop/configd_end.sh";
+					key "tagnode";
+					leaf tagnode {
+						type types:ipv6-address {
+							configd:syntax "/opt/vyatta/share/tmplscripts/protocols/static/route6/next-hop/configd_syntax1.cli";
+						}
+						configd:help "Next-hop IPv6 router [REQUIRED]";
+					}
+					leaf disable {
+						type empty;
+						configd:help "Disable IPv6 next-hop static route";
+					}
+					leaf interface {
+						type string;
+						configd:help "Outgoing interface";
+						configd:allowed "/opt/vyatta/share/tmplscripts/protocols/static/route6/next-hop/interface/configd_allowed.sh";
+					}
+					leaf distance {
+						type uint32 {
+							range 1..255 {
+								error-message "Must be between (1-255)";
+							}
+						}
+						configd:help "Distance value for this route";
+					}
+				}
+				container blackhole {
+					presence "Indicates a blackhole route";
+					configd:help "Silently discard pkts when matched";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/route6/blackhole/configd_validate1.cli";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/static/route6/blackhole/configd_end.sh";
+					leaf distance {
+						type uint32 {
+							range 1..255 {
+								error-message "Must be between (1-255)";
+							}
+						}
+						configd:help "Distance value for this route";
+					}
+				}
+				container unreachable {
+					presence "Indicates an unreachable route";
+					configd:help "Discard packets with ICMP unreachable";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/static/route6/unreachable/configd_end.sh";
+					leaf distance {
+						type uint32 {
+							range 1..255 {
+								error-message "Must be between (1-255)";
+							}
+						}
+						configd:help "Distance value for this route";
+					}
+				}
+			}
+			list interface-route {
+				configd:help "Interface based static route";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/interface-route/configd_validate1.cli";
+				key "tagnode";
+				leaf tagnode {
+					type types:ipv4-prefix {
+						configd:syntax "/opt/vyatta/share/tmplscripts/protocols/static/interface-route/configd_syntax1.cli";
+					}
+					configd:help "Interface based static route";
+				}
+				list next-hop-interface {
+					configd:help "Next-hop interface [REQUIRED]";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route/next-hop-interface/configd_validate.sh";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/static/interface-route/next-hop-interface/configd_allowed.sh";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/static/interface-route/next-hop-interface/configd_end.sh";
+					key "tagnode";
+					leaf tagnode {
+						type types:interface-ifname;
+						configd:help "Next-hop interface [REQUIRED]";
+						configd:allowed "/opt/vyatta/share/tmplscripts/protocols/static/interface-route/next-hop-interface/configd_allowed.sh";
+					}
+					leaf disable {
+						type empty;
+						configd:help "Disable IPv4 interface static route";
+					}
+					leaf distance {
+						type uint32 {
+							range 1..255 {
+								error-message "Must be between (1-255)";
+							}
+						}
+						configd:help "Distance value for this route";
+					}
+				}
+			}
+			list interface-route6 {
+				configd:help "Interface based IPv6 static route";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/interface-route6/configd_validate1.cli";
+				key "tagnode";
+				leaf tagnode {
+					type types:ipv6-prefix {
+						configd:syntax "/opt/vyatta/share/tmplscripts/protocols/static/interface-route6/configd_syntax1.cli";
+					}
+					configd:help "Interface based IPv6 static route";
+				}
+				list next-hop-interface {
+					configd:help "Next-hop interface [REQUIRED]";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/static/table/interface-route/next-hop-interface/configd_validate.sh";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/static/interface-route6/next-hop-interface/configd_allowed.sh";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/static/interface-route6/next-hop-interface/configd_end.sh";
+					key "tagnode";
+					leaf tagnode {
+						type types:interface-ifname;
+						configd:help "Next-hop interface [REQUIRED]";
+						configd:allowed "/opt/vyatta/share/tmplscripts/protocols/static/interface-route6/next-hop-interface/configd_allowed.sh";
+					}
+					leaf disable {
+						type empty;
+						configd:help "Disable IPv6 interface static route";
+					}
+					leaf distance {
+						type uint32 {
+							range 1..255 {
+								error-message "Must be between (1-255)";
+							}
+						}
+						configd:help "Distance value for this route";
+					}
+				}
+			}
+		}
+	}
+}

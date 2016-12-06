@@ -1,0 +1,190 @@
+module vyatta-interfaces-bridge-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-interfaces-bridge:1";
+	prefix vyatta-interfaces-bridge-v1;
+
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-tunnel-v1 {
+		prefix interfaces-tunnel;
+	}
+	import vyatta-interfaces-bonding-v1 {
+		prefix interfaces-bonding;
+	}
+	import vyatta-interfaces-l2tpeth-v1 {
+		prefix interfaces-l2tpeth;
+	}
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-03-28 {
+		description "Remove use of bash in action scripts";
+	}
+	revision 2015-08-17 {
+		description "Break out bridge-base grouping for use by VDR";
+	}
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	grouping bridge-group {
+		container bridge-group {
+			presence "bridge specific parameters";
+			description "Add this interface to a bridge group.";
+			configd:priority "320";
+			configd:help "Add this interface to a bridge group";
+			configd:end "vyatta-bridge.pl ${COMMIT_ACTION} $VAR(../@)";
+
+			leaf bridge {
+				type string {
+					pattern "v?br[0-9]+" {
+						configd:error-message "$VAR(@): not a valid name for a bridge";
+					}
+				}
+				mandatory true;
+				description "Bridge group name.";
+				configd:help "Bridge group name";
+				configd:allowed "vyatta-interfaces.pl --show=bridge";
+				configd:validate "/opt/vyatta/share/tmplscripts/bridge/configd_validate1.cli";
+			}
+		}
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane {
+		uses bridge-group;
+	}
+	augment /if:interfaces/interfaces-tunnel:tunnel {
+		uses bridge-group {
+			refine bridge-group {
+				configd:end "/opt/vyatta/share/tmplscripts/interfaces/tunnel/bridge-group/configd_end.sh";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-bonding:bonding {
+		uses bridge-group;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:vif {
+		uses bridge-group {
+			refine bridge-group {
+				configd:end "vyatta-bridge.pl ${COMMIT_ACTION} $VAR(../../@).$VAR(../@)";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth {
+		uses bridge-group;
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif {
+		uses bridge-group {
+			refine bridge-group {
+				configd:end "vyatta-bridge.pl ${COMMIT_ACTION} $VAR(../../@).$VAR(../@)";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif {
+		uses bridge-group {
+			refine bridge-group {
+				configd:end "vyatta-bridge.pl ${COMMIT_ACTION} $VAR(../../@).$VAR(../@)";
+			}
+		}
+	}
+
+	grouping bridge-base {
+		leaf description {
+			type if:description;
+			description "Interface description.";
+			configd:help "Interface description";
+			configd:update "ip link set dev $VAR(../@) alias '$VAR(@)'";
+			configd:delete "vyatta-interfaces.pl --dev=$VAR(../@) --delete-description";
+		}
+		leaf disable {
+			type empty;
+			description "Disable bridge interface.";
+			configd:help "Disable bridge interface";
+			configd:create "/opt/vyatta/share/tmplscripts/interfaces/bridge/disable/configd_create.sh";
+		}
+		leaf-list address {
+			type if:address-dhcp;
+			ordered-by "user";
+			description "IP address.";
+			configd:help "IP address";
+			configd:create "vyatta-address add $VAR(../@) $VAR(@)";
+			configd:allowed "echo 'dhcp dhcpv6 <>'";
+		}
+		leaf mac {
+			type types:mac-address {
+				configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/bridge/mac/configd_syntax1.cli";
+			}
+			description "Media Access Control (MAC) address.";
+			configd:help "Media Access Control (MAC) address";
+			configd:create "vyatta-interfaces-bridge --action=set_mac --bridge=$VAR(../@) --val=$VAR(@)";
+			configd:delete "vyatta-interfaces-bridge --action=del_mac --bridge=$VAR(../@) --val=$VAR(@)";
+		}
+		leaf aging {
+			type uint32 {
+				range "0|10..1000000";
+			}
+			default "300";
+			description "Interval learnt MAC addresses are retained (0 for no aging).";
+			configd:help "Interval learnt MAC addresses are retained (0 for no aging)";
+			configd:update "vyatta-interfaces-bridge --action=set_ageing --bridge=$VAR(../@) --val=$VAR(@)";
+		}
+		container ip {
+			description "IPv4 parameters.";
+			configd:help "IPv4 parameters";
+		}
+		container ipv6 {
+			presence "true";
+			description "IPv6 parameters.";
+			configd:help "IPv6 parameters";
+		}
+	}
+
+	augment /if:interfaces {
+		list bridge {
+			configd:priority "310";
+			configd:help "Bridge interface name";
+			configd:create "/opt/vyatta/share/tmplscripts/interfaces/bridge/configd_create.sh";
+			configd:delete "ip link del $VAR(@)";
+			configd:end "/opt/vyatta/sbin/vyatta-intf-end $VAR(@)";
+			key "tagnode";
+			leaf tagnode {
+				type string {
+					length 3..15;
+					pattern "br[0-9]+";
+					configd:pattern-help "<brN>";
+				}
+				description "Bridge interface name.";
+				configd:help "Bridge interface name";
+			}
+
+			uses bridge-base {
+				refine address {
+				       configd:priority "320";
+				}
+			}
+
+			leaf disable-link-detect {
+				type empty;
+				description "Ignore link state changes.";
+				configd:help "Ignore link state changes";
+				configd:create "vyatta-link-detect $VAR(../@) off";
+				configd:delete "vyatta-link-detect $VAR(../@) on";
+			}
+		}
+	}
+}

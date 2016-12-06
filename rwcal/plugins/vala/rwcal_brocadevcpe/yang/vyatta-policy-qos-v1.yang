@@ -1,0 +1,376 @@
+module vyatta-policy-qos-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-policy-qos:1";
+	prefix vyatta-policy-qos-v1;
+
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-policy-v1 {
+		prefix policy;
+	}
+	import vyatta-interfaces-policy-v1 {
+		prefix interfaces-policy;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-npf-v1 {
+		prefix npf;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-09-30 {
+		description "Initial revision, forked from vyatta-config-qos module.";
+		configd:migration 2;
+	}
+
+	typedef name {
+		type string {
+			pattern "[0-9A-Za-z][-_0-9A-Za-z]*" {
+				error-message "Only alpha-numeric name allowed";
+			}
+			configd:pattern-help "<name>";
+		}
+	}
+
+	typedef bandwidth-percent {
+		type string {	/* Number from 1 - 100 followed by percent */
+			pattern '(100|[1-9][0-9]?(\.[0-9]*)?)%';
+			configd:pattern-help "<<number>%>";
+		}
+	}
+
+	typedef dscp-name-or-range {
+		type string {
+			configd:syntax "qos-policy.pl --dscp $VAR(@)";
+			pattern "([0-9a-z])*(-(([0-9a-z])*))?(,([0-9a-z])*(-(([0-9a-z])*))?)*";
+			configd:pattern-help "<<dscp>[-<dscp>][,<dscp>[-<dscp>]...]>";
+			configd:help "List of individual or range of DSCP values/names";
+		}
+	}
+
+	grouping rule-qos {
+		uses npf:rule-common;
+		uses npf:ethertype;
+		uses npf:fragment;
+		uses npf:marking;
+		uses npf:policing;
+		leaf action {
+			type enumeration {
+				enum "pass" {
+					description "Process packets matching this rule with QoS settings";
+					configd:help "Process packets matching this rule with QoS settings";
+				}
+				enum "drop" {
+					description "Drop packets matching this rule";
+					configd:help "Drop packets matching this rule";
+				}
+			}
+			description "Rule action";
+			configd:help "Rule action";
+			default "pass";
+		}
+	}
+
+	grouping class-list {
+		list class {
+			configd:help "Class number";
+			max-elements "255";
+			key "id";
+			leaf id {
+				type uint32 {
+					range 1..255;
+				}
+				configd:help "Class number";
+			}
+			leaf description {
+				type string;
+				configd:help "Description for this policy class";
+			}
+			leaf profile {
+				type name;
+				mandatory true;
+				configd:help "QoS profile for class";
+			}
+			list match {
+				configd:help "Class matching rule";
+				key "id";
+				leaf id {
+					type name;
+					configd:help "Class matching rule";
+				}
+				uses rule-qos;
+			}
+		}
+	}
+
+	grouping bandwidth-combo {
+		leaf bandwidth {
+			type union {
+				type npf:bandwidth-suffix;
+				type bandwidth-percent;
+			}
+			default "100%";
+			configd:help "Bandwidth limit";
+		}
+	}
+
+	grouping traffic-class-list {
+		list traffic-class {
+			configd:help "Traffic Class";
+			key "id";
+			leaf id {
+				type uint32 {
+					range 0..3;
+				}
+				configd:help "Traffic Class";
+			}
+			leaf description {
+				type string;
+				configd:help "Description for this traffic-class";
+			}
+			uses bandwidth-combo;
+		}
+	}
+
+	grouping period {
+		leaf period {
+			type uint32 {
+				range 1..3000;
+			}
+			configd:help "Enforcement period (ms)";
+		}
+	}
+
+	grouping red-parameter {
+		container random-detect {
+			presence "true";
+			configd:help "Random Early Detection (RED) parameters";
+			leaf min-threshold {
+				type uint16 {
+					range 1..1022;
+				}
+				configd:help "Minimum threshold";
+			}
+			leaf max-threshold {
+				type uint16 {
+					range 1..1023;
+				}
+				configd:help "Maximum threshold";
+			}
+			leaf filter-weight {
+				type uint16 {
+					range 1..12;
+				}
+				configd:help "EWMA Filter Weight";
+				default "9";
+			}
+			leaf mark-probability {
+				type uint16 {
+					range 1..255;
+				}
+				configd:help "Inverse of packet marking probability maximum value";
+				default "10";
+			}
+		}
+	}
+
+	grouping to-queue {
+		leaf to {
+			type uint32 {
+				range 0..15;
+			}
+			mandatory true;
+			configd:help "Queue";
+		}
+	}
+
+	grouping queue-map {
+		container map {
+			configd:help "Type to queue mapping";
+			list pcp {
+				configd:help "Priority Control Point";
+				key "id";
+				leaf id {
+					type uint32 {
+						range 0..7;
+					}
+					configd:help "Priority Control Point";
+				}
+				uses to-queue;
+			}
+			list dscp {
+				configd:help "DSCP to queue mapping";
+				key "id";
+				leaf id {
+				    type dscp-name-or-range;
+					configd:help "DSCP value";
+				}
+				uses to-queue;
+			}
+		}
+	}
+
+	grouping profile-list {
+		list profile {
+			configd:help "QoS traffic profile";
+			max-elements "256";
+			key "id";
+			leaf id {
+				type name;
+				configd:help "QoS traffic profile";
+			}
+			uses period;
+			leaf description {
+				type string;
+				configd:help "Description for this traffic profile";
+			}
+
+			uses npf:burst;
+			leaf bandwidth {
+				type npf:bandwidth-suffix;
+				configd:help "Bandwidth limit";
+			}
+
+			uses queue-map;
+			list queue {
+				configd:help "Queue properties";
+				key "id";
+				leaf id {
+					type uint32 {
+						range 0..15;
+					}
+					configd:help "Queue properties";
+				}
+				leaf description {
+					type string;
+					configd:help "Description for this queue";
+				}
+				leaf traffic-class {
+					type uint32 {
+						range 0..3;
+					}
+					mandatory true;
+					configd:help "Traffic class";
+				}
+				leaf weight {
+					type uint8 {
+						range 1..100;
+					}
+					configd:help "WRR weight";
+					default "1";
+				}
+			}
+			uses traffic-class-list;
+		}
+	}
+
+	grouping subport {
+		leaf default {
+			type name;
+			mandatory true;
+			configd:help "Qos profile for default traffic";
+		}
+		uses bandwidth-combo {
+			refine bandwidth {
+				default "10Gbit";
+			}
+		}
+		uses npf:burst;
+		uses period;
+		uses traffic-class-list;
+		uses class-list;
+	}
+
+	grouping queue-limit {
+		leaf queue-limit {
+			type uint16 {
+				range 1..max;
+				configd:syntax "/opt/vyatta/share/tmplscripts/policy/qos/shaper/traffic-class/queue-limit/configd_syntax1.cli";
+			}
+			configd:help "Queue size";
+			default "64";
+		}
+	}
+
+	grouping policy-list {
+		list name {
+			configd:help "Quality of Service (QOS) policy";
+			configd:validate "qos-policy.pl --validate $VAR(@)";
+			configd:end "qos-policy.pl --update $VAR(@)";
+
+			key "id";
+			leaf id {
+				type name;
+				configd:help "Quality of Service (QOS) policy";
+			}
+			container shaper {
+				configd:help "Shaping QOS policy";
+				leaf description {
+					type string;
+					configd:help "Description for this QoS policy";
+				}
+				leaf frame-overhead {
+					type uint32 {
+						range 0..1000;
+					}
+					configd:help "Framing overhead";
+					default "24";
+				}
+				uses profile-list;
+				uses subport {
+					augment traffic-class {
+						uses queue-limit;
+						uses red-parameter;
+					}
+					refine default {
+						configd:allowed "echo $VAR(../profile/@@)";
+					}
+					refine class/profile {
+						configd:allowed "echo $VAR(../../profile/@@)";
+					}
+				}
+			}
+		}
+	}
+
+	augment /policy:policy {
+		container qos {
+			configd:priority "400";
+			configd:help "Quality of Service (QOS)";
+			uses policy-list;
+		}
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane {
+		configd:end "/opt/vyatta/sbin/qos-policy.pl --update-binding $VAR(@)";
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-policy:policy {
+		leaf qos {
+			type string;
+			configd:help "Qos policy for interface";
+			configd:allowed "echo $VAR(/policy/qos/name/@@)";
+			configd:validate "qos-policy.pl --validate-binding $VAR(../../@) 0";
+		}
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif/interfaces-policy:policy {
+		leaf qos {
+			type string;
+			configd:help "Qos policy for virtual interface";
+			configd:allowed "echo $VAR(/policy/qos/name/@@)";
+			configd:validate "qos-policy.pl --validate-binding $VAR(../../../@) $VAR(../../@)";
+		}
+	}
+}

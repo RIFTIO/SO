@@ -1,0 +1,246 @@
+module vyatta-multicast-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-multicast:1";
+	prefix vyatta-multicast-v1;
+
+	import vyatta-protocols-v1 {
+		prefix protocols;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-bridge-v1 {
+		prefix interfaces-bridge;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-l2tpeth-v1 {
+		prefix interfaces-l2tpeth;
+	}
+	import vyatta-interfaces-loopback-v1 {
+		prefix interfaces-loopback;
+	}
+	import vyatta-interfaces-openvpn-v1 {
+		prefix interfaces-openvpn;
+	}
+	import vyatta-interfaces-tunnel-v1 {
+		prefix interfaces-tunnel;
+	}
+	import vyatta-interfaces-vti-v1 {
+		prefix interfaces-vti;
+	}
+	import vyatta-interfaces-bonding-v1 {
+		prefix interfaces-bonding;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	grouping multicast-interface-parameters {
+		container multicast {
+		        configd:help "Multicast";
+			leaf ttl-threshold {
+				type uint32 {
+					range 1..255;
+				}
+			configd:help "Time to live (TTL) threshold";
+			}
+		}
+	}
+	grouping multicast-protocol-af-parameters {
+		leaf routing {
+			type empty;
+		}
+		leaf route-limit {
+			type uint32 {
+				range 1..2147483647;
+			}
+			configd:help "Limit number of multicast routes";
+		}
+		leaf log-warning {
+			type uint32 {
+				range 1..2147483647;
+			}
+			configd:help "Threshold at which to generate a warning message";
+		}
+		container log {
+			leaf all {
+				type empty;
+				configd:help "Enable Multicast Routing Information Base (MRIB) debugging for all multicast";
+			}
+			leaf event {
+				type empty;
+				configd:help "Enable Multicast Routing Information Base (MRIB) debugging for multicast events";
+			}
+			leaf fib-msg {
+				type empty;
+				configd:help "Enable Multicast Routing Information Base (MRIB) debugging for multicast FIB events";
+			}
+			leaf mrib-msg {
+				type empty;
+				configd:help "Enable Multicast Routing Information Base (MRIB) debugging for multicast MRIB events";
+			}
+			leaf mrt {
+				type empty;
+				configd:help "Enable Multicast Routing Information Base (MRIB) debugging for multicast route";
+			}
+			leaf mtrace {
+				type empty;
+				configd:help "Enable Multicast Routing Information Base (MRIB) debugging for multicast traceroute";
+			}
+			leaf mtrace-detail {
+				type empty;
+				configd:help "Enable Multicast Routing Information Base (MRIB) debugging for multicast traceroute messages";
+			}
+			leaf nsm-msg {
+				type empty;
+				configd:help "Enable Multicast Routing Information Base (MRIB) debugging for multicast NSM messages";
+			}
+			leaf register-msg {
+				type empty;
+				configd:help "Enable Multicast Routing Information Base (MRIB) debugging for multicast PIM Register messages";
+			}
+			leaf stats {
+				type empty;
+				configd:help "Enable Multicast Routing Information Base (MRIB) debugging for multicast stats";
+			}
+			leaf vif {
+				type empty;
+				configd:help "Enable Multicast Routing Information Base (MRIB) debugging for multicast interface";
+			}
+		}
+	}
+	augment /protocols:protocols {
+		container multicast {
+			configd:priority "299";
+			configd:help "Multicast";
+			container ip {
+				configd:help "Internet Protocol (IP)";
+				configd:validate "vyatta-multicast-validate 4";
+				configd:end "vyatta-multicast 4";
+				uses multicast-protocol-af-parameters {
+					refine routing {
+						configd:help "Turn on IP Multicast Routing";
+					}
+					refine log {
+						configd:help "Internet Protocol (IP) logging parameters";
+					}
+				}
+
+			}
+			container ipv6 {
+				configd:help "Internet Protocol Version 6 (IPv6)";
+				configd:validate "vyatta-multicast-validate 6";
+				configd:end "vyatta-multicast 6";
+				uses multicast-protocol-af-parameters {
+					refine routing {
+						configd:help "Internet Protocol version 6 (IPv6) logging parameters";
+				        }
+					refine log {
+						configd:help "Internet Protocol version 6 (IPv6) logging parameters";
+					}
+				}
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-bridge:bridge/interfaces-bridge:ip {
+		uses multicast-interface-parameters {
+			refine multicast {
+				configd:validate "vyatta-multicast-interface-validate $VAR(../../@)";
+				configd:end "vyatta-multicast-interface $VAR(../../@)";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:ip {
+		uses multicast-interface-parameters {
+			refine multicast {
+				configd:validate "vyatta-multicast-interface-validate $VAR(../../@)";
+				configd:end "vyatta-multicast-interface $VAR(../../@)";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif/interfaces-dataplane:ip {
+		uses multicast-interface-parameters {
+			refine multicast {
+				configd:validate "vyatta-multicast-interface-validate $VAR(../../../@).$VAR(../../@)";
+				configd:end "vyatta-multicast-interface $VAR(../../../@).$VAR(../../@)";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:ip {
+		uses multicast-interface-parameters {
+			refine multicast {
+				configd:validate "vyatta-multicast-interface-validate $VAR(../../@)";
+				configd:end "vyatta-multicast-interface $VAR(../../@)";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:vif/interfaces-l2tpeth:ip {
+		uses multicast-interface-parameters {
+			refine multicast {
+				configd:validate "vyatta-multicast-interface-validate $VAR(../../../@).$VAR(../../@)";
+				configd:end "vyatta-multicast-interface $VAR(../../../@).$VAR(../../@)";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-loopback:loopback/interfaces-loopback:ip {
+		uses multicast-interface-parameters {
+			refine multicast {
+				configd:validate "vyatta-multicast-interface-validate $VAR(../../@)";
+				configd:end "vyatta-multicast-interface $VAR(../../@)";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-openvpn:openvpn/interfaces-openvpn:ip {
+		uses multicast-interface-parameters {
+			refine multicast {
+				configd:validate "vyatta-multicast-interface-validate $VAR(../../@)";
+				configd:end "vyatta-multicast-interface $VAR(../../@)";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-tunnel:tunnel/interfaces-tunnel:ip {
+		uses multicast-interface-parameters {
+			refine multicast {
+				configd:validate "vyatta-multicast-interface-validate $VAR(../../@)";
+				configd:end "vyatta-multicast-interface $VAR(../../@)";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-vti:vti/interfaces-vti:ip {
+		uses multicast-interface-parameters {
+			refine multicast {
+				configd:validate "vyatta-multicast-interface-validate $VAR(../../@)";
+				configd:end "vyatta-multicast-interface $VAR(../../@)";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:ip {
+		uses multicast-interface-parameters {
+			refine multicast {
+				configd:validate "vyatta-multicast-interface-validate $VAR(../../@)";
+				configd:end "vyatta-multicast-interface $VAR(../../@)";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif/interfaces-bonding:ip {
+		uses multicast-interface-parameters {
+			refine multicast {
+				configd:validate "vyatta-multicast-interface-validate $VAR(../../../@).$VAR(../../@)";
+				configd:end "vyatta-multicast-interface $VAR(../../../@).$VAR(../../@)";
+			}
+		}
+	}
+}

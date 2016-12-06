@@ -1,0 +1,479 @@
+module vyatta-protocols-ripng-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-protocols-ripng:1";
+	prefix vyatta-protocols-ripng-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-protocols-v1 {
+		prefix protocols;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-bridge-v1 {
+		prefix interfaces-bridge;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-l2tpeth-v1 {
+		prefix interfaces-l2tpeth;
+	}
+	import vyatta-interfaces-loopback-v1 {
+		prefix interfaces-loopback;
+	}
+	import vyatta-interfaces-openvpn-v1 {
+		prefix interfaces-openvpn;
+	}
+	import vyatta-interfaces-tunnel-v1 {
+		prefix interfaces-tunnel;
+	}
+	import vyatta-interfaces-vti-v1 {
+		prefix interfaces-vti;
+	}
+	import vyatta-interfaces-bonding-v1 {
+		prefix interfaces-bonding;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-06 {
+		description "Initial revision of version 1";
+	}
+
+	augment /protocols:protocols {
+		container ripng {
+			presence "true";
+			configd:priority "660";
+			configd:help "Routing Information Protocol (RIPng) parameters";
+			configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/configd_create.sh";
+			configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/configd_delete.sh";
+			leaf-list aggregate-address {
+				type types:ipv6-prefix {
+					configd:syntax "/opt/vyatta/share/tmplscripts/protocols/ripng/aggregate-address/configd_syntax1.cli";
+				}
+				ordered-by "user";
+				configd:help "Aggregate RIPng route announcement";
+				configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/aggregate-address/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/aggregate-address/configd_delete.sh";
+			}
+			leaf-list route {
+				type types:ipv6-prefix {
+					configd:syntax "/opt/vyatta/share/tmplscripts/protocols/ripng/route/configd_syntax1.cli";
+				}
+				ordered-by "user";
+				configd:help "RIPng static route";
+				configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/route/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/route/configd_delete.sh";
+			}
+			container timers {
+				presence "true";
+				configd:help "RIPng timer values";
+				configd:end "/opt/vyatta/share/tmplscripts/protocols/ripng/timers/configd_end.sh";
+				leaf garbage-collection {
+					type uint32 {
+						range 5..65535 {
+							error-message "Garbage collection timer must be between 5 and 65535";
+						}
+					}
+					default "120";
+					configd:help "Garbage collection timer";
+				}
+				leaf update {
+					type uint32 {
+						range 5..65535 {
+							error-message "Update timer must be between 5 and 65535";
+						}
+					}
+					default "30";
+					configd:help "Routing table update timer";
+				}
+				leaf timeout {
+					type uint32 {
+						range 5..65535 {
+							error-message "Timeout timer must be between 5 and 65535";
+						}
+					}
+					default "180";
+					configd:help "Routing information timeout timer";
+				}
+			}
+			container distribute-list {
+				presence "true";
+				configd:help "Filter networks in routing updates";
+				container access-list {
+					presence "true";
+					configd:help "Access list";
+					leaf out {
+						type string {
+							pattern '[!-~]{1,64}' {
+								error-message "access-list name must be 64 characters or less";
+							}
+							pattern '[^-].*' {
+								error-message "access-list name cannot start with \"-\"";
+							}
+							pattern '[^\|;&$<>]*' {
+								error-message "access-list name cannot contain shell punctuation";
+							}
+						}
+						configd:help "Access list to apply to output packets";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/access-list/out/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/access-list/out/configd_delete.sh";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/access-list/out/configd_validate1.cli";
+					}
+					leaf in {
+						type string {
+							pattern '[!-~]{1,64}' {
+								error-message "access-list name must be 64 characters or less";
+							}
+							pattern '[^-].*' {
+								error-message "access-list name cannot start with \"-\"";
+							}
+							pattern '[^\|;&$<>]*' {
+								error-message "access-list name cannot contain shell punctuation";
+							}
+						}
+						configd:help "Access list to apply to input packets";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/access-list/in/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/access-list/in/configd_delete.sh";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/access-list/in/configd_validate1.cli";
+					}
+				}
+				list interface {
+					configd:help "Apply filtering to an interface";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/configd_allowed.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/configd_validate.cli";
+					key "tagnode";
+					leaf tagnode {
+						type string {
+							configd:syntax "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/configd_syntax1.cli";
+						}
+						configd:help "Apply filtering to an interface";
+						configd:allowed "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/configd_allowed.sh";
+					}
+					container access-list {
+						presence "true";
+						configd:help "Access list";
+						leaf out {
+							type uint32;
+							configd:help "Access list to apply to output packets";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/access-list/out/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/access-list/out/configd_delete.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/access-list/out/configd_validate1.cli";
+						}
+						leaf in {
+							type uint32;
+							configd:help "Access list to apply to input packets";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/access-list/in/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/access-list/in/configd_delete.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/access-list/in/configd_validate1.cli";
+						}
+					}
+					container prefix-list {
+						presence "true";
+						configd:help "Prefix-list";
+						leaf out {
+							type string;
+							configd:help "Prefix-list to apply to output packets";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/prefix-list/out/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/prefix-list/out/configd_delete.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/prefix-list/out/configd_validate1.cli";
+						}
+						leaf in {
+							type string;
+							configd:help "Prefix-list to apply to input packets";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/prefix-list/in/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/prefix-list/in/configd_delete.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/interface/prefix-list/in/configd_validate1.cli";
+						}
+					}
+				}
+				container prefix-list {
+					presence "true";
+					configd:help "Prefix-list";
+					leaf out {
+						type string;
+						configd:help "Prefix-list to apply to output packets";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/prefix-list/out/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/prefix-list/out/configd_delete.sh";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/prefix-list/out/configd_validate1.cli";
+					}
+					leaf in {
+						type string;
+						configd:help "Prefix-list to apply to input packets";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/prefix-list/in/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/prefix-list/in/configd_delete.sh";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/distribute-list/prefix-list/in/configd_validate1.cli";
+					}
+				}
+			}
+			leaf-list passive-interface {
+				type string {
+					configd:syntax "/opt/vyatta/share/tmplscripts/protocols/ripng/passive-interface/configd_syntax1.cli";
+				}
+				ordered-by "user";
+				configd:help "Suppress routing updates on an interface";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/ripng/passive-interface/configd_allowed.sh";
+				configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/passive-interface/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/passive-interface/configd_delete.sh";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/passive-interface/configd_validate.cli";
+			}
+			leaf default-metric {
+				type uint32 {
+					range 1..16 {
+						error-message "Must be between 1-16";
+					}
+				}
+				configd:help "Metric of redistributed routes";
+				configd:update "/opt/vyatta/share/tmplscripts/protocols/ripng/default-metric/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/default-metric/configd_delete.sh";
+			}
+			container redistribute {
+				presence "true";
+				configd:help "Redistribute information from another routing protocol";
+				container bgp {
+					presence "true";
+					configd:help "Redistribute BGP routes";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ripng/redistribute/configd_redist_end.sh";
+					leaf route-map {
+						type string;
+						configd:help "Route map reference";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/redistribute/configd_redist_routemap_validate.cli";
+					}
+					leaf metric {
+						type uint32 {
+							range 1..16 {
+								error-message "metric must be between 1 and 16";
+							}
+						}
+						configd:help "Metric for redistributed routes";
+					}
+				}
+				container kernel {
+					presence "true";
+					configd:help "Redistribute kernel routes";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ripng/redistribute/configd_redist_end.sh";
+					leaf route-map {
+						type string;
+						configd:help "Route map reference";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/redistribute/configd_redist_routemap_validate.cli";
+					}
+					leaf metric {
+						type uint32 {
+							range 1..16 {
+								error-message "metric must be between 1 and 16";
+							}
+						}
+						configd:help "Metric for redistributed routes";
+					}
+				}
+				container connected {
+					presence "true";
+					configd:help "Redistribute connected routes";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ripng/redistribute/configd_redist_end.sh";
+					leaf route-map {
+						type string;
+						configd:help "Route map reference";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/redistribute/configd_redist_routemap_validate.cli";
+					}
+					leaf metric {
+						type uint32 {
+							range 1..16 {
+								error-message "metric must be between 1 and 16";
+							}
+						}
+						configd:help "Metric for redistributed routes";
+					}
+				}
+				container static {
+					presence "true";
+					configd:help "Redistribute static routes";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ripng/redistribute/configd_redist_end.sh";
+					leaf route-map {
+						type string;
+						configd:help "Route map reference";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/redistribute/configd_redist_routemap_validate.cli";
+					}
+					leaf metric {
+						type uint32 {
+							range 1..16 {
+								error-message "metric must be between 1 and 16";
+							}
+						}
+						configd:help "Metric for redistributed routes";
+					}
+				}
+				container ospfv3 {
+					presence "true";
+					configd:help "Redistribute OSPFv3 routes";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ripng/redistribute/configd_redist_end.sh";
+					leaf route-map {
+						type string;
+						configd:help "Route map reference";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ripng/redistribute/configd_redist_routemap_validate.cli";
+					}
+					leaf metric {
+						type uint32 {
+							range 1..16 {
+								error-message "metric must be between 1 and 16";
+							}
+						}
+						configd:help "Metric for redistributed routes";
+					}
+				}
+			}
+			container default-information {
+				presence "true";
+				configd:help "Control distribution of default route";
+				leaf originate {
+					type empty;
+					configd:help "Distribute a default route";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/default-information/originate/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/default-information/originate/configd_delete.sh";
+				}
+			}
+			container log {
+				configd:help "RIPNG logging parameters";
+				leaf all {
+					type empty;
+					configd:help "Enable all RIPNG logs";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/log/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/log//configd_delete.pl $VAR(@)";
+				}
+				leaf events {
+					type empty;
+					configd:help "Enable RIPNG events logs";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/log/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/log/configd_delete.pl $VAR(@)";
+				}
+				leaf rib {
+					type empty;
+					configd:help "Enable RIPNG rib logs";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/log/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/log/configd_delete.pl $VAR(@)";
+				}
+				leaf nsm {
+					type empty;
+					configd:help "Enable RIPNG nsm logs";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/log/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/log/configd_delete.pl $VAR(@)";
+				}
+				container packet {
+					configd:help "RIPNG packet logs";
+					leaf all {
+						type empty;
+						configd:help "Enable RIPNG packet all logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf send {
+						type empty;
+						configd:help "Enable RIPNG packet send logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf recv {
+						type empty;
+						configd:help "Enable RIPNG packet recv logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf detail {
+						type empty;
+						configd:help "Enable RIPNG packet detail logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ripng/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ripng/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+				}
+			}
+		}
+	}
+	grouping itf-ipv6-ripng {
+		container ripng {
+			configd:help "Routing Information Protocol (RIPng)";
+			container split-horizon {
+				presence "true";
+				configd:help "Split horizon parameters";
+				leaf poison-reverse {
+					type empty;
+					configd:help "Enable poison reverse for split-horizon";
+					configd:create "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ripng/split-horizon/poison-reverse/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ripng/split-horizon/poison-reverse/configd_delete.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ripng/split-horizon/poison-reverse/configd_validate1.cli";
+				}
+				leaf disable {
+					type empty;
+					configd:help "Disable split horizon";
+					configd:create "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ripng/split-horizon/disable/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ripng/split-horizon/disable/configd_delete.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ripng/split-horizon/disable/configd_validate1.cli";
+				}
+			}
+			leaf metric-offset {
+				type uint32 {
+					range 1..16 {
+						error-message "Must be between 1-16";
+					}
+				}
+				configd:help "metric value";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ripng/metric-offset/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ripng/metric-offset/configd_delete.sh";
+			}
+			leaf enable {
+				type empty;
+				configd:help "Enable RIPng for interface";
+				configd:create "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ripng/enable/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ripng/enable/configd_delete.sh";
+			}
+			leaf neighbor {
+				type types:ipv6-address;
+				configd:help "IPv6 Link local address of neighbor";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ripng/neighbor/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ripng/neighbor/configd_delete.sh";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-bridge:bridge/interfaces-bridge:ipv6 {
+		uses itf-ipv6-ripng;
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:ipv6 {
+		uses itf-ipv6-ripng;
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif/interfaces-dataplane:ipv6 {
+		uses itf-ipv6-ripng;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:ipv6 {
+		uses itf-ipv6-ripng;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:vif/interfaces-l2tpeth:ipv6 {
+		uses itf-ipv6-ripng;
+	}
+	augment /if:interfaces/interfaces-loopback:loopback/interfaces-loopback:ipv6 {
+		uses itf-ipv6-ripng;
+	}
+	augment /if:interfaces/interfaces-openvpn:openvpn/interfaces-openvpn:ipv6 {
+		uses itf-ipv6-ripng;
+	}
+	augment /if:interfaces/interfaces-tunnel:tunnel/interfaces-tunnel:ipv6 {
+		uses itf-ipv6-ripng;
+	}
+	augment /if:interfaces/interfaces-vti:vti/interfaces-vti:ipv6 {
+		uses itf-ipv6-ripng;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:ipv6 {
+		uses itf-ipv6-ripng;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif/interfaces-bonding:ipv6 {
+		uses itf-ipv6-ripng;
+	}
+}

@@ -1,0 +1,147 @@
+module vyatta-nhrp-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-nhrp:1";
+	prefix vyatta-nhrp-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-tunnel-v1 {
+		prefix interfaces-tunnel;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /if:interfaces/interfaces-tunnel:tunnel {
+		container nhrp {
+			presence "true";
+			configd:help "Configure NHRP Parameter";
+			configd:create "/opt/vyatta/share/tmplscripts/interfaces/tunnel/nhrp/configd_create.sh";
+			configd:delete "/opt/vyatta/share/tmplscripts/interfaces/tunnel/nhrp/configd_delete.sh";
+			configd:end "/opt/vyatta/share/tmplscripts/interfaces/tunnel/nhrp/configd_end.sh";
+			configd:validate "/opt/vyatta/share/tmplscripts/interfaces/tunnel/nhrp/configd_validate1.cli";
+			container authentication {
+				presence "true";
+				configd:help "Enter authentication key";
+				leaf pre-shared-secret {
+					type string;
+					configd:help "Enter authentication key";
+				}
+			}
+			container shortcut-target {
+				presence "true";
+				configd:help "Define an off-NBMA network prefix";
+				configd:validate "/opt/vyatta/share/tmplscripts/interfaces/tunnel/nhrp/shortcut-target/configd_validate1.cli";
+				leaf protocol-address {
+					type types:ipv4-prefix;
+					configd:help "Enter IP address with prefix [REQUIRED]";
+				}
+				leaf holding-time {
+					type uint32 {
+						range 360..10000 {
+							configd:error-message "Must be between 360-10000 for $VAR(../../@)";
+						}
+					}
+					configd:help "Hold time for Resolution Requests and Resolution Replies in seconds";
+				}
+			}
+			container dynamic-map {
+				presence "true";
+				configd:help "Specify the NBMA address of the next hop servers and the domain name in which they are defined";
+				configd:validate "/opt/vyatta/share/tmplscripts/interfaces/tunnel/nhrp/dynamic-map/configd_validate1.cli";
+				configd:validate "/opt/vyatta/share/tmplscripts/interfaces/tunnel/nhrp/dynamic-map/configd_validate2.cli";
+				leaf nbma-domain {
+					type string {
+						configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/tunnel/nhrp/dynamic-map/nbma-domain/configd_syntax1.cli";
+					}
+					configd:help "Enter domain name [REQUIRED]";
+				}
+				leaf protocol-address {
+					type types:ipv4-prefix {
+						configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/tunnel/nhrp/dynamic-map/protocol-address/configd_syntax1.cli";
+					}
+					configd:help "Enter IPv4 network and netmask prefix [REQUIRED]";
+				}
+			}
+			leaf shortcut-destination {
+				type empty;
+				configd:help "Set to reply with authoritative answers on NHRP Resolution Requests";
+			}
+			container multicast {
+				presence "true";
+				configd:help "Configure multicast for nhrp tunnel";
+				leaf parameters {
+					type enumeration {
+						enum "nhs" {
+							configd:help "Specifying nhs makes all multicast packets to be repeated to each statically configured next hop";
+						}
+						enum "dynamic" {
+							configd:help "Dynamic instructs to forward to all peers which  we  have a direct connection with";
+						}
+					}
+					configd:help "Choose multicast option";
+					configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/tunnel/nhrp/multicast/parameters/configd_allowed.sh";
+				}
+				leaf-list protocol-address {
+					type types:ipv4-address;
+					ordered-by "user";
+					configd:help "IP address";
+				}
+			}
+			list map {
+				configd:help "Enter address of NHS";
+				configd:validate "/opt/vyatta/share/tmplscripts/interfaces/tunnel/nhrp/map/configd_validate1.cli";
+				key "tagnode";
+				leaf tagnode {
+					type types:ipv4-prefix {
+						configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/tunnel/nhrp/map/configd_syntax1.cli";
+					}
+					configd:help "Enter address of NHS";
+				}
+				leaf register-no-unique {
+					type empty;
+					configd:help "NHRP register-no-unique";
+				}
+				leaf nbma-address {
+					type types:ipv4-address;
+					configd:help "IP address [REQUIRED]";
+				}
+				leaf register {
+					type empty;
+					configd:help "Enable NHRP registration for this tunnel";
+				}
+			}
+			leaf shortcut {
+				type empty;
+				configd:help "NHRP Shortcut";
+			}
+			leaf redirect {
+				type empty;
+				configd:help "Enable sending of NHRP Traffic Indication packets";
+			}
+			leaf holding-time {
+				type uint32 {
+					range 60..10000 {
+						configd:error-message "Must be between 60-10000 for $VAR(../../@)";
+					}
+				}
+				configd:help "Enter holding time in seconds";
+			}
+		}
+	}
+}

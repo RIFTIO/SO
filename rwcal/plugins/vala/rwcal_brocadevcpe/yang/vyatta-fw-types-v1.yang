@@ -1,0 +1,396 @@
+module vyatta-fw-types-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-fw-types:1";
+	prefix vyatta-fw-types-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-10-12 {
+		description "Initial revision.";
+	}
+
+	typedef group-name {
+		type types:alpha-numeric {
+			pattern '.*[-_A-Za-z].*';	// At least 1 non digit
+		}
+	}
+
+	// RFC6335, but up to 16 chars
+	typedef service-name {
+		type string {
+			length "1..16";
+			pattern '[-0-9A-Za-z]*';	// Allowed chars
+			pattern '.*[A-Za-z].*';		// At least 1 letter
+			pattern '[^-](.*[^-])?';	// Neither begin nor end with hyphen
+			pattern '[^-]+(-[^-]+)*';	// No adjacent hyphens
+			configd:pattern-help "<service name>";
+			configd:help "Named-port (RFC6335, any name in /etc/services, e.g., http)";
+			configd:syntax "vyatta-validate-type port $VAR(@)"; // checks in /etc/services
+		}
+	}
+
+	typedef rule-name {
+		type types:alpha-numeric;
+	}
+
+	typedef zone-name {
+		type types:alpha-numeric;
+	}
+
+	typedef rule-number {
+		type uint32 {
+			range 1..9999;
+			configd:help "Rule number";
+		}
+	}
+
+	typedef icmpv4-symbolic {
+		type enumeration {
+			enum "echo-reply" {
+				description "Type  0";
+				configd:help " : Type  0";
+			}
+			enum "destination-unreachable" {
+				description "Type  3";
+				configd:help " : Type  3";
+			}
+			enum "network-unreachable" {
+				description "Type  3; Code  0";
+				configd:help " : Type  3; Code  0";
+			}
+			enum "host-unreachable" {
+				description "Type  3; Code  1";
+				configd:help " : Type  3; Code  1";
+			}
+			enum "protocol-unreachable" {
+				description "Type  3; Code  2";
+				configd:help " : Type  3; Code  2";
+			}
+			enum "port-unreachable" {
+				description "Type  3; Code  3";
+				configd:help " : Type  3; Code  3";
+			}
+			enum "fragmentation-needed" {
+				description "Type  3; Code  4";
+				configd:help " : Type  3; Code  4";
+			}
+			enum "source-route-failed" {
+				description "Type  3; Code  5";
+				configd:help " : Type  3; Code  5";
+			}
+			enum "network-unknown" {
+				description "Type  3; Code  6";
+				configd:help " : Type  3; Code  6";
+			}
+			enum "host-unknown" {
+				description "Type  3; Code  7";
+				configd:help " : Type  3; Code  7";
+			}
+			enum "network-prohibited" {
+				description "Type  3; Code  9";
+				configd:help " : Type  3; Code  9";
+			}
+			enum "host-prohibited" {
+				description "Type  3; Code 10";
+				configd:help " : Type  3; Code 10";
+			}
+			enum "TOS-network-unreachable" {
+				description "Type  3; Code 11";
+				configd:help " : Type  3; Code 11";
+			}
+			enum "TOS-host-unreachable" {
+				description "Type  3; Code 12";
+				configd:help " : Type  3; Code 12";
+			}
+			enum "communication-prohibited" {
+				description "Type  3; Code 13";
+				configd:help " : Type  3; Code 13";
+			}
+			enum "host-precedence-violation" {
+				description "Type  3; Code 14";
+				configd:help " : Type  3; Code 14";
+			}
+			enum "precedence-cutoff" {
+				description "Type  3; Code 15";
+				configd:help " : Type  3; Code 15";
+			}
+			enum "source-quench" {
+				description "Type  4";
+				configd:help " : Type  4";
+			}
+			enum "redirect" {
+				description "Type  5";
+				configd:help " : Type  5";
+			}
+			enum "network-redirect" {
+				description "Type  5; Code  0";
+				configd:help " : Type  5; Code  0";
+			}
+			enum "host-redirect" {
+				description "Type  5; Code  1";
+				configd:help " : Type  5; Code  1";
+			}
+			enum "TOS-network-redirect" {
+				description "Type  5; Code  2";
+				configd:help " : Type  5; Code  2";
+			}
+			enum "TOS-host-redirect" {
+				description "Type  5; Code  3";
+				configd:help " : Type  5; Code  3";
+			}
+			enum "echo-request" {
+				description "Type  8";
+				configd:help " : Type  8";
+			}
+			enum "router-advertisement" {
+				description "Type  9";
+				configd:help " : Type  9";
+			}
+			enum "router-solicitation" {
+				description "Type 10";
+				configd:help " : Type 10";
+			}
+			enum "time-exceeded" {
+				description "Type 11";
+				configd:help " : Type 11";
+			}
+			enum "ttl-zero-during-reassembly" {
+				description "Type 11; Code  0";
+				configd:help " : Type 11; Code  0";
+			}
+			enum "ttl-zero-during-transit" {
+				description "Type 11; Code  1";
+				configd:help " : Type 11; Code  1";
+			}
+			enum "parameter-problem" {
+				description "Type 12";
+				configd:help " : Type 12";
+			}
+			enum "ip-header-bad" {
+				description "Type 12; Code  0";
+				configd:help " : Type 12; Code  0";
+			}
+			enum "required-option-missing" {
+				description "Type 12; Code  1";
+				configd:help " : Type 12; Code  1";
+			}
+			enum "timestamp-request" {
+				description "Type 13";
+				configd:help " : Type 13";
+			}
+			enum "timestamp-reply" {
+				description "Type 14";
+				configd:help " : Type 14";
+			}
+			enum "address-mask-request" {
+				description "Type 17";
+				configd:help " : Type 17";
+			}
+			enum "address-mask-reply" {
+				description "Type 18";
+				configd:help " : Type 18";
+			}
+
+			configd:help "ICMPv4 type/code name";
+		}
+	}
+
+	typedef icmpv6-symbolic {
+		type enumeration {
+			enum "destination-unreachable" {
+				description "Type   1";
+				configd:help " : Type   1";
+			}
+			enum "no-route" {
+				description "Type   1; Code  0";
+				configd:help " : Type   1; Code  0";
+			}
+			enum "communication-prohibited" {
+				description "Type   1; Code  1";
+				configd:help " : Type   1; Code  1";
+			}
+			enum "address-unreachable" {
+				description "Type   1; Code  3";
+				configd:help " : Type   1; Code  3";
+			}
+			enum "port-unreachable" {
+				description "Type   1; Code  4";
+				configd:help " : Type   1; Code  4";
+			}
+			enum "packet-too-big" {
+				description "Type   2";
+				configd:help " : Type   2";
+			}
+			enum "time-exceeded" {
+				description "Type   3";
+				configd:help " : Type   3";
+			}
+			enum "ttl-zero-during-transit" {
+				description "Type   3; Code  0";
+				configd:help " : Type   3; Code  0";
+			}
+			enum "ttl-zero-during-reassembly" {
+				description "Type   3; Code  1";
+				configd:help " : Type   3; Code  1";
+			}
+			enum "parameter-problem" {
+				description "Type   4";
+				configd:help " : Type   4";
+			}
+			enum "bad-header" {
+				description "Type   4; Code  0";
+				configd:help " : Type   4; Code  0";
+			}
+			enum "unknown-header-type" {
+				description "Type   4; Code  1";
+				configd:help " : Type   4; Code  1";
+			}
+			enum "unknown-option" {
+				description "Type   4; Code  2";
+				configd:help " : Type   4; Code  2";
+			}
+			enum "echo-request" {
+				description "Type 128";
+				configd:help " : Type 128";
+			}
+			enum "echo-reply" {
+				description "Type 129";
+				configd:help " : Type 129";
+			}
+			enum "multicast-listener-query" {
+				description "Type 130";
+				configd:help " : Type 130";
+			}
+			enum "multicast-listener-report" {
+				description "Type 131";
+				configd:help " : Type 131";
+			}
+			enum "multicast-listener-done" {
+				description "Type 132";
+				configd:help " : Type 132";
+			}
+			enum "router-solicitation" {
+				description "Type 133";
+				configd:help " : Type 133";
+			}
+			enum "router-advertisement" {
+				description "Type 134";
+				configd:help " : Type 134";
+			}
+			enum "neighbor-solicitation" {
+				description "Type 135";
+				configd:help " : Type 135";
+			}
+			enum "neighbor-advertisement" {
+				description "Type 136";
+				configd:help " : Type 136";
+			}
+			enum "redirect" {
+				description "Type 137";
+				configd:help " : Type 137";
+			}
+			enum "mobile-prefix-solicitation" {
+				description "Type 146";
+				configd:help " : Type 146";
+			}
+			enum "mobile-prefix-advertisement" {
+				description "Type 147";
+				configd:help " : Type 147";
+			}
+
+			configd:help "ICMPv6 type/code name";
+		}
+	}
+
+	typedef icmp-code-number {
+		type uint8 {
+			range 0..255;
+		}
+		configd:help "ICMP code value";
+	}
+
+	typedef icmp-type-number {
+		type uint8 {
+			range 0..255;
+		}
+		configd:help "ICMP type value";
+	}
+
+	typedef tcp-flags {
+		type string {
+			pattern '(((!?(SYN|ACK|FIN|RST|PSH|URG),)*(!?(SYN|ACK|FIN|RST|PSH|URG))))' {
+				error-message "
+Invalid value for TCP flags. Allowed values: SYN ACK FIN RST URG PSH.
+When specifying more than one flag, flags should be comma-separated.
+For example: value of 'SYN,!ACK,!FIN,!RST' will only match packets with
+the SYN flag set, and the ACK, FIN and RST flags unset";
+			}
+			configd:pattern-help "<flag,flag,..>";
+			configd:help "The TCP flags to match.
+Allowed values: SYN ACK FIN RST URG PSH.
+When specifying more than one flag, flags should be comma-separated.
+For example: value of 'SYN,!ACK,!FIN,!RST' will only match packets with
+the SYN flag set, and the ACK, FIN and RST flags unset.";
+		}
+	}
+
+	typedef fw-address {
+		type union {
+			type types:ipv4-address {
+				configd:help "IP address to match";
+			}
+			type types:ipv4-prefix {
+				configd:help "IP Subnet to match";
+				configd:normalize "normalize ipv4-prefix";
+			}
+			type types:neg-ipv4-address {
+				configd:help "Match everything except the specified IP address";
+			}
+			type types:neg-ipv4-prefix {
+				configd:help "Match everything except the specified IP subnet";
+			}
+			type types:ipv6-address {
+				configd:help "IPv6 address to match";
+			}
+			type types:ipv6-prefix {
+				configd:help "IPv6 Subnet to match";
+				configd:normalize "normalize ipv6-prefix";
+			}
+			type types:neg-ipv6-address {
+				configd:help "Match everything except the specified IPv6 address";
+			}
+			type types:neg-ipv6-prefix {
+				configd:help "Match everything except the specified IPv6 subnet";
+			}
+			type group-name {
+				configd:pattern-help "<address-group name>";
+				configd:help "Defined address-group";
+			}
+		}
+	}
+
+	typedef fw-port {
+		type union {
+			type types:port;
+			type types:port-range;
+			type group-name {
+				configd:pattern-help "<port-group name>";
+				configd:help "Defined port group";
+			}
+			type service-name;
+		}
+	}
+}

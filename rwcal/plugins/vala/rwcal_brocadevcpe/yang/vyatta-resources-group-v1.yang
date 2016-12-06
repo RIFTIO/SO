@@ -1,0 +1,183 @@
+module vyatta-resources-group-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-resources-group:1";
+	prefix vyatta-resources-group-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+
+	import vyatta-resources-v1 {
+		prefix resources;
+	}
+
+	import configd-v1 {
+		prefix configd;
+	}
+
+	import vyatta-fw-types-v1 {
+		prefix fw-types;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-03-28 {
+		description "Remove use of bash in action scripts";
+	}
+	revision 2015-10-13 {
+		description "Initial revision.";
+	}
+
+	typedef group-address {
+		type union {
+			type types:ipv4-address {
+				configd:help "IP address to match";
+			}
+			type types:ipv4-prefix {
+				configd:help "IP subnet to match";
+				pattern '.*/(([0-9])|([1-2][0-9])|(3[0-1]))';
+				configd:pattern-help "<x.x.x.x/0-31>";
+				configd:normalize "normalize ipv4-prefix";
+			}
+			type types:ipv6-address {
+				configd:help "IPv6 address to match";
+			}
+			type types:ipv6-prefix {
+				configd:help "IPv6 subnet to match";
+				pattern '.*(/(([0-9])|([0-9]{2})|(1[0-1][0-9])|(12[0-7])))';
+				configd:pattern-help "<h:h:h:h:h:h:h:h/0-127>";
+				configd:normalize "normalize ipv6-prefix";
+			}
+		}
+	}
+
+	typedef group-port {
+		type union {
+			type fw-types:service-name;
+			type types:port;
+			type types:port-range;
+		}
+	}
+
+	grouping group-icmp-numeric {
+		list type {
+			description "Choose a type (and optional code) by number";
+			configd:help "Choose a type (and optional code) by number";
+			key type-number;
+			leaf type-number {
+				type fw-types:icmp-type-number;
+				description "ICMP type value";
+				configd:help "ICMP type value";
+			}
+			list code {
+				key code-number;
+				leaf code-number {
+					type fw-types:icmp-code-number;
+				}
+				description "ICMP code value";
+				configd:help "ICMP code value";
+			}
+		}
+	}
+
+	augment /resources:resources {
+		container group {
+			configd:priority "300";
+			configd:help "Group of addresses, networks, ports and ICMP type/codes";
+			list icmp-group {
+				configd:help "Group of IPv4 ICMP";
+				configd:end "end-icmp-group icmp $VAR(@)";
+				key "group-name";
+				leaf group-name {
+					type fw-types:group-name;
+					configd:help "Group of IPv4 ICMP";
+				}
+				leaf description {
+					type string;
+					description "IPv4 ICMP-group description";
+					configd:help "IPv4 ICMP-group description";
+				}
+				leaf-list name {
+					type fw-types:icmpv4-symbolic;
+					description "Choose a type (and optional code) by name";
+					configd:help "Choose a type (and optional code) by name";
+				}
+				uses group-icmp-numeric;
+				must "count(name) + count(type/type-number) >= 1" {
+					error-message "An 'icmp-group' must have at least one member";
+				}
+			}
+			list icmpv6-group {
+				configd:help "Group of IPv6 ICMP";
+				configd:end "end-icmp-group icmpv6 $VAR(@)";
+				key "group-name";
+				leaf group-name {
+					type fw-types:group-name;
+					configd:help "Group of IPv6 ICMP";
+				}
+				leaf description {
+					type string;
+					description "IPv6 ICMP-group description";
+					configd:help "IPv6 ICMP-group description";
+				}
+				leaf-list name {
+					type fw-types:icmpv6-symbolic;
+					description "Choose a type (and optional code) by name";
+					configd:help "Choose a type (and optional code) by name";
+				}
+				uses group-icmp-numeric;
+				must "count(name) + count(type/type-number) >= 1" {
+					error-message "An 'icmpv6-group' must have at least one member";
+				}
+			}
+			list port-group {
+				configd:help "Group of ports";
+				configd:end "end-port-group $VAR(@)";
+				key "tagnode";
+				leaf tagnode {
+					type fw-types:group-name {
+						configd:help "Port-group name";
+						configd:syntax "/opt/vyatta/share/tmplscripts/resources/group/port-group/configd_syntax.cli";
+					}
+					configd:help "Group of ports";
+				}
+				leaf description {
+					type string;
+					configd:help "Port-group description";
+				}
+				leaf-list port {
+					type group-port;
+					ordered-by "user";
+					configd:help "Port-group member";
+					max-elements 500;
+				}
+			}
+			list address-group {
+				configd:help "Group of addresses and networks";
+				configd:end "end-address-group $VAR(@)";
+				max-elements 32;
+				key "tagnode";
+				leaf tagnode {
+					type fw-types:group-name {
+						configd:help "Address-group name";
+					}
+					configd:help "Group of addresses and networks";
+				}
+				leaf description {
+					type string;
+					configd:help "Address-group description";
+				}
+				leaf-list address {
+					type group-address;
+					ordered-by "user";
+					configd:help "Address-group member";
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,299 @@
+module vyatta-service-dhcp-server-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-dhcp-server:1";
+	prefix vyatta-service-dhcp-server-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /service:service {
+		container dhcp-server {
+			presence "true";
+			configd:priority "911";
+			configd:help "Dynamic Host Configuration Protocol (DHCP) for DHCP server";
+			configd:end "/opt/vyatta/share/tmplscripts/service/dhcp-server/configd_end1.cli";
+			leaf disabled {
+				type boolean;
+				default "false";
+				configd:help "Option to disable DHCP server";
+			}
+			leaf-list global-parameters {
+				type string;
+				ordered-by "user";
+				configd:help "Additional global parameters for DHCP server. You must 
+use the syntax of dhcpd.conf in this text-field. Using this 
+without proper knowledge may result in a crashed DHCP server.
+Check system log to look for errors.";
+			}
+			container listento {
+				presence "true";
+				configd:help "force dhcpd listens to interfaces";
+				leaf-list interface {
+					type string;
+					ordered-by "user";
+					configd:help "interfaces dhcpd listens to";
+					configd:allowed "/opt/vyatta/share/tmplscripts/service/dhcp-server/interface/configd_allowed.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/service/dhcp-server/configd_validate1.cli";
+				}
+			}
+			list static-mapping {
+				configd:help "Static mapping for specified address type";
+					key "tagnode";
+					leaf tagnode {
+					type string {
+					     pattern '[-_a-zA-Z0-9\.]+' {
+						configd:error-message "invalid static-mapping name \"$VAR(@)\"";
+					     }
+					}
+					configd:help "Static mapping for specified address type";
+				}
+				leaf-list static-mapping-parameters {
+					type string;
+					ordered-by "user";
+					configd:help "Additional static-mapping parameters for DHCP server.
+You must use the syntax of dhcpd.conf in this text-field. 
+Using this without proper knowledge may result in a crashed 
+DHCP server. Check system log to look for errors.";
+				}
+				leaf ip-address {
+					type types:ipv4-address;
+					configd:help "Static mapping for specified IP address";
+				}
+				leaf mac-address {
+					mandatory true;
+					type types:mac-address;
+					configd:help "Static mapping for specified MAC address [REQUIRED]";
+				}
+				leaf disable {
+					type empty;
+					configd:help "Option to disable static-mapping";
+				}
+			}
+			list shared-network-name {
+				configd:help "DHCP shared network [REQUIRED]";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern '[-_a-zA-Z0-9\.]+' {
+							configd:error-message "invalid DHCP pool name \"$VAR(@)\"";
+						}
+					}
+					configd:help "DHCP shared network [REQUIRED]";
+				}
+				leaf description {
+					type string;
+					configd:help "Shared-network-name description";
+				}
+				leaf-list shared-network-parameters {
+					type string;
+					ordered-by "user";
+					configd:help "Additional shared-network parameters for DHCP server.
+You must use the syntax of dhcpd.conf in this text-field. 
+Using this without proper knowledge may result in a crashed 
+DHCP server. Check system log to look for errors.";
+				}
+				list subnet {
+					configd:help "DHCP subnet for shared network [REQUIRED]";
+					key "tagnode";
+					leaf tagnode {
+						type types:ipv4-prefix;
+						configd:help "DHCP subnet for shared network [REQUIRED]";
+					}
+					leaf-list dns-server {
+						type types:ipv4-address;
+						ordered-by "user";
+						configd:help "IP address of DNS server";
+					}
+					leaf tftp-server-name {
+						type string;
+						configd:help "TFTP server name";
+					}
+					leaf-list time-server {
+						type types:ipv4-address;
+						ordered-by "user";
+						configd:help "IP address of time server";
+					}
+					leaf-list exclude {
+						type types:ipv4-address;
+						ordered-by "user";
+						configd:help "IP address that needs to be excluded from DHCP lease range";
+					}
+					container ip-forwarding {
+						presence "true";
+						configd:help "IP layer forwarding";
+						leaf enable {
+							type boolean;
+							default "false";
+							configd:help "Option to set IP forwarding (default: false)";
+						}
+					}
+					leaf client-prefix-length {
+						type uint32 {
+							range 0..32 {
+								error-message "DHCP client prefix length must be 0 to 32";
+							}
+						}
+						configd:help "DHCP client prefix length";
+					}
+					leaf time-offset {
+						type string {
+							pattern '\-?[0-9]+' {
+								configd:error-message "invalid time offset value \"$VAR(@)\"";
+							}
+						}
+						configd:help "Offset of the client's subnet in seconds from Coordinated Universal Time (UTC)";
+					}
+					leaf server-identifier {
+						type types:ipv4-address;
+						configd:help "Address for DHCP server identifier";
+					}
+					leaf-list smtp-server {
+						type types:ipv4-address;
+						ordered-by "user";
+						configd:help "IP address of SMTP server";
+					}
+					leaf-list ntp-server {
+						type types:ipv4-address;
+						ordered-by "user";
+						configd:help "IP address of NTP server";
+					}
+					leaf-list wins-server {
+						type types:ipv4-address;
+						ordered-by "user";
+						configd:help "IP address for Windows Internet Name Service (WINS) server";
+					}
+					container static-route {
+						presence "true";
+						configd:help "Classless static route";
+						leaf destination-subnet {
+							type types:ipv4-prefix;
+							configd:help "Destination subnet [REQUIRED]";
+						}
+						leaf router {
+							type types:ipv4-address;
+							configd:help "IP address of router to be used to reach the destination subnet [REQUIRED]";
+						}
+					}
+					leaf bootfile-server {
+						type string;
+						configd:help "Server (IP address or domain name) from which the initial boot file is to be loaded";
+					}
+					leaf-list subnet-parameters {
+						type string;
+						ordered-by "user";
+						configd:help "Additional subnet parameters for DHCP server. You must
+use the syntax of dhcpd.conf in this text-field. Using this 
+without proper knowledge may result in a crashed DHCP server.
+Check system log to look for errors.";
+					}
+					leaf bootfile-name {
+						type string;
+						configd:help "Bootstrap file name";
+					}
+					container failover {
+						presence "true";
+						configd:help "DHCP failover parameters";
+						leaf name {
+							type string {
+								pattern '[-_a-zA-Z0-9\.]+' {
+									configd:error-message "invalid failover peer name \"$VAR(@)\"";
+								}
+							}
+							configd:help "DHCP failover peer name [REQUIRED]";
+						}
+						leaf peer-address {
+							type types:ipv4-address;
+							configd:help "IP address of failover peer [REQUIRED]";
+						}
+						leaf status {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/service/dhcp-server/shared-network-name/subnet/failover/status/configd_syntax1.cli";
+							}
+							configd:help "DHCP failover peer status (primary|secondary) [REQUIRED]";
+						}
+						leaf local-address {
+							type types:ipv4-address;
+							configd:help "IP address for failover peer to connect [REQUIRED]";
+						}
+					}
+					leaf ping-check {
+						type empty;
+						configd:help "Ping the IP address that is being offered to make sure it isn't configured on another node";
+					}
+					leaf-list pop-server {
+						type types:ipv4-address;
+						ordered-by "user";
+						configd:help "IP address of POP3 server";
+					}
+					leaf default-router {
+						type types:ipv4-address;
+						configd:help "IP address of default router";
+					}
+					leaf lease {
+						type uint32;
+						default "86400";
+						configd:help "Lease timeout in seconds";
+					}
+					leaf domain-name {
+						type string;
+						configd:help "Client domain name";
+					}
+					list start {
+						configd:help "Starting IP address for DHCP lease range";
+						key "tagnode";
+						leaf tagnode {
+							type types:ipv4-address;
+							configd:help "Starting IP address for DHCP lease range";
+						}
+						leaf stop {
+							type types:ipv4-address;
+							configd:help "Stopping IP address for DHCP lease range [REQUIRED]";
+						}
+					}
+					leaf wpad-url {
+						type string;
+						configd:help "Web Proxy Autodiscovery (WPAD) URL";
+					}
+				}
+				leaf disable {
+					type empty;
+					configd:help "Option to disable DHCP configuration for shared-network";
+				}
+				leaf authoritative {
+					type string {
+						configd:syntax "/opt/vyatta/share/tmplscripts/service/dhcp-server/shared-network-name/authoritative/configd_syntax1.cli";
+					}
+					default "disable";
+					configd:help "Option to make DHCP server authoritative for this physical network";
+				}
+			}
+			container dynamic-dns-update {
+				presence "true";
+				configd:help "DHCP server to dynamically update the Domain Name System (DNS)";
+				leaf enable {
+					type boolean;
+					default "false";
+					configd:help "Option to set dynamic DNS update (default: false)";
+				}
+			}
+		}
+	}
+}

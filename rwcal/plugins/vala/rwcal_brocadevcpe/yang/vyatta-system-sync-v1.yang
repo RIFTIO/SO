@@ -1,0 +1,99 @@
+module vyatta-system-sync-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-system-sync:1";
+	prefix vyatta-system-sync-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-system-v1 {
+		prefix system;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-04-19 {
+		description "Add timeout";
+	}
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /system:system {
+		container config-sync {
+			presence "true";
+			configd:priority "900";
+			configd:help "Configuration synchronization";
+			configd:end "/opt/vyatta/share/tmplscripts/system/config-sync/configd_end.sh";
+			list remote-router {
+				configd:help "Remote router to which configuration is to be synced";
+				configd:delete "/opt/vyatta/share/tmplscripts/system/config-sync/remote-router/configd_delete.sh";
+				configd:validate "/opt/vyatta/share/tmplscripts/system/config-sync/remote-router/configd_validate1.cli";
+				configd:validate "/opt/vyatta/share/tmplscripts/system/config-sync/remote-router/configd_validate2.cli";
+				key "tagnode";
+				leaf tagnode {
+					type types:ipv4-address;
+					configd:help "Remote router to which configuration is to be synced";
+				}
+				leaf password {
+					type string;
+					configd:secret "true";
+					configd:help "Plaintext password associated with remote router";
+				}
+				leaf username {
+					type string;
+					configd:help "Username associated with remote router";
+				}
+				leaf sync-map {
+					type string;
+					configd:help "Synchronization map associated with remote router";
+				}
+			}
+			list sync-map {
+				configd:help "Configuration synchronization map to use for a remote-router";
+				key "tagnode";
+				leaf tagnode {
+					type string;
+					configd:help "Configuration synchronization map to use for a remote-router";
+				}
+				list rule {
+					configd:help "Rule number to evaluate configuration matching";
+					configd:validate "/opt/vyatta/share/tmplscripts/system/config-sync/sync-map/rule/configd_validate1.cli";
+					configd:validate "/opt/vyatta/share/tmplscripts/system/config-sync/sync-map/rule/configd_validate2.cli";
+					key "tagnode";
+					leaf tagnode {
+						type uint32;
+						configd:help "Rule number to evaluate configuration matching";
+					}
+					leaf action {
+						type enumeration {
+							enum "include";
+							enum "exclude";
+						}
+						configd:help "Rule behavior (\"include\" or \"exclude\")";
+					}
+					leaf location {
+						type string {
+							configd:syntax "/opt/vyatta/share/tmplscripts/system/config-sync/sync-map/rule/location/configd_syntax1.cli";
+						}
+						configd:help "Configuration tree location to match";
+					}
+				}
+			}
+			leaf timeout {
+				type uint32;
+				default 900;
+				configd:help "Timeout in seconds for REST calls to remote-routers";
+			}
+		}
+	}
+}

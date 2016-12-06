@@ -1,0 +1,95 @@
+module vyatta-interfaces-vti-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-interfaces-vti:1";
+	prefix vyatta-interfaces-vti-v1;
+
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-05-09 {
+		description "Validation warning added to address leaf-list";
+	}
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /if:interfaces {
+		list vti {
+			configd:priority "381";
+			configd:help "Virtual Tunnel interface";
+			configd:begin "/opt/vyatta/share/tmplscripts/interfaces/vti/configd_begin.sh";
+			configd:validate "interface-address-check $VAR(@) $VAR(./address/@@)";
+			configd:delete "/opt/vyatta/share/tmplscripts/interfaces/vti/configd_delete.sh";
+			configd:end "/opt/vyatta/share/tmplscripts/interfaces/vti/configd_end.sh";
+			key "tagnode";
+			leaf tagnode {
+				type string {
+					pattern "vti[0-9]+" {
+						error-message "vti must be (vti0-vti999..)";
+					}
+					configd:pattern-help "<vtiN>";
+				}
+				configd:help "Virtual Tunnel interface";
+			}
+			leaf description {
+				type string {
+					pattern ".{1,256}" {
+						error-message "interface description is too long (limit 256 characters)";
+					}
+				}
+				configd:help "Description";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/vti/description/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/vti/description/configd_delete.sh";
+			}
+			leaf mtu {
+				type uint32 {
+					range 68..9000 {
+						error-message "Must be between 68-9000";
+					}
+				}
+				configd:priority "382";
+				configd:help "Maximum Transmission Unit (MTU)";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/vti/mtu/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/vti/mtu/configd_delete.sh";
+			}
+			leaf disable {
+				type empty;
+				configd:help "Disable interface";
+				configd:create "/opt/vyatta/share/tmplscripts/interfaces/vti/disable/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/vti/disable/configd_delete.sh";
+			}
+			leaf-list address {
+				type union {
+					type types:ipv4-prefix;
+					type types:ipv6-prefix;
+				}
+				ordered-by "user";
+				configd:help "IP address";
+				configd:create "/opt/vyatta/share/tmplscripts/interfaces/vti/address/configd_create.sh";
+				configd:validate "/opt/vyatta/share/tmplscripts/interfaces/vti/address/warning_unsupported_setups.cli";
+			}
+			container ip {
+				configd:help "IPv4 parameters";
+			}
+			container ipv6 {
+				presence "true";
+				configd:help "IPv6 parameters";
+			}
+		}
+	}
+}

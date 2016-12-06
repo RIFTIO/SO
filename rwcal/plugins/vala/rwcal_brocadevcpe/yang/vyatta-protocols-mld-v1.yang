@@ -1,0 +1,309 @@
+module vyatta-protocols-mld-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-protocols-mld:1";
+	prefix vyatta-protocols-mld-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-protocols-v1 {
+		prefix protocols;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-bridge-v1 {
+		prefix interfaces-bridge;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-l2tpeth-v1 {
+		prefix interfaces-l2tpeth;
+	}
+	import vyatta-interfaces-loopback-v1 {
+		prefix interfaces-loopback;
+	}
+	import vyatta-interfaces-openvpn-v1 {
+		prefix interfaces-openvpn;
+	}
+	import vyatta-interfaces-tunnel-v1 {
+		prefix interfaces-tunnel;
+	}
+	import vyatta-interfaces-vti-v1 {
+		prefix interfaces-vti;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+
+	revision 2015-07-28 {
+		description "New module, replaces vyatta-protocols-mld";
+		configd:migration 1;
+	}
+
+         typedef static-group-source-v6 {
+                type union {
+                        type string {
+                                configd:pattern-help "ssm-map";
+                                configd:help "Use SSM mapping";
+                        }
+			type types:ipv6-address {
+				configd:help "IP Address";
+			}
+                }
+        }
+
+	grouping mld-interface-parameters {
+		container mld {
+			presence "true";
+			configd:priority "770";	
+			configd:help "Multicast Listener Discovery (MLD)";
+			container immediate-leave {
+				presence "true";
+				configd:help "Immediate leave feature";
+				leaf group-list {
+					type string;
+					configd:help "Define multicast groups in which the immediate leave feature is enabled";
+				        configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/mld/immediate-leave/group-list/configd_allowed.sh";
+				}
+			}
+			leaf robustness-variable {
+				type uint32 {
+					range 2..7;
+				}
+				configd:help "Configure the robustness variable value on an interface";
+			}
+			leaf querier-timeout {
+				type uint32 {
+					range 60..300;
+				}
+				configd:help "Configure the timeout period that the router waits after the previous querier has stopped querying before it takes over as the querier";
+			}
+			leaf limit-exception {
+				type string;
+				configd:help "Specify access-list that defines multicast groups that are exempted from being subject to configured limit";
+				        configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/mld/limit-exception/configd_allowed.sh";			}
+			leaf limit {
+				type uint32 {
+					range 1..2097152;
+				}
+				default 5000;
+				configd:help "Configure the limit on the maximum number of group membership states";
+			}
+			leaf query-max-response-time {
+				type uint32 {
+					range 1..240;
+				}
+				configd:help "Configure the maximum response time advertised in MLD queries";
+			}
+			leaf last-member-query-count {
+				type uint32 {
+					range 2..7;
+				}
+				configd:help "Set the last-member query-count value";
+			}
+			list static-group {
+				configd:help "Set standard IPv6 Multicast group address to be configured as a static group member";
+				key "tagnode";
+				leaf tagnode {
+					type types:ipv6-address;
+					// multicast address
+					must "(starts-with(., 'ff'))" {
+						error-message "Not a valid IPv6 multicast address.";
+					}
+					configd:help "Set standard IPv6 Multicast group address to be configured as a static group member";
+				}
+				leaf-list source {
+					type static-group-source-v6;
+					// not (multicast, loopback) or ssm-map
+					must "(not(starts-with(., 'ff'))) and " +
+						"(not(. = '::1')) or " +
+						"(.= 'ssm-map')" {
+						error-message "Not either a valid IPv6 Unicast address or <ssm-map>.";
+					}
+					ordered-by "user";
+					configd:help "Configure standard IPv6 source address as a static source from where multicast packets originate";
+				}
+			}
+			leaf last-member-query-interval {
+				type uint32 {
+					range 1000..25500;
+				}
+				configd:help "Configure the frequency at which the router sends MLD group-specific host query messages";
+			}
+			leaf version {
+				type uint32 {
+					range 1..2;
+				}
+				default "2";
+				configd:help "Configure the current MLD protocol version on an interface";
+			}
+			leaf access-group {
+				type string;
+				configd:help "Control the multicast local-membership groups learned on an interface";
+			     configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/mld/access-group/configd_allowed.sh";			}
+			leaf query-interval {
+				type uint32 {
+					range 1..18000;
+				}
+				configd:help "Configure the frequency of sending MLD host query messages";
+			}
+		}
+	}
+	augment /protocols:protocols {
+		container mld {
+			configd:validate "vyatta-igmp-validate 6";
+			configd:end "vyatta-igmp 6";
+			configd:help "Multicast Listener Discovery (MLD)";
+			leaf limit-exception {
+				type string {
+				}
+				configd:help "Specify access-list that defines multicast groups that are exempted from being subject to configured limit";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/mld/limit-exception/configd_allowed.sh";
+			}
+			leaf limit {
+				type uint32 {
+					range 1..2097152;
+				}
+				configd:help "Configure the limit on the maximum number of group membership states";
+			}
+			container ssm-map {
+				presence "true";
+				configd:help "Enable SSM mapping on the router";
+				container static {
+					configd:help "Configure the static mode of defining SSM mapping";
+					list access-list {
+						configd:help "Configure access-list for the static mode of defining SSM mapping";
+						configd:allowed "/opt/vyatta/share/tmplscripts/protocols/mld/ssm-map/static/access-list/configd_allowed.sh";
+						key "tagnode";
+						leaf tagnode {
+							type string {
+							}
+							configd:help "Configure access-list for the static mode of defining SSM mapping";
+							configd:allowed "/opt/vyatta/share/tmplscripts/protocols/mld/ssm-map/static/access-list/configd_allowed.sh";
+						}
+						leaf-list source {
+							min-elements 1;
+							type types:ipv6-address;
+							// not (multicast, loopback)
+							must "(not(starts-with(., 'ff'))) and " +
+								"(not(. = '::1'))" {
+								error-message "Not a valid IPv6 unicast address.";
+							}
+							ordered-by "user";
+							configd:help "Configure IPv6 source address to use for static map group";
+						}
+					}
+				}
+			}
+			container log {
+				configd:help "MLD logging parameters";
+				leaf all {
+					type empty;
+					configd:help "Enable all MLD debugging";
+				}
+				leaf encode {
+					type empty;
+					configd:help "Enable MLD encode debugging";
+				}
+				leaf decode {
+					type empty;
+					configd:help "Enable MLD decode debugging";
+				}
+				leaf events {
+					type empty;
+					configd:help "Enable MLD events debugging";
+				}
+				leaf fsm {
+					type empty;
+					configd:help "Enable MLD fsm debugging";
+				}
+				leaf tib {
+					type empty;
+					configd:help "Enable MLD tib debugging";
+				}
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-bridge:bridge/interfaces-bridge:ipv6 {
+		 uses mld-interface-parameters {
+			 refine mld {
+			         configd:validate "vyatta-mld-interface-validate $VAR(../../@)";
+				 configd:end "vyatta-mld-interface $VAR(../../@)";
+			 }
+		 }
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:ipv6 {
+		 uses mld-interface-parameters {
+			 refine mld {
+			         configd:validate "vyatta-mld-interface-validate $VAR(../../@)";
+				 configd:end "vyatta-mld-interface $VAR(../../@)";
+			 }
+		 }
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif/interfaces-dataplane:ipv6 {
+		 uses mld-interface-parameters {
+			 refine mld {
+			         configd:validate "vyatta-mld-interface-validate  $VAR(../../../@).$VAR(../../@)";
+				 configd:end "vyatta-mld-interface $VAR(../../@)";
+			 }
+		 }
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:ipv6 {
+		 uses mld-interface-parameters {
+			 refine mld {
+			         configd:validate "vyatta-mld-interface-validate $VAR(../../@)";
+				 configd:end "vyatta-mld-interface $VAR(../../@)";
+			 }
+		 }
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:vif/interfaces-l2tpeth:ipv6 {
+		 uses mld-interface-parameters {
+			 refine mld {
+			         configd:validate "vyatta-mld-interface-validate  $VAR(../../../@).$VAR(../../@)";
+				 configd:end "vyatta-mld-interface $VAR(../../@)";
+			 }
+		 }
+	}
+	augment /if:interfaces/interfaces-loopback:loopback/interfaces-loopback:ipv6 {
+		 uses mld-interface-parameters {
+			 refine mld {
+			         configd:validate "vyatta-mld-interface-validate $VAR(../../@)";
+				 configd:end "vyatta-mld-interface $VAR(../../@)";
+			 }
+		 }
+	}
+	augment /if:interfaces/interfaces-openvpn:openvpn/interfaces-openvpn:ipv6 {
+		 uses mld-interface-parameters {
+			 refine mld {
+			         configd:validate "vyatta-mld-interface-validate $VAR(../../@)";
+				 configd:end "vyatta-mld-interface $VAR(../../@)";
+			 }
+		 }
+	}
+	augment /if:interfaces/interfaces-tunnel:tunnel/interfaces-tunnel:ipv6 {
+		 uses mld-interface-parameters {
+			 refine mld {
+			         configd:validate "vyatta-mld-interface-validate $VAR(../../@)";
+				 configd:end "vyatta-mld-interface $VAR(../../@)";
+			 }
+		 }
+	}
+	augment /if:interfaces/interfaces-vti:vti/interfaces-vti:ipv6 {
+		 uses mld-interface-parameters {
+			 refine mld {
+			         configd:validate "vyatta-mld-interface-validate $VAR(../../@)";
+				 configd:end "vyatta-mld-interface $VAR(../../@)";
+			 }
+		 }
+	}
+}

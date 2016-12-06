@@ -1,0 +1,116 @@
+module vyatta-system-acm-configd-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-system-acm-configd:1";
+	prefix vyatta-system-acm-configd-v1;
+
+	import vyatta-system-v1 {
+		prefix system;
+	}
+	import vyatta-system-acm-v1 {
+		prefix system-acm;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2014-08-26 {
+		description "Initial revision.";
+		configd:migration 1;
+	}
+
+	typedef action {
+		type enumeration {
+			enum "allow" {
+				configd:help "Allow the action";
+			}
+			enum "deny" {
+				configd:help "Deny the action";
+			}
+		}
+	}
+
+		
+	augment /system:system/system-acm:acm {
+		leaf log-requests {
+			configd:help "Log all requests to the audit log";
+			type empty;
+		}
+		leaf read-default {
+			type action;
+			default "allow";
+			configd:help "Read operation default action";
+		}
+		leaf delete-default {
+			type action;
+			default "deny";
+			configd:help "Delete operation default action";
+		}
+		leaf update-default {
+			type action;
+			default "deny";
+			configd:help "Update operation default action";
+		}
+		container ruleset {
+			presence "true";
+			configd:help "Configuration path ruleset";
+			list rule {
+				configd:help "Rule number (1-9999)";
+				configd:validate "/opt/vyatta/share/tmplscripts/system/acm/ruleset/rule/configd_validate1.cli";
+				configd:validate "/opt/vyatta/share/tmplscripts/system/acm/ruleset/rule/configd_validate2.cli";
+				configd:validate "/opt/vyatta/share/tmplscripts/system/acm/ruleset/rule/configd_validate3.cli";
+				key "tagnode";
+				leaf tagnode {
+					type uint32 {
+						range 1..9999;
+					}
+					configd:help "Rule number";
+				}
+				leaf path {
+					type string;
+					configd:help "Path to match";
+				}
+				leaf action {
+					type action;
+					default "deny";
+					configd:help "Action";
+				}
+				leaf-list group {
+					type string;
+					ordered-by "user";
+					configd:help "Group to match";
+					configd:allowed "/opt/vyatta/share/tmplscripts/system/acm/ruleset/rule/group/configd_allowed.sh";
+				}
+				leaf log {
+					type empty;
+					configd:help "Enable logging for rule";
+				}
+				leaf operation {
+					type enumeration {
+						enum "create";
+						enum "read";
+						enum "update";
+						enum "delete";
+						enum "*";
+					}
+					configd:help "Path operation to match";
+				}
+			}
+		}
+		leaf enable {
+			type empty;
+			configd:help "Enable rulesets";
+		}
+		leaf create-default {
+			type action;
+			default "deny";
+			configd:help "Create operation default action";
+		}
+	}
+}

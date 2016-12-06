@@ -1,0 +1,64 @@
+
+/*
+ * 
+ *   Copyright 2016 RIFT.IO Inc
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ *
+ *
+ */
+
+module rw-sdn
+{
+  namespace "http://riftio.com/ns/riftware-1.0/rw-sdn";
+  prefix "rw-sdn";
+
+
+  import rw-pb-ext {
+    prefix "rw-pb-ext";
+  }
+
+  import rwsdn {
+    prefix "rwsdn";
+  }
+
+  revision 2015-09-14 {
+    description
+      "Initial revision.";
+  }
+  container sdn {
+    list account {
+    rw-pb-ext:msg-new SDNAccountConfig;
+
+      key "name";
+      leaf name {
+        type string;
+      }
+
+      uses rwsdn:sdn-provider-auth;
+      uses rwsdn:connection-status;
+    }
+  }
+
+  rpc update-sdn-status {
+    description "Begin sdn accunt connection status";
+    input {
+      leaf sdn-account {
+        mandatory true;
+        description
+          "The sdn account name to update connection status for";
+        type string;
+      }
+    }
+  }
+}

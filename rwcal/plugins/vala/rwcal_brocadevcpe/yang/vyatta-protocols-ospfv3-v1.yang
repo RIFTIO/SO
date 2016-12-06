@@ -1,0 +1,1602 @@
+module vyatta-protocols-ospfv3-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-protocols-ospfv3:1";
+	prefix vyatta-protocols-ospfv3-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-protocols-v1 {
+		prefix protocols;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-bridge-v1 {
+		prefix interfaces-bridge;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-l2tpeth-v1 {
+		prefix interfaces-l2tpeth;
+	}
+	import vyatta-interfaces-loopback-v1 {
+		prefix interfaces-loopback;
+	}
+	import vyatta-interfaces-openvpn-v1 {
+		prefix interfaces-openvpn;
+	}
+	import vyatta-interfaces-tunnel-v1 {
+		prefix interfaces-tunnel;
+	}
+	import vyatta-interfaces-vti-v1 {
+		prefix interfaces-vti;
+	}
+	import vyatta-interfaces-bonding-v1 {
+		prefix interfaces-bonding;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-05-09 {
+		description "Various configd script changes.";
+	}
+
+	revision 2015-08-06 {
+		description "Initial revision of version 1";
+	}
+
+	grouping parameters_summary_address {
+		container advertise {
+			presence "true";
+			configd:help "OSPFv3 summary address which should be advertised";
+			leaf tag {
+				type uint32 {
+					range min..2147483647;
+				}
+				configd:help "OSPFv3 tag identifier for summary address.";
+			}
+		}
+		leaf not-advertise {
+			type empty;
+			configd:help "OSPFv3 summary address which shouldn't be advertised";
+		}
+	}
+
+	grouping parameters_redistribute {
+		leaf metric-type {
+			type uint32 {
+				range 1..2;
+			}
+			configd:help "Metric type for redistributed routes";
+			default "2";
+		}
+		leaf route-map {
+			type string;
+				configd:help "Route map reference";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/configd_route_map_validate.cli";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/ospfv3/configd_route_map_allowed.sh";
+			}
+		leaf metric {
+			type uint32 {
+				range 0..16777214;
+			}
+			configd:help "Metric for redistributed routes";
+		}
+		leaf tag {
+			type uint32 {
+				range 1..2147483647;
+			}
+			configd:help "Tag for redistributed routes";
+		}
+	}
+
+	grouping param-default-info-originate{
+		container originate {
+			presence "true";
+			configd:help "Distribute a default route";
+			configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/default-information/originate/configd_end.sh";
+			configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/default-information/originate/configd_delete.sh";
+			leaf metric-type {
+				type uint32 {
+					range 1..2;
+				}
+				configd:help "OSPF metric type for default routes";
+				default "2";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/default-information/originate/metric-type/configd_delete.sh";
+			}
+			leaf always {
+				type empty;
+				configd:help "Always originate a default route";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/default-information/originate/always/configd_delete.sh";
+			}
+			leaf route-map {
+				type string;
+				configd:help "OSPF route-map to control default routes";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/configd_route_map_validate.cli";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/default-information/originate/route-map/configd_delete.sh";
+			}
+			leaf metric {
+				type uint32 {
+				       	range 0..16777214;
+				}
+				configd:help "OSPF default metric";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/default-information/originate/metric/configd_delete.sh";
+			}
+		}
+	}
+	
+	grouping area-default-cost {
+		leaf default-cost {
+			type uint32 {
+				range 1..16777214;
+			}
+			configd:help "default-cost of area";
+			configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/default-cost/configd_create.sh";
+			configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/default-cost/configd_delete.sh";
+		}
+	}
+	augment /protocols:protocols {
+		container ospfv3 {
+			presence "true";
+			configd:priority "640";
+			configd:help "Open Shortest Path First version 3 protocol (OSPFv3) parameters";
+			configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/configd_create.sh";
+			configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/configd_delete.sh";
+			container timers {
+				presence "true";
+				configd:help "OSPFv3 protocol configuration for timers";
+				container spf {
+					presence "true";
+					configd:help "OSPFv3 protocol configuration for SPF calculation";
+					container exp {
+						presence "true";
+						configd:help "OSPFv3 protocol configuration for exp backoff delays";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/timers/spf/exp/configd_end.sh";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/timers/spf/exp/configd_validate1.cli";
+						leaf max {
+							type uint32 {
+								range 0..2147483647;
+							}
+							configd:help "Maximum delay between receiving change to SPF calculation";
+							default "50000";
+						}
+						leaf min {
+							type uint32 {
+								range 0..2147483647;
+							}
+							configd:help "Minimum delay between receiving change to SPF calculation";
+							default "500";
+						}
+					}
+				}
+			}
+			list distribute-list {
+				configd:help "Access list to filter networks in routing updates";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern '[!-~]{1,64}' {
+							error-message "access-list name must be 64 characters or less";
+						}
+						pattern '[^-].*' {
+							error-message "access-list name cannot start with \"-\"";
+						}
+						pattern '[^\|;&$<>]*' {
+							error-message "access-list name cannot contain shell punctuation";
+						}
+					}
+					configd:help "Access list to filter networks in routing updates";
+				}
+				leaf-list export {
+					type enumeration {
+						enum "bgp";
+						enum "connected";
+						enum "kernel";
+						enum "rip";
+						enum "static";
+					}
+					ordered-by "user";
+					configd:help "Filter for outgoing routing updates [REQUIRED]";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distribute-list/export/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distribute-list/export/configd_delete.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distribute-list/export/configd_validate1.cli";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distribute-list/export/configd_validate2.cli";
+				}
+				leaf import {
+					type empty;
+					configd:help "Filter for incoming routing updates";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distribute-list/import/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distribute-list/import/configd_delete.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distribute-list/import/configd_validate1.cli";
+				}
+			}
+			leaf-list passive-interface {
+				type string;
+				ordered-by "user";
+				configd:priority "642";
+				configd:help "Suppress routing updates on an interface";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/ospfv3/passive-interface/configd_allowed.sh";
+				configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/passive-interface/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/passive-interface/configd_delete.sh";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/passive-interface/configd_validate.cli";
+			}
+			leaf-list passive-interface-exclude {
+				type string;
+				ordered-by "user";
+				configd:priority "643";
+				configd:help "Excludes OSPFv3 routing update suppression on an interface";
+				configd:allowed "/opt/vyatta/sbin/vyatta-interfaces.pl --show all --filter-out ^ers";
+				configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/passive-interface/exclude/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/passive-interface/exclude/configd_delete.sh";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/passive-interface/exclude/configd_validate.cli";
+			}
+			leaf default-metric {
+				type uint32 {
+					range 1..16777214;
+				}
+				configd:help "default-metric";
+				configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/default-metric/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/default-metric/configd_delete.sh";
+			}
+			list process {
+				configd:priority "641";
+				configd:help "OSPFv3 process-id";
+				configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/configd_delete.sh";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern '[0-9A-Za-z][-_0-9A-Za-z]*' {
+							error-message "name must be alphanumeric (hyphen/underscore may be used inside)";
+						}
+					}
+					configd:help "OSPFv3 process-id";
+				}
+				container timers {
+					presence "true";
+					configd:help "OSPFv3 protocol configuration for timers";
+					container spf {
+						presence "true";
+						configd:help "OSPFv3 protocol configuration for SPF calculation";
+						container exp {
+							presence "true";
+							configd:help "OSPFv3 protocol configuration for exp backoff delays";
+							configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/timers/spf/exp/configd_end.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/timers/spf/exp/configd_validate1.cli";
+							leaf max {
+								type uint32 {
+									range 0..2147483647;
+								}
+								configd:help "Maximum delay between receiving change to SPF calculation";
+								default "50000";
+							}
+							leaf min {
+								type uint32 {
+									range 0..2147483647;
+								}
+								configd:help "Minimum delay between receiving change to SPF calculation";
+								default "500";
+							}
+						}
+					}
+				}
+				list distribute-list {
+					key "tagnode";
+					configd:help "Access list to filter networks in routing updates";
+					leaf tagnode {
+						type string;
+						configd:help "Access list to filter networks in routing updates";
+					}
+					leaf-list export {
+						type enumeration {
+							enum "bgp";
+							enum "connected";
+							enum "kernel";
+							enum "rip";
+							enum "static";
+						}
+						ordered-by "user";
+						configd:help "Filter for outgoing routing updates [REQUIRED]";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distribute-list/export/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distribute-list/export/configd_delete.sh";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distribute-list/export/configd_validate1.cli";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distribute-list/export/configd_validate2.cli";
+					}
+					leaf import {
+						type empty;
+						configd:help "Filter for incoming routing updates";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distribute-list/import/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distribute-list/import/configd_delete.sh";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distribute-list/import/configd_validate1.cli";
+					}
+				}
+				leaf-list passive-interface {
+					type string;
+					ordered-by "user";
+					configd:priority "644";
+					configd:help "Suppress routing updates on an interface";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/passive-interface/configd_allowed.sh";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/passive-interface/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/passive-interface/configd_delete.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/passive-interface/configd_validate.cli";
+				}
+				leaf-list passive-interface-exclude {
+					type string;
+					ordered-by "user";
+					configd:priority "645";
+					configd:help "Excludes OSPFv3 routing update suppression on an interface";
+					configd:allowed "/opt/vyatta/sbin/vyatta-interfaces.pl --show all --filter-out ^ers";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/passive-interface/exclude/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/passive-interface/exclude/configd_delete.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/passive-interface/exclude/configd_validate.cli";
+				}
+				leaf default-metric {
+					type uint32 {
+						range 1..16777214;
+					}
+					configd:help "default-metric";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/default-metric/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/default-metric/configd_delete.sh";
+				}
+				container redistribute {
+					configd:help "Redistribute information from another routing protocol";
+					container bgp {
+						presence "true";
+						configd:help "Redistribute bgp routes";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/redistribute/configd_end.sh";
+						uses parameters_redistribute;
+					}
+					container kernel {
+						presence "true";
+						configd:help "Redistribute kernel routes";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/redistribute/configd_end.sh";
+						uses parameters_redistribute;
+					}
+					container rip {
+						presence "true";
+						configd:help "Redistribute RIPNG routes";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/redistribute/configd_end.sh";
+						uses parameters_redistribute;
+					}
+					container connected {
+						presence "true";
+						configd:help "Redistribute connected routes";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/redistribute/configd_end.sh";
+						uses parameters_redistribute;
+					}
+					container static {
+						presence "true";
+						configd:help "Redistribute static routes";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/redistribute/configd_end.sh";
+						uses parameters_redistribute;
+					}
+				}
+				container distance {
+					presence "true";
+					configd:help "Administrative distance";
+					leaf global {
+						type uint32 {
+							range 1..254;
+						}
+						configd:help "OSPF administrative distance";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distance/global/configd_update1.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distance/global/configd_delete1.cli";
+					}
+					container ospfv3 {
+						presence "true";
+						configd:help "OSPF administrative distance";
+						leaf external {
+							type uint32 {
+								range 1..254;
+							}
+							configd:help "Distance for external routes";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distance/ospfv3/external/configd_update1.cli";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distance/ospfv3/external/configd_delete1.cli";
+						}
+						leaf inter-area {
+							type uint32 {
+								range 1..254;
+							}
+							configd:help "Distance for inter-area routes";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distance/ospfv3/inter-area/configd_update1.cli";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distance/ospfv3/inter-area/configd_delete1.cli";
+						}
+						leaf intra-area {
+							type uint32 {
+								range 1..254;
+							}
+							configd:help "Distance for intra-area routes";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distance/ospfv3/intra-area/configd_update1.cli";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/distance/ospfv3/intra-area/configd_delete1.cli";
+						}
+					}
+				}
+				leaf abr-type {
+					type enumeration {
+						enum "cisco";
+						enum "ibm";
+						enum "standard";
+					}
+					configd:help "Area Border Router type";
+					configd:begin "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/abr-type/configd_begin.sh";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/abr-type/configd_end.sh";
+				}
+				list summary-address {
+					configd:help "OSPFv3 Summary address";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/summary-address/configd_create.cli";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/summary-address/configd_validate.cli";
+					key "tagnode";
+					leaf tagnode {
+						type types:ipv6-prefix;
+						configd:help "OSPFv3 Summary address";
+					}
+					uses parameters_summary_address {
+						refine advertise {
+							configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/summary-address/advertise/configd_create.cli";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/summary-address/advertise/configd_delete.cli";
+						}
+						refine advertise/tag {
+							configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/summary-address/advertise/tag/configd_create.cli";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/summary-address/advertise/tag/configd_delete.cli";
+						}
+						refine not-advertise {
+							configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/summary-address/not-advertise/configd_create.cli";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/summary-address/not-advertise/configd_delete.cli";
+						}
+					}
+				}
+				container default-information {
+					presence "true";
+					configd:help "Control distribution of default information";
+					uses param-default-info-originate;
+				}
+				container address-family {
+					presence "true";
+					configd:help "OSPFv3 address-family parameters";
+					container ipv4 {
+						presence "true";
+						configd:help "IPv4 address family";
+						container unicast {
+							presence "true";
+							configd:help "OSPFv3 IPv4-unicast address-family settings";
+							configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/configd_create1.cli";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/configd_delete1.cli";
+							container redistribute {
+								presence "true";
+								configd:help "Redistribute information from another routing protocol";
+								container bgp {
+									presence "true";
+									configd:help "Redistribute bgp routes";
+									configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/redistribute/configd_end.sh";
+									uses parameters_redistribute;
+								}
+								container kernel {
+									presence "true";
+									configd:help "Redistribute kernel routes";
+									configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/redistribute/configd_end.sh";
+									uses parameters_redistribute;
+								}
+								container rip {
+									presence "true";
+									configd:help "Redistribute RIPNG routes";
+									configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/redistribute/configd_end.sh";
+									uses parameters_redistribute;
+								}
+								container connected {
+									presence "true";
+									configd:help "Redistribute connected routes";
+									configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/redistribute/configd_end.sh";
+									uses parameters_redistribute;
+								}
+								container static {
+									presence "true";
+									configd:help "Redistribute static routes";
+									configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/redistribute/configd_end.sh";
+									uses parameters_redistribute;
+								}
+								container ospf {
+									presence "true";
+									configd:help "Redistribute OSPF routes";
+									configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/redistribute/configd_end.sh";
+									uses parameters_redistribute;
+								}
+							}
+							list summary-address {
+								configd:help "OSPFv3 Summary address for address family";
+								configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/summary-address/configd_create.cli";
+								configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/summary-address/configd_validate.cli";
+								key "tagnode";
+								leaf tagnode {
+									type types:ipv4-prefix;
+									configd:help "OSPFv3 Summary address for address family";
+								}
+								uses parameters_summary_address {
+									refine advertise {
+										configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/summary-address/advertise/configd_create.cli";
+										configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/summary-address/advertise/configd_delete.cli";
+									}
+									refine advertise/tag {
+										configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/summary-address/advertise/tag/configd_create.cli";
+										configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/summary-address/advertise/tag/configd_delete.cli";
+									}
+									refine not-advertise {
+										configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/summary-address/not-advertise/configd_create.cli";
+										configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/summary-address/not-advertise/configd_delete.cli";
+									}
+								}
+							}
+							container default-information {
+								presence "true";
+								configd:help "Control distribution of default information";
+								container originate {
+									presence "true";
+									configd:help "Distribute a default route";
+									configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/default-information/originate/configd_end.sh";
+									leaf metric-type {
+										type uint32 {
+											range 1..2;
+										}
+										configd:help "OSPFv3 metric type for address-family default routes";
+										default "2";
+									}
+									leaf always {
+										type empty;
+										configd:help "Always originate a default route even if ASBR does not have one in RIB";
+									}
+									leaf route-map {
+										type string;
+										configd:help "OSPFv3 route-map to control default routes";
+										configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/default-information/originate/route-map/configd_validate.cli";
+									}
+									leaf metric {
+										type uint32 {
+											range 0..16777214;
+										}
+										configd:help "OSPFv3 address-family default metric";
+									}
+								}
+							}
+							list area {
+								configd:help "OSPFv3 Area of address-family";
+								key "tagnode";
+								leaf tagnode {
+									type union {
+										type types:ipv4-address;
+										type uint32;
+									}
+									configd:help "OSPFv3 Area of address-family";
+								}
+								list range {
+									configd:help "Specify range (border routers only)";
+									configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/area/range/configd_end.sh";
+									key "tagnode";
+									leaf tagnode {
+										type types:ipv4-prefix {
+											configd:syntax "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/address-family/ipv4/unicast/area/range/configd_syntax1.cli";
+										}
+										configd:help "Specify range (border routers only)";
+									}
+									leaf advertise {
+										type empty;
+										configd:help "Advertise this range";
+									}
+									leaf not-advertise {
+										type empty;
+										configd:help "Do not advertise this range";
+									}
+								}
+							}
+						}
+					}
+				}
+				list area {
+					configd:help "OSPFv3 Area";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/configd_delete.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/configd_validate1.cli";
+					key "tagnode";
+					leaf tagnode {
+						type union {
+							type types:ipv4-address;
+							type uint32;
+						}
+						configd:help "OSPFv3 Area";
+					}
+					container stub {
+						presence "true";
+						configd:help "Stub area";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/stub/configd_create.sh";
+						uses area-default-cost;
+						leaf no-summary {
+							type empty;
+							configd:help "Do not inject inter-area routes into stub";
+							configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/stub/no-summary/configd_create.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/stub/no-summary/configd_delete.sh";
+						}
+					}
+					list virtual-link {
+						configd:help "OSPFv3 router ID";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/virtual-link/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/virtual-link/configd_delete.sh";
+						key "tagnode";
+						leaf tagnode {
+							type types:ipv4-address;
+							configd:help "OSPFv3 router ID";
+						}
+						leaf dead-interval {
+							type uint32 {
+								range 1..65535;
+							}
+							configd:help "Interval after which a neighbor is declared dead";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/virtual-link/dead-interval/configd_update1.cli";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/virtual-link/dead-interval/configd_delete1.cli";
+						}
+						leaf hello-interval {
+							type uint32 {
+								range 1..65535;
+							}
+							configd:help "Interval between hello packets";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/virtual-link/hello-interval/configd_update1.cli";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/virtual-link/hello-interval/configd_delete1.cli";
+						}
+						leaf retransmit-interval {
+							type uint32 {
+								range 1..65535;
+							}
+							configd:help "Interval between retransmitting lost link state advertisements";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/virtual-link/retransmit-interval/configd_update1.cli";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/virtual-link/retransmit-interval/configd_delete1.cli";
+						}
+						leaf transmit-delay {
+							type uint32 {
+								range 1..65535;
+							}
+							configd:help "Link state transmit delay";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/virtual-link/transmit-delay/configd_update1.cli";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/virtual-link/transmit-delay/configd_delete1.cli";
+						}
+					}
+					container nssa {
+						presence "true";
+						configd:help "Configure OSPFv3 area as nssa";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/configd_end.sh";
+						uses area-default-cost;
+						leaf stability-interval {
+							type uint32 {
+								range 0..2147483647;
+							}
+							configd:help "NSSA stability interval in seconds";
+							configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/stability-interval/configd_create.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/stability-interval/configd_delete.sh";
+						}
+						leaf translator-role {
+							type enumeration {
+								enum "candidate" {
+									configd:help "Candidate for translator";
+								}
+								enum "always" {
+									configd:help "Translate always";
+								}
+							}
+							configd:help "NSSA-ABR Translator role";
+							default "candidate";
+							configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/translator-role/configd_create.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/translator-role/configd_delete.sh";
+						}
+						leaf no-redistribution {
+							type empty;
+							configd:help "No redistribution into this NSSA area";
+							configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/no-redistribution/configd_end.sh";
+						}
+						container default-information-originate {
+							presence "true";
+							configd:help "Originate Type 7 default into NSSA area";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/default-information-originate/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/default-information-originate/configd_delete.sh";
+							leaf metric-type {
+								type uint32 {
+									range 1..2;
+								}
+								configd:help "OSPFv3 metric type for default routes";
+								configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/default-information-originate/metric-type/configd_create.sh";
+								configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/default-information-originate/metric-type/configd_delete.sh";
+							}
+							leaf metric {
+								type uint32 {
+									range 0..16777214;
+								}
+								configd:help "OSPFv3 default metric";
+								configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/default-information-originate/metric/configd_create.sh";
+								configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/default-information-originate/metric/configd_delete.sh";
+							}
+						}
+						leaf no-summary {
+							type empty;
+							configd:help "Do not send summary LSA into NSSA";
+							configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/nssa/no-summary/configd_end.sh";
+						}
+					}
+					list range {
+						configd:help "Area address range";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/range/configd_end.sh";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/range/configd_validate1.cli";
+						key "tagnode";
+						leaf tagnode {
+							type types:ipv6-prefix {
+								configd:syntax "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/area/range/configd_syntax1.cli";
+							}
+							configd:help "Area address range";
+						}
+						leaf advertise {
+							type empty;
+							configd:help "Advertise this range";
+						}
+						leaf not-advertise {
+							type empty;
+							configd:help "Do not advertise this range";
+						}
+					}
+				}
+				container auto-cost {
+					presence "true";
+					configd:help "Set reference bandwidth";
+					leaf reference-bandwidth {
+						type uint32 {
+							range 1..4294967;
+						}
+						configd:help "Reference bandwidth method to assign OSPF cost";
+						default "100";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/auto-cost/reference-bandwidth/configd_update1.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/auto-cost/reference-bandwidth/configd_delete1.cli";
+					}
+				}
+				leaf router-id {
+					type types:ipv4-address;
+					configd:help "Router identifier";
+					configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/router-id/configd_update.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/process/router-id/configd_delete.sh";
+				}
+			}
+			container redistribute {
+				presence "true";
+				configd:help "Redistribute information from another routing protocol";
+				container bgp {
+					presence "true";
+					configd:help "Redistribute bgp routes";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/redistribute/configd_end.sh";
+					uses parameters_redistribute;
+				}
+				container kernel {
+					presence "true";
+					configd:help "Redistribute kernel routes";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/redistribute/configd_end.sh";
+					uses parameters_redistribute;
+				}
+				container rip {
+					presence "true";
+					configd:help "Redistribute RIPNG routes";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/redistribute/configd_end.sh";
+					uses parameters_redistribute;
+				}
+				container connected {
+					presence "true";
+					configd:help "Redistribute connected routes";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/redistribute/configd_end.sh";
+					uses parameters_redistribute;
+				}
+				container static {
+					presence "true";
+					configd:help "Redistribute static routes";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/redistribute/configd_end.sh";
+					uses parameters_redistribute;
+				}
+			}
+			container distance {
+				presence "true";
+				configd:help "Administrative distance";
+				leaf global {
+					type uint32 {
+						range 1..254;
+					}
+					configd:help "OSPF administrative distance";
+					configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distance/global/configd_update1.cli";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distance/global/configd_delete1.cli";
+				}
+				container ospfv3 {
+					presence "true";
+					configd:help "OSPF administrative distance";
+					leaf external {
+						type uint32 {
+							range 1..254;
+						}
+						configd:help "Distance for external routes";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distance/ospfv3/external/configd_update1.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distance/ospfv3/external/configd_delete1.cli";
+					}
+					leaf inter-area {
+						type uint32 {
+							range 1..254;
+						}
+						configd:help "Distance for inter-area routes";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distance/ospfv3/inter-area/configd_update1.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distance/ospfv3/inter-area/configd_delete1.cli";
+					}
+					leaf intra-area {
+						type uint32 {
+							range 1..254;
+						}
+						configd:help "Distance for intra-area routes";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distance/ospfv3/intra-area/configd_update1.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/distance/ospfv3/intra-area/configd_delete1.cli";
+					}
+				}
+			}
+			list summary-address {
+				configd:help "OSPFv3 Summary address";
+				configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/summary-address/configd_create.cli";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/summary-address/configd_validate.cli";
+				key "tagnode";
+				leaf tagnode {
+					type types:ipv6-prefix;
+					configd:help "OSPFv3 Summary address";
+				}
+				uses parameters_summary_address {
+					refine advertise {
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/summary-address/advertise/configd_create.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/summary-address/advertise/configd_delete.cli";
+					}
+					refine advertise/tag {
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/summary-address/advertise/tag/configd_create.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/summary-address/advertise/tag/configd_delete.cli";
+					}
+					refine not-advertise {
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/summary-address/not-advertise/configd_create.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/summary-address/not-advertise/configd_delete.cli";
+					}
+				}
+			}
+			container default-information {
+				presence "true";
+				configd:help "Control distribution of default information";
+				uses param-default-info-originate;
+			}
+			list area {
+				configd:help "OSPFv3 Area";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/configd_validate1.cli";
+				key "tagnode";
+				leaf tagnode {
+					type union {
+						type types:ipv4-address;
+						type uint32;
+					}
+					configd:help "OSPFv3 Area";
+				}
+				container stub {
+					presence "true";
+					configd:help "Stub area";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/stub/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/stub/configd_delete.sh";
+					uses area-default-cost;
+					leaf no-summary {
+						type empty;
+						configd:help "Do not inject inter-area routes into stub";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/stub/no-summary/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/stub/no-summary/configd_delete.sh";
+					}
+				}
+				list virtual-link {
+					configd:help "OSPFv3 router ID";
+					configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/virtual-link/configd_update.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/virtual-link/configd_delete.sh";
+					key "tagnode";
+					leaf tagnode {
+						type types:ipv4-address;
+						configd:help "OSPFv3 router ID";
+					}
+					leaf dead-interval {
+						type uint32 {
+							range 1..65535;
+						}
+						configd:help "Interval after which a neighbor is declared dead";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/virtual-link/dead-interval/configd_update1.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/virtual-link/dead-interval/configd_delete1.cli";
+					}
+					leaf hello-interval {
+						type uint32 {
+							range 1..65535;
+						}
+						configd:help "Interval between hello packets";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/virtual-link/hello-interval/configd_update1.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/virtual-link/hello-interval/configd_delete1.cli";
+					}
+					leaf retransmit-interval {
+						type uint32 {
+							range 1..65535;
+						}
+						configd:help "Interval between retransmitting lost link state advertisements";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/virtual-link/retransmit-interval/configd_update1.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/virtual-link/retransmit-interval/configd_delete1.cli";
+					}
+					leaf transmit-delay {
+						type uint32 {
+							range 1..65535;
+						}
+						configd:help "Link state transmit delay";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/virtual-link/transmit-delay/configd_update1.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/virtual-link/transmit-delay/configd_delete1.cli";
+					}
+				}
+				container nssa {
+					presence "true";
+					configd:help "Configure OSPFv3 area as nssa";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/configd_end.sh";
+					uses area-default-cost;
+					leaf stability-interval {
+						type uint32 {
+							range 0..2147483647;
+						}
+						configd:help "NSSA stability interval in seconds";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/stability-interval/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/stability-interval/configd_delete.sh";
+					}
+					leaf translator-role {
+						type enumeration {
+							enum "candidate" {
+								configd:help "Candidate for translator";
+							}
+							enum "always" {
+								configd:help "Translate always";
+							}
+						}
+						configd:help "NSSA-ABR Translator role";
+						default "candidate";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/translator-role/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/translator-role/configd_delete.sh";
+					}
+					leaf no-redistribution {
+						type empty;
+						configd:help "No redistribution into this NSSA area";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/no-redistribution/configd_end.sh";
+					}
+					container default-information-originate {
+						presence "true";
+						configd:help "Originate Type 7 default into NSSA area";
+						configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/default-information-originate/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/default-information-originate/configd_delete.sh";
+						leaf metric-type {
+							type uint32 {
+								range 1..2;
+							}
+							configd:help "OSPFv3 metric type for default routes";
+							configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/default-information-originate/metric-type/configd_create.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/default-information-originate/metric-type/configd_delete.sh";
+						}
+						leaf metric {
+							type uint32 {
+								range 0..16777214;
+							}
+							configd:help "OSPFv3 default metric";
+							configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/default-information-originate/metric/configd_create.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/default-information-originate/metric/configd_delete.sh";
+						}
+					}
+					leaf no-summary {
+						type empty;
+						configd:help "Do not send summary LSA into NSSA";
+						configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/nssa/no-summary/configd_end.sh";
+					}
+				}
+				list range {
+					configd:help "Area address range";
+					configd:end "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/range/configd_end.sh";
+					key "tagnode";
+					leaf tagnode {
+						type types:ipv6-prefix {
+							configd:syntax "/opt/vyatta/share/tmplscripts/protocols/ospfv3/area/range/configd_syntax1.cli";
+						}
+						configd:help "Area address range";
+					}
+					leaf advertise {
+						type empty;
+						configd:help "Advertise this range";
+					}
+					leaf not-advertise {
+						type empty;
+						configd:help "Do not advertise this range";
+					}
+				}
+			}
+			container auto-cost {
+				presence "true";
+				configd:help "Set reference bandwidth";
+				leaf reference-bandwidth {
+					type uint32 {
+						range 1..4294967;
+					}
+					configd:help "Reference bandwidth method to assign OSPF cost";
+					default "100";
+					configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/auto-cost/reference-bandwidth/configd_update1.cli";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/auto-cost/reference-bandwidth/configd_delete1.cli";
+				}
+			}
+			leaf router-id {
+				type types:ipv4-address;
+				configd:help "Router identifier";
+				configd:update "/opt/vyatta/share/tmplscripts/protocols/ospfv3/router-id/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/router-id/configd_delete.sh";
+			}
+			container log {
+				configd:help "OSPFv3 logging parameters";
+				leaf all {
+					type empty;
+					configd:help "Enable all OSPFv3 logs";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(@)";
+				}
+				leaf retransmission {
+					type empty;
+					configd:help "Enable OSPFv3 retransmission logs";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(@)";
+				}
+				container rib {
+					configd:help "OSPFv3 rib logs";
+					leaf all {
+						type empty;
+						configd:help "Enable OSPFv3 rib all logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/rib/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf interface {
+						type empty;
+						configd:help "Enable OSPFv3 rib interface logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/rib/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf redistribute {
+						type empty;
+						configd:help "Enable OSPFv3 rib redistribute logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/rib/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+				}
+				container nsm {
+					configd:help "OSPFv3 nsm logs";
+					leaf all {
+						type empty;
+						configd:help "Enable OSPFv3 nsm all logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/nsm/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf interface {
+						type empty;
+						configd:help "Enable OSPFv3 nsm interface logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/nsm/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf redistribute {
+						type empty;
+						configd:help "Enable OSPFv3 nsm redistribute logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/nsm/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+				}
+				container events {
+					configd:help "OSPFv3 event logs";
+					leaf all {
+						type empty;
+						configd:help "Enable OSPFv3 events all logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/events/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf abr {
+						type empty;
+						configd:help "Enable OSPFv3 events abr logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/events/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf asbr {
+						type empty;
+						configd:help "Enable OSPFv3 events asbr logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/events/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf lsa {
+						type empty;
+						configd:help "Enable OSPFv3 events lsa logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/events/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf nssa {
+						type empty;
+						configd:help "Enable OSPFv3 events nssa logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/events/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf os {
+						type empty;
+						configd:help "Enable OSPFv3 events os logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/events/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf router {
+						type empty;
+						configd:help "Enable OSPFv3 events router logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/events/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf vlink {
+						type empty;
+						configd:help "Enable OSPFv3 events vlink logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/events/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+				}
+				container ifsm {
+					configd:help "OSPFv3 ifsm logs";
+					leaf all {
+						type empty;
+						configd:help "Enable OSPFv3 ifsm all logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/ifsm/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf events {
+						type empty;
+						configd:help "Enable OSPFv3 ifsm events logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/ifsm/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf status {
+						type empty;
+						configd:help "Enable OSPFv3 ifsm status logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/ifsm/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf timers {
+						type empty;
+						configd:help "Enable OSPFv3 ifsm timers logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/ifsm/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+				}
+				container lsa {
+					configd:help "OSPFv3 lsa logs";
+					leaf all {
+						type empty;
+						configd:help "Enable OSPFv3 lsa all logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/lsa/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf flooding {
+						type empty;
+						configd:help "Enable OSPFv3 lsa flooding logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/lsa/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf generate {
+						type empty;
+						configd:help "Enable OSPFv3 lsa generate logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/lsa/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf install {
+						type empty;
+						configd:help "Enable OSPFv3 lsa install logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/lsa/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf maxage {
+						type empty;
+						configd:help "Enable OSPFv3 lsa maxage logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/lsa/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf refresh {
+						type empty;
+						configd:help "Enable OSPFv3 lsa refresh logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/lsa/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+				}
+				container nfsm {
+					configd:help "OSPFv3 nfsm logs";
+					leaf all {
+						type empty;
+						configd:help "Enable OSPFv3 nfsm all logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/nfsm/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf events {
+						type empty;
+						configd:help "Enable OSPFv3 nfsm events logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/nfsm/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf status {
+						type empty;
+						configd:help "Enable OSPFv3 nfsm status logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/nfsm/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf timers {
+						type empty;
+						configd:help "Enable OSPFv3 nfsm timers logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/nfsm/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+				}
+				container route {
+					configd:help "OSPFv3 route logs";
+					leaf all {
+						type empty;
+						configd:help "Enable OSPFv3 route all logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/route/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf ase {
+						type empty;
+						configd:help "Enable OSPFv3 route ase logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/route/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf ia {
+						type empty;
+						configd:help "Enable OSPFv3 route ia logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/route/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf install {
+						type empty;
+						configd:help "Enable OSPFv3 route install logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/route/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf spf {
+						type empty;
+						configd:help "Enable OSPFv3 route spf logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/route/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+				}
+				container packet {
+					configd:help "OSPFv3 packet logs";
+					leaf all {
+						type empty;
+						configd:help "Enable OSPFv3 packet all logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf dd {
+						type empty;
+						configd:help "Enable OSPFv3 packet dd logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf detail {
+						type empty;
+						configd:help "Enable OSPFv3 packet detail logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf hello {
+						type empty;
+						configd:help "Enable OSPFv3 packet hello logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf ls-ack {
+						type empty;
+						configd:help "Enable OSPFv3 packet ls-ack logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf ls-request {
+						type empty;
+						configd:help "Enable OSPFv3 packet ls-request logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf ls-update {
+						type empty;
+						configd:help "Enable OSPFv3 packet ls-update logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf send {
+						type empty;
+						configd:help "Enable OSPFv3 packet send logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf recv {
+						type empty;
+						configd:help "Enable OSPFv3 packet recv logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/ospfv3/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+				}
+			}
+		}
+	}
+	grouping itf-ipv6-ospfv3 {
+		container ospfv3 {
+			configd:priority "948";
+			configd:help "Set OSPFv3 instance parameters";
+			leaf link-lsa-suppression {
+				type string {
+					configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/link-lsa-suppression/configd_syntax1.cli";
+				}
+				configd:help "Enable link-lsa-suppression for this instance-id";
+				configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/link-lsa-suppression/configd_allowed.sh";
+				configd:create "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/link-lsa-suppression/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/link-lsa-suppression/configd_delete.sh";
+			}
+			leaf priority {
+				type uint32 {
+					range 0..255;
+				}
+				configd:help "Router priority (default 1)";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/priority/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/priority/configd_delete.sh";
+			}
+			list process {
+				configd:help "IPv6 Open Shortest Path First (OSPFv3) Process ID";
+				configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/configd_allowed.sh";
+				key "tagnode";
+				leaf tagnode {
+					type string;
+					configd:help "IPv6 Open Shortest Path First (OSPFv3) Process ID";
+					configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/configd_allowed.sh";
+				}
+				list instance-id {
+					max-elements "1";
+					configd:help "Instance-id";
+					key "tagnode";
+					leaf tagnode {
+						type uint32 {
+							range 0..255;
+						}
+						configd:help "Instance-id";
+					}
+					leaf link-lsa-suppression {
+						type string {
+							configd:syntax "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/link-lsa-suppression/configd_syntax1.cli";
+						}
+						configd:help "Enable link-lsa-suppression for this instance-id";
+						configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/link-lsa-suppression/configd_allowed.sh";
+						configd:create "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/link-lsa-suppression/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/link-lsa-suppression/configd_delete.sh";
+					}
+					leaf priority {
+						type uint32 {
+							range 0..255;
+						}
+						configd:help "Router priority (default 1)";
+						configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/priority/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/priority/configd_delete.sh";
+					}
+					list neighbor {
+						configd:help "Configure ipv6 address for neighbor parameters";
+						configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/neighbor/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/neighbor/configd_delete.sh";
+						key "tagnode";
+						leaf tagnode {
+							type types:ipv6-address;
+							configd:help "Configure ipv6 address for neighbor parameters";
+						}
+					}
+					leaf dead-interval {
+						type uint32 {
+							range 1..65535;
+						}
+						configd:help "Interval after which neighbor is declared dead (default 40)";
+						configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/dead-interval/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/dead-interval/configd_delete.sh";
+					}
+					leaf hello-interval {
+						type uint32 {
+							range 1..65535;
+						}
+						configd:help "Interval between hello packets (default 10)";
+						configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/hello-interval/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/hello-interval/configd_delete.sh";
+					}
+					leaf retransmit-interval {
+						type uint32 {
+							range 3..65535;
+						}
+						configd:help "Interval between retransmitting lost link state advertisements (default 5)";
+						configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/retransmit-interval/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/retransmit-interval/configd_delete.sh";
+					}
+					leaf area {
+						type union {
+							type types:ipv4-address;
+							type uint32;
+						}
+						configd:help "OSPFv3 area";
+						configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/area/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/area/configd_delete.sh";
+					}
+					leaf cost {
+						type uint32 {
+							range 1..65535;
+						}
+						configd:help "Interface cost";
+						configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/cost/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/cost/configd_delete.sh";
+					}
+					list network {
+						max-elements "1";
+						configd:help "Network type";
+						configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/network/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/network/configd_delete.sh";
+						key "tagnode";
+						leaf tagnode {
+							type enumeration {
+								enum "broadcast" {
+									configd:help "Broadcast network type";
+								}
+								enum "non-broadcast" {
+									configd:help "Non-broadcast network type";
+								}
+								enum "point-to-point" {
+									configd:help "Point-to-point network type";
+								}
+								enum "point-to-multipoint" {
+									configd:help "Point-to-multipoint network type";
+								}
+							}
+							configd:help "Network type";
+						}
+					}
+					leaf transmit-delay {
+						type uint32 {
+							range 1..65535;
+						}
+						configd:help "Link state transmit delay (default 1)";
+						configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/transmit-delay/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/transmit-delay/configd_delete.sh";
+					}
+					leaf mtu-ignore {
+						type empty;
+						configd:help "Disable Maximum Transmission Unit mismatch detection";
+						configd:create "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/mtu-ignore/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/process/instance-id/mtu-ignore/configd_delete.sh";
+					}
+				}
+			}
+			list neighbor {
+				configd:help "Configure ipv6 address for neighbor parameters";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/neighbor/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/neighbor/configd_delete.sh";
+				key "tagnode";
+				leaf tagnode {
+					type types:ipv6-address;
+					configd:help "Configure ipv6 address for neighbor parameters";
+				}
+			}
+			leaf mtu-ignore {
+				type empty;
+				configd:help "Disable Maximum Transmission Unit mismatch detection";
+				configd:create "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/mtu-ignore/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/mtu-ignore/configd_delete.sh";
+			}
+			leaf dead-interval {
+				type uint32 {
+					range 1..65535;
+				}
+				configd:help "Interval after which neighbor is declared dead (default 40)";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/dead-interval/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/dead-interval/configd_delete.sh";
+			}
+			leaf hello-interval {
+				type uint32 {
+					range 1..65535;
+				}
+				configd:help "Interval between hello packets (default 10)";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/hello-interval/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/hello-interval/configd_delete.sh";
+			}
+			leaf retransmit-interval {
+				type uint32 {
+					range 3..65535;
+				}
+				configd:help "Interval between retransmitting lost link state advertisements (default 5)";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/retransmit-interval/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/retransmit-interval/configd_delete.sh";
+			}
+			leaf area {
+				type union {
+					type types:ipv4-address;
+					type uint32;
+				}
+				configd:help "OSPFv3 area";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/area/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/area/configd_delete.sh";
+			}
+			leaf cost {
+				type uint32 {
+					range 1..65535;
+				}
+				configd:help "Interface cost";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/cost/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/cost/configd_delete.sh";
+			}
+			list network {
+				max-elements "1";
+				configd:help "Network type";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/network/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/network/configd_delete.sh";
+				key "tagnode";
+				leaf tagnode {
+					type enumeration {
+						enum "broadcast" {
+							configd:help "Broadcast network type";
+						}
+						enum "non-broadcast" {
+							configd:help "Non-broadcast network type";
+						}
+						enum "point-to-point" {
+							configd:help "Point-to-point network type";
+						}
+						enum "point-to-multipoint" {
+							configd:help "Point-to-multipoint network type";
+						}
+					}
+					configd:help "Network type";
+				}
+			}
+			leaf transmit-delay {
+				type uint32 {
+					range 1..65535;
+				}
+				configd:help "Link state transmit delay (default 1)";
+				configd:update "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/transmit-delay/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/ospfv3/transmit-delay/configd_delete.sh";
+			}
+		}
+	}
+	augment /if:interfaces/interfaces-bridge:bridge/interfaces-bridge:ipv6 {
+		uses itf-ipv6-ospfv3;
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:ipv6 {
+		uses itf-ipv6-ospfv3;
+	}
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif/interfaces-dataplane:ipv6 {
+		uses itf-ipv6-ospfv3;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:ipv6 {
+		uses itf-ipv6-ospfv3;
+	}
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:vif/interfaces-l2tpeth:ipv6 {
+		uses itf-ipv6-ospfv3;
+	}
+	augment /if:interfaces/interfaces-loopback:loopback/interfaces-loopback:ipv6 {
+		uses itf-ipv6-ospfv3;
+	}
+	augment /if:interfaces/interfaces-openvpn:openvpn/interfaces-openvpn:ipv6 {
+		uses itf-ipv6-ospfv3;
+	}
+	augment /if:interfaces/interfaces-tunnel:tunnel/interfaces-tunnel:ipv6 {
+		uses itf-ipv6-ospfv3;
+	}
+	augment /if:interfaces/interfaces-vti:vti/interfaces-vti:ipv6 {
+		uses itf-ipv6-ospfv3;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:ipv6 {
+		uses itf-ipv6-ospfv3;
+	}
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif/interfaces-bonding:ipv6 {
+		uses itf-ipv6-ospfv3;
+	}
+}

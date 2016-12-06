@@ -1,0 +1,57 @@
+module vyatta-interfaces-policy-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-interfaces-policy:1";
+	prefix vyatta-interfaces-policy-v1;
+
+	import vyatta-policy-v1 {
+		prefix policy;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+	import vyatta-interfaces-l2tpeth-v1 {
+		prefix interfaces-l2tpeth;
+	}
+	import vyatta-interfaces-bonding-v1 {
+		prefix interfaces-bonding;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		 	 San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-10-05 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane {
+		uses policy:policy-binding;
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane/interfaces-dataplane:vif {
+		uses policy:policy-binding;
+	}
+
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth {
+		uses policy:policy-binding;
+	}
+
+	augment /if:interfaces/interfaces-l2tpeth:l2tpeth/interfaces-l2tpeth:vif {
+		uses policy:policy-binding;
+	}
+
+	augment /if:interfaces/interfaces-bonding:bonding {
+		uses policy:policy-binding;
+	}
+
+	augment /if:interfaces/interfaces-bonding:bonding/interfaces-bonding:vif {
+		uses policy:policy-binding;
+	}
+
+}

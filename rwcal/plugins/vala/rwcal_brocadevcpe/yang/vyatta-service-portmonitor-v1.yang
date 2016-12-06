@@ -1,0 +1,156 @@
+module vyatta-service-portmonitor-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-portmonitor:1";
+	prefix vyatta-service-portmonitor-v1;
+
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	typedef direction {
+		description "Policy to receive and/or transmit packets";
+		type enumeration {
+			enum "both" {
+				configd:help "Direction for receiving and transmitting packets";
+			}
+			enum "rx" {
+				configd:help "Direction for only receiving packets";
+			}
+			enum "tx" {
+				configd:help "Direction for only transmitting packets";
+			}
+		}
+	}
+
+	typedef session-type {
+		description "Type of portmonitor session";
+		type enumeration {
+			enum "span" {
+				configd:help "Session type SPAN";
+			}
+			enum "rspan-source" {
+				configd:help "Session type RSPAN source";
+			}
+			enum "rspan-destination" {
+				configd:help "Session type RSPAN destination";
+			}
+			enum "erspan-source" {
+				configd:help "Session type ERSPAN source";
+			}
+			enum "erspan-destination" {
+				configd:help "Session type ERSPAN destination";
+			}
+		}
+	}
+
+	typedef header-type {
+		description "Header type of portmonitor session of type erspan";
+		type enumeration {
+			enum "type-II" {
+				configd:help "ERSPAN header Type-II";
+			}
+			enum "type-III" {
+				configd:help "ERSPAN header Type-III";
+			}
+		}
+	}
+
+	augment /service:service {
+		container portmonitor {
+			presence "enable portmonitor";
+			configd:help "Portmonitor configuration";
+			configd:validate "vplane-portmonitor-validate.pl";
+			configd:end "vyatta-portmonitor.pl --action=update";
+			configd:priority "810";
+			description "Portmonitor configuration container";
+			list session {
+				configd:help "Portmonitor session configuration";
+				description "Portmonitor session configuration";
+				max-elements "8";
+				key "list-key";
+				leaf list-key {
+					type uint8 {
+						range 1..31;
+					}
+					configd:help "Portmonitor session identifier";
+					description "Portmonitor session identifier";
+				}
+				leaf type {
+					type session-type;
+					mandatory true;
+					configd:help "Type for portmonitoring";
+					description "Portmonitor session type";
+				}
+				leaf description {
+					type string {
+						length "1..256";
+					}
+					configd:help "Session Description";
+					description "Portmonitor session description";
+				}
+				leaf disable {
+					type empty;
+					configd:help "Disable portmonitor session";
+					description "Disable portmonitor session";
+				}
+				list source {
+					description "Portmonitor source interface configuration";
+					configd:help "Source interface for portmonitoring";
+					configd:allowed "vyatta-portmonitor.pl --action=show_allowed_intf";
+					key "interface";
+					leaf interface {
+						type string;
+						description "Source interface name";
+						configd:help "Source interface name";
+						configd:allowed "vyatta-portmonitor.pl --action=show_allowed_intf";
+					}
+					leaf direction {
+						type direction;
+						description "Source interface direction for packets";
+						default "both";
+						configd:help "Policy for interface whether to receive and/or transmit packets";
+					}
+				}
+				leaf-list destination {
+					type string;
+					ordered-by "system";
+					max-elements "1";
+					description "Portmonitor destination interface configuration";
+					configd:help "Destination interface for portmonitoring";
+					configd:allowed "vyatta-portmonitor.pl --action=show_allowed_intf";
+				}
+				container erspan {
+					configd:help "Properties for session type erspan";
+					description "Properties for session type erspan";
+					leaf identifier {
+						type uint16 {
+							range 1..1023;
+						}
+						description "erspan identifier";
+						configd:help "erspan identifier";
+					}
+					leaf header {
+						type header-type;
+						description "erspan header type";
+						default "type-II";
+						configd:help "erspan header type";
+					}
+				}
+			}
+		}
+	}
+}

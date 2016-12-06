@@ -1,0 +1,63 @@
+module vyatta-system-mgmt-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-system-mgmt:1";
+	prefix vyatta-system-mgmt-v1;
+
+	import vyatta-system-v1 {
+		prefix system;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-12-04 {
+		description "Convert comp_help extension to description.";
+	}
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /system:system {
+		container config-management {
+			presence "true";
+			configd:help "Configuration management settings";
+			container commit-archive {
+				presence "true";
+				configd:priority "400";
+				configd:help "Commit archival settings";
+				configd:end "/opt/vyatta/share/tmplscripts/system/config-management/commit-archive/configd_end.sh";
+				leaf-list location {
+					description "Location of commit archive
+
+						     URLs supported are:
+						      - scp://<user>:<passwd>@<host>/<dir>
+						      - ftp://<user>:<passwd>@<host>/<dir>
+						      - tftp://<host>/<dir>";
+					type string {
+						configd:syntax "/opt/vyatta/share/tmplscripts/system/config-management/commit-archive/location/configd_syntax1.cli";
+					}
+					ordered-by "user";
+					configd:help "Commit archive location";
+				}
+			}
+			leaf commit-revisions {
+				type uint32 {
+					range 0..65535 {
+						error-message "Commit revisions must be in range 0 to 65535";
+					}
+				}
+				configd:priority "400";
+				configd:help "Commit revisions";
+				configd:update "/opt/vyatta/share/tmplscripts/system/config-management/commit-revisions/configd_update.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/system/config-management/commit-revisions/configd_delete.sh";
+			}
+		}
+	}
+}

@@ -1,0 +1,343 @@
+module vyatta-service-probe-v1 {
+    namespace "urn:vyatta.com:mgmt:vyatta-service-probe:1";
+    prefix vyatta-service-probe-v1;
+
+    import configd-v1 {
+        prefix configd;
+    }
+    import vyatta-services-v1 {
+        prefix service;
+    }
+    import vyatta-types-v1 {
+        prefix types;
+    }
+
+    organization "Brocade Communications Systems, Inc.";
+    contact
+        "Brocade Communications Systems, Inc.
+        Postal: 130 Holger Way
+            San Jose, CA 95134
+        E-mail: support@Brocade.com
+        Web: www.brocade.com";
+
+    revision 2015-09-28 {
+        description "Initial revision";
+    }
+
+    grouping http-probe-options {
+        leaf port {
+            description "The port of the server";
+            configd:help "Server port";
+            type types:port;
+        }
+        leaf path {
+            description "The document path on the server";
+            configd:help "Server document path";
+            type string {
+                length 1..256;
+            }
+            default "/";
+        }
+        leaf status-code {
+            description "The status code that is expected for the probe to succeed";
+            configd:help "Expected HTTP status code";
+            type uint16 {
+                range 100..505;
+            }
+            default 200;
+        }
+    }
+
+    typedef probe-name {
+        description "The probe name";
+        type types:alpha-numeric {
+            configd:help "Probe name";
+            length 1..50;
+        }
+    }
+
+    typedef oid {
+		/*
+		 * According to RFC 3416 Section 4.1 there is a stricter
+		 * definition, for SNMP, which limits an OID to up to 128
+		 * sub-identifiers. Each sub-identifier may have a maximum
+		 * value of 4294967295";
+		 */
+		type string {
+			pattern '[0-9]{1,10}(\.[0-9]{1,10})*' {
+				error-message "OID must start from a number and consist of dot separated numbers";
+			}
+			configd:pattern-help "<oid>";
+			configd:help "Object Identifier (OID)";
+		}
+	}
+
+    grouping snmp-v1-v2-probe-options {
+        leaf community {
+            description "The SNMP community";
+            configd:help "SNMP community";
+            type string {
+                length 1..256;
+            }
+            default "public";
+        }
+    }
+
+    augment /service:service {
+        container probes {
+            description "Probes service
+
+                Configure probes which are sent at intervals. When there
+                is a consecutive number of probe failures actions are taken";
+            configd:end "vyatta-service-probe-configure.py";
+            configd:validate "vyatta-service-probe-validate.py";
+            configd:help "Perform actions on failed probe events";
+
+            container status {
+                description "The status of all probes that have been configured";
+                config false;
+                configd:get-state "vyatta-service-probe-status.py";
+                
+                list probe {
+                    description "The list of probe status information";
+                    key "name";
+                    leaf name {
+                        description "The probe name";
+                        type probe-name;
+                    }
+
+                    leaf state {
+                        description "The current state of the probe";
+                        type enumeration {
+                            enum "Not running";
+                            enum Running;
+                            enum Paused;
+                            enum Stopping;
+                            enum Stopped;
+                            enum Fatal;
+                        }
+                    }
+                    
+                    leaf current-failures {
+                        description "The current number of consecutive probe failures";
+                        type uint64;
+                    }
+                    
+                    leaf total-failures {
+                        description "The total number of probe failures";
+                        type uint64;
+                    }
+                    
+                    leaf next-probe {
+                        description "When the next probe will occur";
+                        type string;
+                    }
+                    
+                    leaf last-failure {
+                        description "When the most recent failure occurred";
+                        type string;
+                    }
+                    
+                    leaf last-action {
+                        description "When the most recent action took place";
+                        type string;
+                    }
+                    
+                    leaf last-probe-message {
+                        description "The output from the most recent probe";
+                        type string;
+                    }
+                }
+            }
+
+            leaf debug {
+                description "Enables debug logging for the probe service";
+                configd:help "Enable verbose probe logging";
+                type empty;
+            }
+
+            list probe {
+                description "The list of configured probes";
+                configd:help "Perform actions on failed probe events";
+
+                must "type" {
+                    error-message "Probe type must be specified";
+                }
+                must "count(action) > 0" {
+                    error-message "At least one action must be specified";
+                }
+
+                key "name";
+                leaf name {
+                    description "The probe name";
+                    type probe-name;
+                }
+                
+                container action {
+                    description "The actions to perform on probe failure";
+                    configd:help "Actions to perform on probe failure";
+                }
+                
+                leaf interval {
+                    description "The interval between probe attempts, in seconds";
+                    configd:help "Interval between probe attempts (seconds)";
+                    type uint8 {
+                        range 1..120;
+                    }
+                    default 10;
+                    units "seconds";
+                }
+                 
+                leaf retries {
+                    description "The consecutive probe failure threshold
+
+                        When the number of consecutive failures reaches this
+                        number the defined actions will be performed";
+                    configd:help "Number of consecutive probe failures before acting";
+                    type uint8 {
+                        range 1..20;
+                    }
+                    default 3;
+                }
+     
+                container type {
+                    description "The probe type";
+                    configd:help "Probe type that must succeed to prevent action";
+                    container network {
+                        description "Probe that probes over a network";
+                        configd:help "Network status probes";
+                        presence "Network probe configured";
+
+                        must "http or https or ping or snmp" {
+                            /*
+                             * Although this constraint actually enforces at least
+                             * one, rather than exactly one, it is more helpful for
+                             * the user to display the latter since that is what we
+                             * expect.
+                             */
+                            error-message "Exactly one of http, https, ping or snmp must be configured";
+                        }
+
+                        leaf target {
+                            description "The target IP address of the probe";
+                            type types:ip-address;
+                            configd:help "IP address of probe target";
+                            mandatory true;
+                        }
+     
+                        container snmp {
+                            presence "SNMP probe configured";
+                            description "SNMP probe type
+
+                                Probes for an expected value at a particular
+                                OID. The probe only succeeds if that value
+                                can be retrieved.";
+                            configd:help "SNMP MIB value probe";
+
+                            must "not(../http) and not(../https) and not(../ping)" {
+                                error-message "snmp cannot be configured with another type";
+                            }
+                            must "v1 or v2" {
+                                error-message "One of v1 or v2 must be configured";
+                            }
+
+                            leaf oid {
+                                description "The Object Identifier (OID) to probe";
+                                configd:help "OID to check";
+                                type oid;
+                                mandatory true;
+                            }
+                            leaf value {
+                                description "The expected value at the OID, any other value will cause a failure";
+                                configd:help "Expected value at the OID";
+                                type string {
+                                    length 1..512;
+                                }
+                                mandatory true;
+                            }
+                            container v1 {
+                                presence "Probe using SNMP v1";
+                                description "Probe using SNMP version 1";
+                                configd:help "Use SNMP version 1";
+                                must "not(../v2)" {
+                                    error-message "Only one SNMP version may be configured";
+                                }
+                                uses snmp-v1-v2-probe-options;
+                            }
+                            container v2 {
+                                presence "Probe using SNMP v2";
+                                description "Probe using SNMP version 2";
+                                configd:help "Use SNMP version 2";
+                                must "not(../v1)" {
+                                    error-message "Only one SNMP version may be configured";
+                                }
+                                uses snmp-v1-v2-probe-options;
+                            }
+                        }
+                        container http {
+                            presence "HTTP probe configured";
+                            description "HTTP probe type
+
+                                Probes for a particular status code from
+                                a GET request to a particular path on the 
+                                server. The probe fails unless we receive
+                                the configured status code";
+                            configd:help "HTTP request probe";
+                            must "not(../snmp) and not(../https) and not(../ping)" {
+                                error-message "http cannot be configured with another type";
+                            }
+                            uses http-probe-options {
+                                refine port {
+                                    configd:help "HTTP server port";
+                                    default 80;
+                                }
+                            }
+                        }
+                        container https {
+                            presence "HTTPS probe configured";
+                            description "HTTPS probe type
+
+                                Probes for a particular status code from
+                                a GET request to a particular path on the 
+                                server. The probe fails unless we receive
+                                the configured status code";
+                            configd:help "HTTPS request probe";
+                            must "not(../http) and not(../snmp) and not(../ping)" {
+                                error-message "https cannot be configured with another type";
+                            }
+                            uses http-probe-options {
+                                refine port {
+                                    configd:help "HTTPS server port";
+                                    default 443;
+                                }
+                            }
+                            leaf certificate-validation {
+                                description "Toggles the enforcement of certificate validation
+
+                                    If true, an invalid certificate will cause a 
+                                    probe failure. If false, invalid (eg. self signed)
+                                    certificates will be accepted.
+
+                                    Defaults to true";
+                                configd:help "Enforce certificate validation";
+                                type boolean;
+                                default true;
+                            }
+                        }
+                        leaf ping {
+                            description "ICMP echo probe type
+
+                                Sends ICMP echo request packets. The probe
+                                fails unless an echo reply is received";
+                            configd:help "ICMP echo probe";
+                            must "not(../http) and not(../https) and not(../snmp)" {
+                                error-message "ping cannot be configured with another type";
+                            }
+                            type empty;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,61 @@
+module vyatta-service-https-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-https:1";
+	prefix vyatta-service-https-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /service:service {
+		container https {
+			presence "true";
+			configd:priority "913";
+			configd:help "Enable/disable the Web server";
+			configd:update "/opt/vyatta/share/tmplscripts/service/https/configd_update.sh";
+			configd:end "/opt/vyatta/share/tmplscripts/service/https/configd_end.sh";
+			configd:validate "/opt/vyatta/share/tmplscripts/service/https/configd_validate1.cli";
+			leaf service-users {
+				type empty;
+				configd:help "Enable service-user webportal";
+			}
+			leaf http-redirect {
+				type enumeration {
+					enum "enable" {
+						configd:help "Enable HTTP redirection";
+					}
+					enum "disable" {
+						configd:help "Disable HTTP redirection ";
+					}
+				}
+				configd:help "Control HTTP redirection";
+				default "enable";
+			}
+			leaf-list listen-address {
+				type union {
+					type types:ipv4-address;
+					type types:ipv6-address;
+				}
+				ordered-by "user";
+				configd:help "Specify listen address";
+			}
+		}
+	}
+}

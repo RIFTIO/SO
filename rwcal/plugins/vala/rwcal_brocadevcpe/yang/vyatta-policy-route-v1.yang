@@ -1,0 +1,1166 @@
+module vyatta-policy-route-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-policy-route:1";
+	prefix vyatta-policy-route-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-policy-v1 {
+		prefix policy;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-12-04 {
+		description "Convert comp_help extension to description.";
+	}
+	revision 2015-08-06 {
+		description "Initial revision of version 1";
+	}
+
+	typedef metric-val {
+		type union {
+			type string {
+				configd:syntax "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/metric/configd_syntax1.cli";
+				configd:help "[+/-] Add or subtract metric value";
+			}
+			type uint32 {
+				range 0..4294967295;
+				configd:help "Metric value";
+			}
+		}
+	}
+
+	typedef community-list {
+		type union {
+			type uint32 {
+				range 1..199 {
+					error-message "Community-list must be in range 1 to 199 ";
+				}
+				configd:help "BGP community list number";
+			}
+			type string {
+				configd:help "BGP community list Name";
+			}
+		}
+	}
+
+	typedef community-list-std {
+		type union {
+			type uint32 {
+				range 1..99 {
+					error-message "Community-list(standard) must be in range 1 to 99 ";
+				}
+				configd:help "BGP community list (standard) number";
+			}
+			type string {
+				configd:help "BGP community list (standard) Name";
+				configd:syntax "/opt/vyatta/share/tmplscripts/policy/route/community-list/standard/configd_syntax.sh";
+			}
+		}
+	}	
+
+	typedef community-list-exp {
+		type union {
+			type uint32 {
+				range 100..199 {
+					error-message "Community-list(expanded) must be in range 100 to 199 ";
+				}
+				configd:help "BGP community list (expanded) number";
+			}
+			type string {
+				configd:help "BGP community list (expanded) Name";
+				configd:syntax "/opt/vyatta/share/tmplscripts/policy/route/community-list/expanded/configd_syntax.sh";
+			}
+		}
+	}
+
+	typedef extcommunity-list {
+		type union {
+			type uint32 {
+				range 1..199 {
+					error-message "Extended community-list must be in range 1 to 199 ";
+				}
+				configd:help "BGP Extended community list number";
+			}
+			type string {
+				configd:help "BGP Extended community list Name";
+			}
+		}
+	}
+
+	typedef extcommunity-list-std {
+		type union {
+			type uint32 {
+				range 1..99 {
+					error-message "Extended community-list(standard) must be in range 1 to 99 ";
+				}
+				configd:help "BGP Extended community list (standard) number";
+			}
+			type string {
+				configd:help "BGP Extended community list (standard) Name";
+				configd:syntax "/opt/vyatta/share/tmplscripts/policy/route/extcommunity-list/standard/configd_syntax.sh";
+			}
+		}
+	}
+
+	typedef extcommunity-list-exp {
+		type union {
+			type uint32 {
+				range 100..199 {
+					error-message "Extended community-list(expanded) must be in range 100 to 199 ";
+				}
+				configd:help "BGP Extended community list (expanded) number";
+			}
+			type string {
+				configd:help "BGP Extended community list (expanded) Name";
+				configd:syntax "/opt/vyatta/share/tmplscripts/policy/route/extcommunity-list/expanded/configd_syntax.sh";
+			}
+		}
+	}
+
+	typedef rmap-community {
+		description
+			"AA:NN         Community Number
+			 internet      Internet
+			 local-as      Do not send outside local AS
+			 no-advertise  Do not advertise to any peer
+			 no-export     Do not export to next AS
+			 none          No community attribute";
+		type string {
+			configd:pattern-help "<AA:NN>";
+			configd:help "Community Number in AA:NN format";
+		}
+	}
+
+	typedef community {
+		description
+			"AA:NN         Community Number
+			 internet      Internet
+			 local-as      Do not send outside local AS
+			 no-advertise  Do not advertise to any peer
+			 no-export     Do not export to next AS";
+		type string {
+			configd:pattern-help "<AA:NN>";
+			configd:help "Community Number in AA:NN format";
+		}
+	}
+
+	grouping community-list-common {
+		leaf description {
+			type string;
+			configd:help "Description for this rule";
+		}
+		leaf action {
+			type enumeration {
+				enum "permit" {
+					configd:help "Permit matching communities";
+				}
+				enum "deny" {
+					configd:help "Deny matching communities";
+				}
+			}
+			configd:help "Action to take on communities matching this rule [REQUIRED]";
+		}
+	}
+
+	grouping community-list-rules-std {
+		leaf description {
+			type string;
+			configd:help "Description for this community list(standard)";
+		}
+
+		list rule {
+			configd:help "create a rule for this BGP community list(standard)";
+			key "tagnode";
+			leaf tagnode {
+				type uint32 {
+					range 1..65535 {
+						error-message "rule number must be between 1 and 65535";
+					}
+				}
+				configd:help "create a rule for this BGP community list(standard)";
+			}
+
+			uses community-list-common;
+			leaf community {
+				type community {
+					configd:syntax "/opt/vyatta/sbin/vyatta_routing_utils.pl --check-clist-community $VAR(@)";
+				}
+				configd:help "Border Gateway Protocol (BGP) community";
+				configd:allowed "/opt/vyatta/share/tmplscripts/policy/route/community-list/rule/community/configd_allowed.sh";
+				configd:validate "/opt/vyatta/share/tmplscripts/policy/route/community-list/rule/community/configd_validate1.cli";
+			}
+		}
+	}	
+
+	grouping community-list-rules-exp {
+		leaf description {
+			type string;
+			configd:help "Description for this community list(expanded)";		
+		}
+
+		list rule {
+			configd:help "create a rule for this BGP community list(expanded)";
+			key "tagnode";
+			leaf tagnode {
+				type uint32 {
+					range 1..65535 {
+						error-message "rule number must be between 1 and 65535";
+					}
+				}
+				configd:help "create a rule for this BGP community list(expanded)";
+			}
+
+			uses community-list-common;
+			leaf regex {
+				type string;
+				configd:help "Regular expression to match against a community list";
+				configd:validate "/opt/vyatta/share/tmplscripts/policy/route/community-list/rule/regex/configd_validate1.cli";
+			}
+		}
+	}
+
+	grouping extcommunity-list-rules-std {
+		leaf description {
+			type string;
+			configd:help "Description for this extended community list(standard)";
+		}
+		list rule {
+			configd:help "create a rule for this BGP extended community list(standard)";
+			key "tagnode";
+			leaf tagnode {
+				type uint32 {
+					range 1..65535 {
+						error-message "rule number must be between 1 and 65535";
+					}
+				}
+				configd:help "create a rule for this BGP extended community list(standard)";
+			}
+
+			uses community-list-common;
+			leaf rt {
+				type string;
+				configd:help "Route Target extended community in AA:NN or IPAddr:NN format";
+				configd:validate "/opt/vyatta/share/tmplscripts/policy/route/extcommunity-list/rule/rt/configd_validate1.cli";
+			}
+			leaf soo {
+				type string;
+				configd:help "Site-of-Origin extended community in AA:NN or IPAddr:NN format";
+				configd:validate "/opt/vyatta/share/tmplscripts/policy/route/extcommunity-list/rule/soo/configd_validate1.cli";
+			}
+		}
+	}
+
+	grouping extcommunity-list-rules-exp {
+		leaf description {
+			type string;
+			configd:help "Description for this extended community list(expanded)";
+		}
+		list rule {
+			configd:help "create a rule for this BGP extended community list(expanded)";
+			key "tagnode";	
+			leaf tagnode {
+				type uint32 {
+					range 1..65535 {
+						error-message "rule number must be between 1 and 65535";
+					}
+				}
+				configd:help "create a rule for this BGP extended community list(expanded)";
+			}
+	
+			uses community-list-common;
+			leaf regex {
+				type string;
+				configd:help "Regular expression to match against a extcommunity list";
+				configd:validate "/opt/vyatta/share/tmplscripts/policy/route/extcommunity-list/rule/regex/configd_validate1.cli";
+			}
+		}
+	}
+
+	augment /policy:policy {
+		container route {
+			configd:help "Routing policy";
+			presence "true";
+
+			list access-list6 {
+				configd:priority "470";
+				configd:help "IPv6 access-list filter";
+				configd:end "/opt/vyatta/share/tmplscripts/policy/route/access-list6/configd_end.sh";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern '[!-~]{1,64}' {
+							error-message "access-list name must be 64 characters or less";
+						}
+						pattern '[^-].*' {
+							error-message "access-list name cannot start with \"-\"";
+						}
+						pattern '[^\|;&$<>]*' {
+							error-message "access-list name cannot contain shell punctuation";
+						}
+					}
+					configd:help "IPv6 access-list filter";
+				}
+				leaf description {
+					type string;
+					configd:help "Description for this IPv6 access-list";
+				}
+				list rule {
+					configd:help "Rule for this access-list6";
+					key "tagnode";
+					leaf tagnode {
+						type uint32 {
+							range 1..65535 {
+								error-message "rule number must be between 1 and 65535";
+							}
+						}
+						configd:help "Rule for this access-list6";
+					}
+					leaf description {
+						type string;
+						configd:help "Description for this IPv6 access-list rule";
+					}
+					leaf action {
+						type enumeration {
+							enum "permit" {
+								configd:help "Permit matching networks";
+							}
+							enum "deny" {
+								configd:help "Deny matching networks";
+							}
+						}
+						configd:help "Action to take on networks matching this rule [REQUIRED]";
+					}
+					container source {
+						presence "true";
+						configd:help "Source IPv6 network to match";
+						leaf exact-match {
+							type empty;
+							configd:help "Exact match of the network prefixes";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list6/rule/source/exact-match/configd_validate1.cli";
+						}
+						leaf any {
+							type empty;
+							configd:help "Any IPv6 address to match";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list6/rule/source/any/configd_validate1.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list6/rule/source/any/configd_validate2.cli";
+						}
+						leaf network {
+							type types:ipv6-prefix;
+							configd:help "Network/netmask to match (requires inverse-mask be defined)";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list6/rule/source/network/configd_validate1.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list6/rule/source/network/configd_validate2.cli";
+						}
+					}
+				}
+			}
+			list access-list {
+				configd:priority "470";
+				configd:help "IP access-list filter";
+				configd:end "/opt/vyatta/share/tmplscripts/policy/route/access-list/configd_end.sh";
+				key "tagnode";
+				leaf tagnode {
+					type uint32 {
+						configd:syntax "/opt/vyatta/share/tmplscripts/policy/route/access-list/configd_syntax1.cli";
+					}
+					configd:help "IP access-list filter";
+				}
+				leaf description {
+					type string;
+					configd:help "Description for this access-list";
+				}
+				list rule {
+					configd:help "Rule for this access-list";
+					key "tagnode";
+					leaf tagnode {
+						type uint32 {
+							range 1..65535 {
+								error-message "rule number must be between 1 and 65535";
+							}
+						}
+						configd:help "Rule for this access-list";
+					}
+					leaf description {
+						type string;
+						configd:help "Description for this rule";
+					}
+					leaf action {
+						type enumeration {
+							enum "permit" {
+								configd:help "Permit matching networks";
+							}
+							enum "deny" {
+								configd:help "Deny matching networks";
+							}
+						}
+						configd:help "Action to take on networks matching this rule [REQUIRED]";
+					}
+					container source {
+						presence "true";
+						configd:help "Source network or address to match";
+						leaf host {
+							type types:ipv4-address;
+							configd:help "Single host IP address to match";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/source/host/configd_validate1.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/source/host/configd_validate2.cli";
+						}
+						leaf inverse-mask {
+							type types:ipv4-address;
+							configd:help "Network/netmask to match (requires network be defined)";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/source/inverse-mask/configd_validate1.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/source/inverse-mask/configd_validate2.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/source/inverse-mask/configd_validate3.cli";
+						}
+						leaf any {
+							type empty;
+							configd:help "Any IP address to match";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/source/any/configd_validate1.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/source/any/configd_validate2.cli";
+						}
+						leaf network {
+							type types:ipv4-address;
+							configd:help "Network/netmask to match (requires inverse-mask be defined)";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/source/network/configd_validate1.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/source/network/configd_validate2.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/source/network/configd_validate3.cli";
+						}
+					}
+					container destination {
+						presence "true";
+						configd:help "Destination network or address";
+						leaf host {
+							type types:ipv4-address;
+							configd:help "Single host IP address to match";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/host/configd_validate1.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/host/configd_validate2.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/host/configd_validate3.cli";
+						}
+						leaf inverse-mask {
+							type types:ipv4-address;
+							configd:help "Network/netmask to match (requires network be defined)";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/inverse-mask/configd_validate1.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/inverse-mask/configd_validate2.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/inverse-mask/configd_validate3.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/inverse-mask/configd_validate4.cli";
+						}
+						leaf any {
+							type empty;
+							configd:help "Any IP address to match";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/any/configd_validate1.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/any/configd_validate2.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/any/configd_validate3.cli";
+						}
+						leaf network {
+							type types:ipv4-address;
+							configd:help "Network/netmask to match (requires inverse-mask be defined)";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/network/configd_validate1.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/network/configd_validate2.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/network/configd_validate3.cli";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/access-list/rule/destination/network/configd_validate4.cli";
+						}
+					}
+				}
+			}
+		
+			container community-list {
+				configd:help "Border Gateway Protocol (BGP) community-list filter";
+				list standard {
+					configd:priority "470";
+					configd:help "Border Gateway Protocol (BGP) community-list(standard) filter";
+					configd:end "/opt/vyatta/share/tmplscripts/policy/route/community-list/standard/configd_end.sh";
+					key "tagnode";
+					leaf tagnode {
+						type community-list-std;
+						configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-community-list $VAR(@) --comm-list-type expanded";
+					}
+
+					uses community-list-rules-std;
+				}
+
+				list expanded {
+					configd:priority "470";
+					configd:help "Border Gateway Protocol (BGP) community-list(expanded) filter";
+					configd:end "/opt/vyatta/share/tmplscripts/policy/route/community-list/expanded/configd_end.sh";
+					key "tagnode";
+					leaf tagnode {
+						type community-list-exp;
+					}
+
+					uses community-list-rules-exp;
+				}
+			}
+
+			container extcommunity-list {
+				configd:help "Border Gateway Protocol (BGP) Extended community-list filter";
+				list standard {
+					configd:priority "470";
+					configd:help "Border Gateway Protocol (BGP) Extended community-list(standard) filter";
+					configd:end "/opt/vyatta/share/tmplscripts/policy/route/extcommunity-list/standard/configd_end.sh";
+					key "tagnode";
+					leaf tagnode {
+						type extcommunity-list-std;
+						configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-extcommunity-list $VAR(@) --comm-list-type expanded";
+					}
+
+					uses extcommunity-list-rules-std;
+				}
+
+				list expanded {
+					configd:priority "470";
+					configd:help "Border Gateway Protocol (BGP) Extended community-list(expanded) filter";
+					configd:end "/opt/vyatta/share/tmplscripts/policy/route/extcommunity-list/expanded/configd_end.sh";
+					key "tagnode";
+					leaf tagnode {
+						type extcommunity-list-exp;
+					}
+
+					uses extcommunity-list-rules-exp;
+				}
+			}
+
+			list as-path-list {
+				configd:priority "470";
+				configd:help "Border Gateway Protocol (BGP) autonomous system path filter";
+				configd:end "/opt/vyatta/share/tmplscripts/policy/route/as-path-list/configd_end.sh";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern '[-a-zA-Z0-9.]+' {
+							error-message "as-path-list name must be alpha-numeric";
+						}
+					}
+					configd:help "Border Gateway Protocol (BGP) autonomous system path filter";
+				}
+				leaf description {
+					type string;
+					configd:help "Description for this as-path-list";
+				}
+				list rule {
+					configd:help "Rule for this as-path-list";
+					key "tagnode";
+					leaf tagnode {
+						type uint32 {
+							range 1..65535 {
+								error-message "rule number must be between 1 and 65535";
+							}
+						}
+						configd:help "Rule for this as-path-list";
+					}
+					leaf description {
+						type string;
+						configd:help "Description for this rule";
+					}
+					leaf action {
+						type enumeration {
+							enum "permit" {
+								configd:help "Permit matching as-paths";
+							}
+							enum "deny" {
+								configd:help "Deny matching as-paths";
+							}
+						}
+						configd:help "Action to take on AS paths matching this rule [REQUIRED]";
+					}
+					leaf regex {
+						type string;
+						configd:help "Regular expression to match against an AS path";
+						configd:validate "/opt/vyatta/share/tmplscripts/policy/route/as-path-list/rule/regex/configd_validate1.cli";
+					}
+				}
+			}
+			list route-map {
+				configd:priority "470";
+				configd:help "IP route-map";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern '[-a-zA-Z0-9.]+' {
+							configd:error-message "route-map $VAR(@): name must be alpha-numeric";
+						}
+					}
+					configd:help "IP route-map";
+				}
+				leaf description {
+					type string;
+					configd:help "Description for this route-map";
+				}
+				list rule {
+					configd:help "Rule for this route-map";
+					configd:end "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/configd_end.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/configd_validate.sh";
+					key "tagnode";
+					leaf tagnode {
+						type uint32 {
+							range 1..65535 {
+								error-message "rule number must be between 1 and 65535";
+							}
+						}
+						configd:help "Rule for this route-map";
+					}
+					leaf description {
+						type string;
+						configd:help "Description for this rule";
+					}
+					leaf action {
+						type enumeration {
+							enum "permit" {
+								configd:help "Permit matching prefixes";
+							}
+							enum "deny" {
+								configd:help "Deny matching prefixes";
+							}
+						}
+						configd:help "Action to take on prefixes matching this rule [REQUIRED]";
+						configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/action/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/action/configd_delete.sh";
+					}
+					container set {
+						presence "true";
+						configd:help "Route parameters";
+						leaf tag {
+							type uint32 {
+								range 1..65535 {
+									error-message "tag must be between 1 and 65535";
+								}
+							}
+							configd:help "Tag value for routing protocol";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/tag/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/tag/configd_delete.sh";
+						}
+						leaf originator-id {
+							type types:ipv4-address;
+							configd:help "Border Gateway Protocol (BGP) originator ID attribute";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/originator-id/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/originator-id/configd_delete.sh";
+						}
+						container aggregator {
+							presence "true";
+							configd:help "Border Gateway Protocol (BGP) aggregator attribute";
+							configd:end "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/aggregator/configd_end.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/aggregator/configd_validate1.cli";
+							leaf ip {
+								type types:ipv4-address{
+									configd:syntax "/opt/vyatta/share/tmplscripts/policy/route/configd_validate_ipv4_address.sh";
+								}
+								configd:help "IP address of an aggregation";
+							}
+							leaf as {
+								type uint32 {
+									range 1..max {
+										error-message "BGP AS number must be between 1 and 4294967295";
+									}
+								}
+								configd:help "AS number of an aggregation";
+							}
+						}
+						leaf local-preference {
+							type uint32;
+							configd:help "Border Gateway Protocol (BGP) local preference attribute";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/local-preference/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/local-preference/configd_delete.sh";
+						}
+						container ipv6-next-hop {
+							presence "true";
+							configd:help "Nexthop IPv6 address";
+							leaf global {
+								type types:ipv6-address;
+								configd:help "Nexthop IPv6 global address";
+								configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/ipv6-next-hop/global/configd_update.sh";
+								configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/ipv6-next-hop/global/configd_delete.sh";
+							}
+							leaf local {
+								type types:ipv6-address;
+								configd:help "Nexthop IPv6 local address";
+								configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/ipv6-next-hop/local/configd_update.sh";
+								configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/ipv6-next-hop/local/configd_delete.sh";
+							}
+						}
+                                                /* RIFT Change
+						leaf origin {
+							type enumeration {
+								enum "igp" {
+									configd:help "Interior gateway protocol origin";
+								}
+								enum "egp" {
+									configd:help "Exterior gateway protocol origin";
+								}
+								enum "incomplete" {
+									configd:help "Incomplete origin";
+								}
+							}
+							configd:help "Border Gateway Protocol (BGP) origin code";
+							configd:allowed "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/origin/configd_allowed.sh";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/origin/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/origin/configd_delete.sh";
+						}
+                                                 */
+						leaf metric-type {
+							type enumeration {
+								enum "type-1" {
+									configd:help "OSPF external type 1 metric";
+								}
+								enum "type-2" {
+									configd:help "OSPF external type 2 metric";
+								}
+							}
+							configd:help "Open Shortest Path First (OSPF) external metric-type";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/metric-type/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/metric-type/configd_delete.sh";
+						}
+						leaf as-path-prepend {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/as-path-prepend/configd_syntax1.cli";
+							}
+							configd:help "Prepend string for a Border Gateway Protocol (BGP) AS-path attribute";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/as-path-prepend/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/as-path-prepend/configd_delete.sh";
+						}
+						container prepend-as {
+							description "This container is used to configure own-as/last-as.";
+							configd:help "Prepend ASN";
+							leaf own-as {
+								description "This leaf is used to configure own-as <1..32> times.";
+								configd:help "Prepend own-as";
+								type uint32 {
+									range 1..32;
+								}
+							}
+							leaf last-as {
+								description "This leaf is used to configure last-as <1..32> times.";
+								configd:help "Prepend last-as";
+								type uint32 {
+									range 1..32;
+								}
+							}
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/as-path-prepend/configd_create_own_as_last_as.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/as-path-prepend/configd_delete_own_as_last_as.sh";
+						}
+						leaf community {
+							type rmap-community {
+								configd:syntax "/opt/vyatta/sbin/vyatta_routing_utils.pl --check-rmap-community $VAR(@)";
+							}
+							configd:help "Border Gateway Protocol (BGP) community";
+							configd:allowed "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/community/configd_allowed.sh";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/community/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/community/configd_delete.sh";
+						}
+						leaf add-community {
+							type community {
+								configd:syntax "/opt/vyatta/sbin/vyatta_routing_utils.pl --check-clist-community $VAR(@)";
+							}
+							configd:help "Border Gateway Protocol (BGP) community to add to the existing community";
+							configd:allowed "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/add-community/configd_allowed.sh";
+							configd:create "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/add-community/configd_create.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/add-community/configd_delete.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/add-community/configd_validate.sh";
+						}
+						container extcommunity {
+							presence "true";
+							configd:help "Border Gateway Protocol (BGP) extcommunity attribute";
+							leaf rt {
+								type string;
+								configd:help "Route Target extended community in AA:NN or IPAddr:NN format";
+								configd:create "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/extcommunity/rt/configd_create.sh";
+								configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/extcommunity/rt/configd_delete.sh";
+							}
+							leaf soo {
+								type string;
+								configd:help "Site-of-Origin extended community in AA:NN or IPAddr:NN format";
+								configd:create "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/extcommunity/soo/configd_create.sh";
+								configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/extcommunity/soo/configd_delete.sh";
+							}
+						}
+						leaf delete-community {
+							type community-list;
+							configd:help "Border Gateway Protocol (BGP) community-list to delete";
+							configd:allowed "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/delete-community/configd_allowed.sh";
+							configd:create "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/delete-community/configd_create.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/delete-community/configd_delete.sh";
+							configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-comm-list-exists $VAR(@)";
+						}
+						leaf atomic-aggregate {
+							type empty;
+							configd:help "Border Gateway Protocol (BGP) atomic aggregate attribute";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/atomic-aggregate/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/atomic-aggregate/configd_delete.sh";
+						}
+						leaf weight {
+							type uint32;
+							configd:help "Border Gateway Protocol (BGP) weight attribute";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/weight/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/weight/configd_delete.sh";
+						}
+						leaf metric {
+							type metric-val;
+							configd:help "Destination routing protocol metric";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/metric/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/metric/configd_delete.sh";
+							configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --validate-metric $VAR(@)";
+						}
+						leaf ip-next-hop {
+							type types:ipv4-address;
+							configd:help "Nexthop IP address";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/ip-next-hop/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/set/ip-next-hop/configd_delete.sh";
+						}
+					}
+					leaf continue {
+						type uint32 {
+							range 1..65535 {
+								error-message "continue must be between 1 and 65535";
+							}
+						}
+						configd:help "Jump to a different rule in this route-map on a match";
+						configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/continue/configd_update.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/continue/configd_delete.sh";
+						configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/continue/configd_validate1.cli";
+					}
+					container match {
+						presence "true";
+						configd:help "Route parameters to match";
+						leaf tag {
+							type uint32 {
+								range 1..65535 {
+									error-message "tag must be between 1 and 65535";
+								}
+							}
+							configd:help "Route tag to match";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/tag/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/tag/configd_delete.sh";
+						}
+						container ip {
+							presence "true";
+							configd:help "IP prefix parameters to match";
+							container peer {
+								presence "true";
+								configd:help "IP peer to match";
+								leaf access-list {
+									type uint32;
+									configd:help "IP access-list to match";
+									configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/peer/access-list/configd_update.sh";
+									configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/peer/access-list/configd_delete.sh";
+									configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-access-list $VAR(@)";
+								}
+							}
+							container nexthop {
+								presence "true";
+								configd:help "IP next-hop of route to match";
+								leaf access-list {
+									type uint32;
+									configd:help "IP access-list to match";
+									configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/nexthop/access-list/configd_update.sh";
+									configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/nexthop/access-list/configd_delete.sh";
+									configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/nexthop/access-list/configd_validate1.cli";
+									configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-access-list $VAR(@)";
+								}
+								leaf prefix-list {
+									type string;
+									configd:help "IP prefix-list to match";
+									configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/nexthop/prefix-list/configd_update.sh";
+									configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/nexthop/prefix-list/configd_delete.sh";
+									configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/nexthop/prefix-list/configd_validate1.cli";
+									configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-prefix-list $VAR(@)";
+								}
+							}
+							container address {
+								presence "true";
+								configd:help "IP address of route to match";
+								leaf access-list {
+									type uint32;
+									configd:help "IP access-list to match";
+									configd:allowed "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/address/access-list/configd_allowed.sh";
+									configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/address/access-list/configd_update.sh";
+									configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/address/access-list/configd_delete.sh";
+									configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/address/access-list/configd_validate1.cli";
+									configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-access-list $VAR(@)";
+								}
+								leaf prefix-list {
+									type string;
+									configd:help "IP prefix-list to match";
+									configd:allowed "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/address/prefix-list/configd_allowed.sh";
+									configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/address/prefix-list/configd_update.sh";
+									configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/address/prefix-list/configd_delete.sh";
+									configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ip/address/prefix-list/configd_validate1.cli";
+									configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-prefix-list $VAR(@)";
+								}
+							}
+						}
+						leaf origin {
+							type enumeration {
+								enum "egp" {
+									configd:help "Exterior gateway protocol origin ";
+								}
+								enum "igp" {
+									configd:help "Interior gateway protocol origin";
+								}
+								enum "incomplete" {
+									configd:help "Incomplete origin ";
+								}
+							}
+							configd:help "Border Gateway Protocol (BGP) origin code to match";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/origin/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/origin/configd_delete.sh";
+						}
+						leaf interface {
+							type string;
+							configd:help "First hop interface of a route to match";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/interface/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/interface/configd_delete.sh";
+							configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/interface/configd_validate2.cli";
+						}
+						container community {
+							presence "true";
+							configd:help "BGP community-list to match";
+							configd:end "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/community/configd_end.sh";
+							leaf exact-match {
+								type empty;
+								configd:help "Community-list to exactly match";
+								configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/community/exact-match/configd_validate.sh";
+							}
+							leaf community-list {
+								type community-list;
+								configd:help "BGP community-list to match";
+								configd:allowed "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/community/community-list/configd_allowed.sh";
+								configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-comm-list-exists $VAR(@)";
+							}
+						}
+						container extcommunity {
+							presence "true";
+							configd:help "BGP extcommunity-list to match";
+							configd:end "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/extcommunity/configd_end.sh";
+							leaf exact-match {
+								type empty;
+								configd:help "Extcommunity-list to exactly match";
+								configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/extcommunity/exact-match/configd_validate.sh";
+							}
+							leaf extcommunity-list {
+								type extcommunity-list;
+								configd:help "BGP extcommunity-list to match";
+								configd:allowed "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/extcommunity/extcommunity-list/configd_allowed.sh";
+								configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-extcomm-list-exists $VAR(@)";
+							}
+						}
+						container ipv6 {
+							presence "true";
+							configd:help "IPv6 prefix parameters to match";
+							container peer {
+								presence "true";
+								configd:help "IP peer to match";
+								leaf access-list {
+									type string;
+									configd:help "IPv6 access-list6 to match";
+									configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/peer/access-list/configd_update.sh";
+									configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/peer/access-list/configd_delete.sh";
+									configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-access-list6 $VAR(@)";
+								}
+							}
+							container nexthop {
+								presence "true";
+								configd:help "IP next-hop of route to match";
+								leaf access-list {
+									type string;
+									configd:help "IPv6 access-list6 to match";
+									configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/nexthop/access-list/configd_update.sh";
+									configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/nexthop/access-list/configd_delete.sh";
+									configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/nexthop/access-list/configd_validate1.cli";
+									configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-access-list6 $VAR(@)";
+								}
+								leaf prefix-list {
+									type string;
+									configd:help "IPv6 prefix-list to match";
+									configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/nexthop/prefix-list/configd_update.sh";
+									configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/nexthop/prefix-list/configd_delete.sh";
+									configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/nexthop/prefix-list/configd_validate1.cli";
+									configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-prefix-list6 $VAR(@)";
+								}
+							}
+							container address {
+								presence "true";
+								configd:help "IPv6 address of route to match";
+								leaf access-list {
+									type string;
+									configd:help "IPv6 access-list6 to match";
+									configd:allowed "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/address/access-list/configd_allowed.sh";
+									configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/address/access-list/configd_update.sh";
+									configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/address/access-list/configd_delete.sh";
+									configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/address/access-list/configd_validate1.cli";
+									configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-access-list6 $VAR(@)";
+								}
+								leaf prefix-list {
+									type string;
+									configd:help "IPv6 prefix-list to match";
+									configd:allowed "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/address/prefix-list/configd_allowed.sh";
+									configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/address/prefix-list/configd_update.sh";
+									configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/address/prefix-list/configd_delete.sh";
+									configd:validate "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/ipv6/address/prefix-list/configd_validate1.cli";
+									configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-prefix-list6 $VAR(@)";
+								}
+							}
+						}
+						leaf as-path {
+							type string;
+							configd:help "BGP as-path-list to match";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/as-path/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/as-path/configd_delete.sh";
+							configd:validate "/opt/vyatta/sbin/vyatta-policy.pl --check-as-path-list $VAR(@)";
+						}
+						leaf metric {
+							type uint32 {
+								range 0..4294967295;
+							}
+							configd:help "Metric of route to match";
+							configd:update "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/metric/configd_update.sh";
+							configd:delete "/opt/vyatta/share/tmplscripts/policy/route/route-map/rule/match/metric/configd_delete.sh";
+						}
+					}
+				}
+			}
+			list prefix-list6 {
+				configd:priority "470";
+				configd:help "IPv6 prefix-list filter";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern '[-a-zA-Z0-9.]+' {
+							error-message "prefix-list6 name must be alpha-numeric";
+						}
+					}
+					configd:help "IPv6 prefix-list filter";
+				}
+				leaf description {
+					type string;
+					configd:help "Description for this prefix-list6";
+				}
+				list rule {
+					configd:help "Rule for this prefix-list6";
+					configd:delete "/opt/vyatta/share/tmplscripts/policy/route/prefix-list6/rule/configd_delete.sh";
+					configd:end "/opt/vyatta/share/tmplscripts/policy/route/prefix-list6/rule/configd_end.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/policy/route/prefix-list6/rule/configd_validate1.cli";
+					configd:validate "/opt/vyatta/share/tmplscripts/policy/route/prefix-list6/rule/configd_validate2.cli";
+					key "tagnode";
+					leaf tagnode {
+						type uint32 {
+							range 1..65535 {
+								error-message "rule number must be between 1 and 65535";
+							}
+						}
+						configd:help "Rule for this prefix-list6";
+					}
+					leaf description {
+						type string;
+						configd:help "Description for this rule";
+					}
+					leaf action {
+						type enumeration {
+							enum "permit" {
+								configd:help "Permit matching prefixes";
+							}
+							enum "deny" {
+								configd:help "Deny matching prefixes";
+							}
+						}
+						configd:help "Action to take on prefixes matching this rule";
+					}
+					leaf ge {
+						type uint32 {
+							range 0..128 {
+								error-message "ge must be between 0 and 128";
+							}
+						}
+						configd:help "Prefix length to match a netmask greater than or equal to it";
+					}
+					leaf prefix {
+						type types:ipv6-prefix;
+						configd:help "Prefix to match";
+					}
+					leaf le {
+						type uint32 {
+							range 0..128 {
+								error-message "le must be between 0 and 128";
+							}
+						}
+						configd:help "Prefix length to match a netmask less than or equal to it";
+					}
+				}
+			}
+			list prefix-list {
+				configd:priority "470";
+				configd:help "IP prefix-list filter";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern '[-a-zA-Z0-9.]+' {
+							error-message "prefix-list name must be alpha-numeric";
+						}
+					}
+					configd:help "IP prefix-list filter";
+				}
+				leaf description {
+					type string;
+					configd:help "Description for this prefix-list";
+				}
+				list rule {
+					configd:help "Rule for this prefix-list";
+					configd:delete "/opt/vyatta/share/tmplscripts/policy/route/prefix-list/rule/configd_delete.sh";
+					configd:end "/opt/vyatta/share/tmplscripts/policy/route/prefix-list/rule/configd_end.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/policy/route/prefix-list/rule/configd_validate1.cli";
+					configd:validate "/opt/vyatta/share/tmplscripts/policy/route/prefix-list/rule/configd_validate2.cli";
+					key "tagnode";
+					leaf tagnode {
+						type uint32 {
+							range 1..65535 {
+								error-message "rule number must be between 1 and 65535";
+							}
+						}
+						configd:help "Rule for this prefix-list";
+					}
+					leaf description {
+						type string;
+						configd:help "Description for this rule";
+					}
+					leaf action {
+						type enumeration {
+							enum "permit" {
+								configd:help "Permit matching prefixes";
+							}
+							enum "deny" {
+								configd:help "Deny matching prefixes";
+							}
+						}
+						configd:help "Action to take on prefixes matching this rule [REQUIRED]";
+					}
+					leaf ge {
+						type uint32 {
+							range 0..32 {
+								error-message "ge must be between 0 and 32";
+							}
+						}
+						configd:help "Prefix length to match a netmask greater than or equal to it";
+					}
+					leaf prefix {
+						type types:ipv4-prefix;
+						configd:help "Prefix to match";
+					}
+					leaf le {
+						type uint32 {
+							range 0..32 {
+								error-message "le must be between 0 and 32";
+							}
+						}
+						configd:help "Prefix length to match a netmask less than or equal to it";
+					}
+				}
+			}
+		}
+	}
+}

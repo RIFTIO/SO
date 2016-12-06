@@ -1,0 +1,43 @@
+module vyatta-system-login-sssd-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-system-login-sssd:1";
+	prefix vyatta-system-login-sssd-v1;
+
+	import vyatta-system-v1 {
+		prefix system;
+	}
+	import vyatta-system-login-v1 {
+		prefix system-login;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /system:system/system-login:login {
+		container auth-chain {
+			configd:help "Authentication chain";
+			leaf-list method {
+				configd:help "Authentication method";
+				type enumeration {
+					enum "tacplus" {
+						configd:help "TACACS+ authentication";
+					}
+					enum "local" {
+						configd:help "Local authentication";
+					}
+				}
+			}
+		}
+	}
+}

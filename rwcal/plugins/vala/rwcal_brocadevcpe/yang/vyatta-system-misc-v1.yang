@@ -1,0 +1,113 @@
+module vyatta-system-misc-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-system-misc:1";
+	prefix vyatta-system-misc-v1;
+
+	import vyatta-system-v1 {
+		prefix system;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-03-02 {
+		description "serial-boot-console added";
+	}
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /system:system {
+		container console {
+			presence "true";
+			configd:priority "100";
+			configd:help "Serial console configuration";
+			configd:end "/opt/vyatta/share/tmplscripts/system/console/configd_end.sh";
+			leaf serial-boot-console {
+				description "This serial console will be used for boot messages."
+					+ " If this does not exist then tty0 will be used";
+				configd:help "Serial console to use for boot messages";
+				type leafref {
+					path "../device/tagnode";
+				}
+				must "not (../device[tagnode=current()]/modem)"{
+					error-message "boot-console cannot be a modem console";
+				}
+			}
+			leaf powersave {
+				type empty;
+				configd:help "Enable screen blank powersaving on VGA console";
+				configd:create "/opt/vyatta/share/tmplscripts/system/console/powersave/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/system/console/powersave/configd_delete.sh";
+			}
+			list device {
+				configd:help "Serial console device name";
+				configd:end "/opt/vyatta/share/tmplscripts/system/console/device/configd_end.sh";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern "((tty[A-Z])|ttyUSB|(hvc)){1}[0-9]+" {
+							configd:error-message "console $VAR(@): not a valid tty name";
+						}
+					}
+					configd:help "Serial console device name";
+				}
+				leaf modem {
+					type empty;
+					configd:help "Device is Hayes compatible modem";
+				}
+				leaf speed {
+					type enumeration {
+						enum "1200" {
+							configd:help "1200 bps";
+						}
+						enum "2400" {
+							configd:help "2400 bps";
+						}
+						enum "4800" {
+							configd:help "4800 bps";
+						}
+						enum "9600" {
+							configd:help "9600 bps (default)";
+						}
+						enum "19200" {
+							configd:help "19,200 bps";
+						}
+						enum "38400" {
+							configd:help "38,400 bps";
+						}
+						enum "57600" {
+							configd:help "57,600 bps";
+						}
+						enum "115200" {
+							configd:help "115,200 bps";
+						}
+					}
+					configd:help "Console baud rate";
+					default "9600";
+					configd:allowed "/opt/vyatta/share/tmplscripts/system/console/device/speed/configd_allowed.sh";
+				}
+			}
+		}
+		container options {
+			presence "true";
+			configd:priority "400";
+			configd:help "System options";
+			leaf reboot-on-panic {
+				type boolean;
+				configd:help "Reboot system on kernel panic";
+				default "true";
+				configd:update "/opt/vyatta/share/tmplscripts/system/options/reboot-on-panic/configd_update1.cli";
+				configd:delete "/opt/vyatta/share/tmplscripts/system/options/reboot-on-panic/configd_delete1.cli";
+			}
+		}
+	}
+}

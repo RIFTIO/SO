@@ -1,0 +1,116 @@
+module vyatta-service-ssh-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-ssh:1";
+	prefix vyatta-service-ssh-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-system-v1 {
+		prefix system;
+	}
+	import vyatta-system-login-v1 {
+		prefix system-login;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-03-28 {
+		description "Add augment of /system/login
+			     Remove use of bash in action scripts";
+	}
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /system:system/system-login:login {
+		configd:end "vyatta-update-ssh.pl --no-keygen --update";
+	}
+	augment /service:service {
+		container ssh {
+			presence "true";
+			configd:priority "500";
+			configd:help "Secure SHell (SSH) protocol";
+			configd:end "/opt/vyatta/share/tmplscripts/service/ssh/configd_end.sh";
+			leaf allow-root {
+				type empty;
+				configd:help "Enable root login over ssh";
+			}
+			leaf authentication-retries {
+				type uint32 {
+					range 1..5;
+				}
+				configd:help "SSH authentication retries. The default is 3.";
+				default "3";
+			}
+			leaf timeout {
+				type uint32 {
+					range 1..120;
+				}
+				configd:help "SSH timeout value (secs). The default is 120.";
+				default "120";
+			}
+			leaf key-security-strength {
+				type enumeration {
+					enum "80" {
+						configd:help "Generating RSA1-1024, RSA-1024, DSA-1024, ECDSA-256 keys.";
+					}
+					enum "112" {
+						configd:help "Generating RSA1-2048, RSA-2048, DSA-1024, ECDSA-256 keys.";
+					}
+					enum "128" {
+						configd:help "Generating RSA1-3072, RSA-3072, DSA-1024, ECDSA-256 keys.";
+					}
+					enum "192" {
+						configd:help "Generating RSA1-7680, RSA-7680, DSA-1024, ECDSA-384 keys.";
+					}
+					enum "256" {
+						configd:help "Generating RSA1-15360, RSA-15360, DSA-1024, ECDSA-521 keys.";
+					}
+				}
+				configd:help "SSH key strength to generate keys. A higher strength takes longer to complete.";
+				configd:validate "/opt/vyatta/share/tmplscripts/service/ssh/key-security-strength/configd_validate.cli";
+			}
+			leaf disable-password-authentication {
+				type empty;
+				configd:help "Don't allow unknown user to login with password";
+			}
+			leaf-list port {
+				type uint32 {
+					range 1..65535 {
+						error-message "Port number must be in range 1 to 65535";
+					}
+				}
+				ordered-by "user";
+				configd:help "Port for SSH service";
+			}
+			leaf-list listen-address {
+				type union {
+					type types:ipv4-address;
+					type types:ipv6-address;
+				}
+				ordered-by "user";
+				configd:help "Local addresses SSH service should listen on";
+			}
+			leaf disable-host-validation {
+				type empty;
+				configd:help "Don't validate the remote host name with DNS";
+			}
+			leaf disable-tcp-forwarding {
+			  type empty;
+			  configd:help "Disable TCP port forwarding";
+			}
+		}
+	}
+}

@@ -1,0 +1,668 @@
+module vyatta-service-flow-monitoring-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-flow-monitoring:1";
+	prefix vyatta-service-flow-monitoring-v1;
+
+	import ietf-inet-types {
+	       prefix inet;
+	}
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+	import vyatta-interfaces-v1 {
+		prefix if;
+	}
+	import vyatta-interfaces-dataplane-v1 {
+		prefix interfaces-dataplane;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-06 {
+		description "Vermont revision of version 1.";
+		configd:migration 1;
+	}
+
+	typedef module-name {
+		type string{
+			configd:pattern-help "<name>";
+			pattern "[a-zA-Z0-9][a-zA-Z0-9_-]*" {
+				error-message "Name should only contain letters, digits, underscores or dashes";
+			}
+		}
+	}
+
+	feature ipfix-collector {
+		description "Enable the collection of externally generated flows";
+	}
+
+	grouping next-exp {
+		leaf-list exporter {
+			configd:help "Next Flow monitoring exporter";
+			type module-name;
+			configd:allowed "exportd-config.pl --action=list_exporters";
+			configd:validate "exportd-config.pl --action=validate_next_exporter --exporter=$VAR(@)";
+		}
+	}
+	grouping next-agg {
+		leaf-list aggregator {
+			configd:help "Next Flow monitoring aggregator";
+			type module-name;
+			configd:allowed "exportd-config.pl --action=list_aggregators";
+			configd:validate "exportd-config.pl --action=validate_next_aggregator --aggregator=$VAR(@)";
+		}
+	}
+	grouping next {
+		container next {
+			configd:help "Next Flow monitoring module";
+			uses next-exp;
+			uses next-agg;
+		}
+	}
+
+	typedef fields {
+		type enumeration {
+			enum "octetDeltaCount";
+			enum "packetDeltaCount";
+			enum "deltaFlowCount";
+			enum "protocolIdentifier";
+			enum "ipClassOfService";
+			enum "tcpControlBits";
+			enum "sourceTransportPort";
+			enum "sourceIPv4Address";
+			enum "sourceIPv4PrefixLength";
+			enum "ingressInterface";
+			enum "destinationTransportPort";
+			enum "destinationIPv4Address";
+			enum "destinationIPv4PrefixLength";
+			enum "egressInterface";
+			enum "ipNextHopIPv4Address";
+			enum "bgpSourceAsNumber";
+			enum "bgpDestinationAsNumber";
+			enum "bgpNextHopIPv4Address";
+			enum "postMCastPacketDeltaCount";
+			enum "postMCastOctetDeltaCount";
+			enum "flowEndSysUpTime";
+			enum "flowStartSysUpTime";
+			enum "postOctetDeltaCount";
+			enum "postPacketDeltaCount";
+			enum "minimumIpTotalLength";
+			enum "maximumIpTotalLength";
+			enum "sourceIPv6Address";
+			enum "destinationIPv6Address";
+			enum "sourceIPv6PrefixLength";
+			enum "destinationIPv6PrefixLength";
+			enum "flowLabelIPv6";
+			enum "icmpTypeCodeIPv4";
+			enum "igmpType";
+			enum "samplingInterval";
+			enum "samplingAlgorithm";
+			enum "flowActiveTimeout";
+			enum "flowIdleTimeout";
+			enum "engineType";
+			enum "engineId";
+			enum "exportedOctetTotalCount";
+			enum "exportedMessageTotalCount";
+			enum "exportedFlowRecordTotalCount";
+			enum "ipv4RouterSc";
+			enum "sourceIPv4Prefix";
+			enum "destinationIPv4Prefix";
+			enum "mplsTopLabelType";
+			enum "mplsTopLabelIPv4Address";
+			enum "samplerId";
+			enum "samplerMode";
+			enum "samplerRandomInterval";
+			enum "classId";
+			enum "minimumTTL";
+			enum "maximumTTL";
+			enum "fragmentIdentification";
+			enum "postIpClassOfService";
+			enum "sourceMacAddress";
+			enum "postDestinationMacAddress";
+			enum "vlanId";
+			enum "postVlanId";
+			enum "ipVersion";
+			enum "flowDirection";
+			enum "ipNextHopIPv6Address";
+			enum "bgpNextHopIPv6Address";
+			enum "ipv6ExtensionHeaders";
+			enum "mplsTopLabelStackSection";
+			enum "mplsLabelStackSection2";
+			enum "mplsLabelStackSection3";
+			enum "mplsLabelStackSection4";
+			enum "mplsLabelStackSection5";
+			enum "mplsLabelStackSection6";
+			enum "mplsLabelStackSection7";
+			enum "mplsLabelStackSection8";
+			enum "mplsLabelStackSection9";
+			enum "mplsLabelStackSection10";
+			enum "destinationMacAddress";
+			enum "postSourceMacAddress";
+			enum "interfaceName";
+			enum "interfaceDescription";
+			enum "samplerName";
+			enum "octetTotalCount";
+			enum "packetTotalCount";
+			enum "flagsAndSamplerId";
+			enum "fragmentOffset";
+			enum "forwardingStatus";
+			enum "mplsVpnRouteDistinguisher";
+			enum "mplsTopLabelPrefixLength";
+			enum "srcTrafficIndex";
+			enum "dstTrafficIndex";
+			enum "applicationDescription";
+			enum "applicationId";
+			enum "applicationName";
+			enum "postIpDiffServCodePoint";
+			enum "multicastReplicationFactor";
+			enum "className";
+			enum "classificationEngineId";
+			enum "layer2packetSectionOffset";
+			enum "layer2packetSectionSize";
+			enum "layer2packetSectionData";
+			enum "bgpNextAdjacentAsNumber";
+			enum "bgpPrevAdjacentAsNumber";
+			enum "exporterIPv4Address";
+			enum "exporterIPv6Address";
+			enum "droppedOctetDeltaCount";
+			enum "droppedPacketDeltaCount";
+			enum "droppedOctetTotalCount";
+			enum "droppedPacketTotalCount";
+			enum "flowEndReason";
+			enum "commonPropertiesId";
+			enum "observationPointId";
+			enum "icmpTypeCodeIPv6";
+			enum "mplsTopLabelIPv6Address";
+			enum "lineCardId";
+			enum "portId";
+			enum "meteringProcessId";
+			enum "exportingProcessId";
+			enum "templateId";
+			enum "wlanChannelId";
+			enum "wlanSSID";
+			enum "flowId";
+			enum "observationDomainId";
+			enum "flowStartSeconds";
+			enum "flowEndSeconds";
+			enum "flowStartMilliseconds";
+			enum "flowEndMilliseconds";
+			enum "flowStartMicroseconds";
+			enum "flowEndMicroseconds";
+			enum "flowStartNanoseconds";
+			enum "flowEndNanoseconds";
+			enum "flowStartDeltaMicroseconds";
+			enum "flowEndDeltaMicroseconds";
+			enum "systemInitTimeMilliseconds";
+			enum "flowDurationMilliseconds";
+			enum "flowDurationMicroseconds";
+			enum "observedFlowTotalCount";
+			enum "ignoredPacketTotalCount";
+			enum "ignoredOctetTotalCount";
+			enum "notSentFlowTotalCount";
+			enum "notSentPacketTotalCount";
+			enum "notSentOctetTotalCount";
+			enum "destinationIPv6Prefix";
+			enum "sourceIPv6Prefix";
+			enum "postOctetTotalCount";
+			enum "postPacketTotalCount";
+			enum "flowKeyIndicator";
+			enum "postMCastPacketTotalCount";
+			enum "postMCastOctetTotalCount";
+			enum "icmpTypeIPv4";
+			enum "icmpCodeIPv4";
+			enum "icmpTypeIPv6";
+			enum "icmpCodeIPv6";
+			enum "udpSourcePort";
+			enum "udpDestinationPort";
+			enum "tcpSourcePort";
+			enum "tcpDestinationPort";
+			enum "tcpSequenceNumber";
+			enum "tcpAcknowledgementNumber";
+			enum "tcpWindowSize";
+			enum "tcpUrgentPointer";
+			enum "tcpHeaderLength";
+			enum "ipHeaderLength";
+			enum "totalLengthIPv4";
+			enum "payloadLengthIPv6";
+			enum "ipTTL";
+			enum "nextHeaderIPv6";
+			enum "mplsPayloadLength";
+			enum "ipDiffServCodePoint";
+			enum "ipPrecedence";
+			enum "fragmentFlags";
+			enum "octetDeltaSumOfSquares";
+			enum "octetTotalSumOfSquares";
+			enum "mplsTopLabelTTL";
+			enum "mplsLabelStackLength";
+			enum "mplsLabelStackDepth";
+			enum "mplsTopLabelExp";
+			enum "ipPayloadLength";
+			enum "udpMessageLength";
+			enum "isMulticast";
+			enum "ipv4IHL";
+			enum "ipv4Options";
+			enum "tcpOptions";
+			enum "paddingOctets";
+			enum "collectorIPv4Address";
+			enum "collectorIPv6Address";
+			enum "exportInterface";
+			enum "exportProtocolVersion";
+			enum "exportTransportProtocol";
+			enum "collectorTransportPort";
+			enum "exporterTransportPort";
+			enum "tcpSynTotalCount";
+			enum "tcpFinTotalCount";
+			enum "tcpRstTotalCount";
+			enum "tcpPshTotalCount";
+			enum "tcpAckTotalCount";
+			enum "tcpUrgTotalCount";
+			enum "ipTotalLength";
+			enum "postNATSourceIPv4Address";
+			enum "postNATDestinationIPv4Address";
+			enum "postNAPTSourceTransportPort";
+			enum "postNAPTDestinationTransportPort";
+			enum "natOriginatingAddressRealm";
+			enum "natEvent";
+			enum "initiatorOctets";
+			enum "responderOctets";
+			enum "firewallEvent";
+			enum "ingressVRFID";
+			enum "egressVRFID";
+			enum "VRFname";
+			enum "postMplsTopLabelExp";
+			enum "tcpWindowScale";
+			enum "biflowDirection";
+			enum "ethernetHeaderLength";
+			enum "ethernetPayloadLength";
+			enum "ethernetTotalLength";
+			enum "dot1qVlanId";
+			enum "dot1qPriority";
+			enum "dot1qCustomerVlanId";
+			enum "dot1qCustomerPriority";
+			enum "metroEvcId";
+			enum "metroEvcType";
+			enum "pseudoWireId";
+			enum "pseudoWireType";
+			enum "pseudoWireControlWord";
+			enum "ingressPhysicalInterface";
+			enum "egressPhysicalInterface";
+			enum "postDot1qVlanId";
+			enum "postDot1qCustomerVlanId";
+			enum "ethernetType";
+			enum "postIpPrecedence";
+			enum "collectionTimeMilliseconds";
+			enum "exportSctpStreamId";
+			enum "maxExportSeconds";
+			enum "maxFlowEndSeconds";
+			enum "messageMD5Checksum";
+			enum "messageScope";
+			enum "minExportSeconds";
+			enum "minFlowStartSeconds";
+			enum "opaqueOctets";
+			enum "sessionScope";
+			enum "maxFlowEndMicroseconds";
+			enum "maxFlowEndMilliseconds";
+			enum "maxFlowEndNanoseconds";
+			enum "minFlowStartMicroseconds";
+			enum "minFlowStartMilliseconds";
+			enum "minFlowStartNanoseconds";
+			enum "collectorCertificate";
+			enum "exporterCertificate";
+			enum "dataRecordsReliability";
+			enum "observationPointType";
+			enum "newConnectionDeltaCount";
+			enum "connectionSumDurationSeconds";
+			enum "connectionTransactionId";
+			enum "postNATSourceIPv6Address";
+			enum "postNATDestinationIPv6Address";
+			enum "natPoolId";
+			enum "natPoolName";
+			enum "anonymizationFlags";
+			enum "anonymizationTechnique";
+			enum "informationElementIndex";
+			enum "p2pTechnology";
+			enum "tunnelTechnology";
+			enum "encryptedTechnology";
+			enum "basicList";
+			enum "subTemplateList";
+			enum "subTemplateMultiList";
+			enum "bgpValidityState";
+			enum "IPSecSPI";
+			enum "greKey";
+			enum "natType";
+			enum "initiatorPackets";
+			enum "responderPackets";
+			enum "observationDomainName";
+			enum "selectionSequenceId";
+			enum "selectorId";
+			enum "informationElementId";
+			enum "selectorAlgorithm";
+			enum "samplingPacketInterval";
+			enum "samplingPacketSpace";
+			enum "samplingTimeInterval";
+			enum "samplingTimeSpace";
+			enum "samplingSize";
+			enum "samplingPopulation";
+			enum "samplingProbability";
+			enum "dataLinkFrameSize";
+			enum "ipHeaderPacketSection";
+			enum "ipPayloadPacketSection";
+			enum "dataLinkFrameSection";
+			enum "mplsLabelStackSection";
+			enum "mplsPayloadPacketSection";
+			enum "selectorIdTotalPktsObserved";
+			enum "selectorIdTotalPktsSelected";
+			enum "absoluteError";
+			enum "relativeError";
+			enum "observationTimeSeconds";
+			enum "observationTimeMilliseconds";
+			enum "observationTimeMicroseconds";
+			enum "observationTimeNanoseconds";
+			enum "digestHashValue";
+			enum "hashIPPayloadOffset";
+			enum "hashIPPayloadSize";
+			enum "hashOutputRangeMin";
+			enum "hashOutputRangeMax";
+			enum "hashSelectedRangeMin";
+			enum "hashSelectedRangeMax";
+			enum "hashDigestOutput";
+			enum "hashInitialiserValue";
+			enum "selectorName";
+			enum "upperCILimit";
+			enum "lowerCILimit";
+			enum "confidenceLevel";
+			enum "informationElementDataType";
+			enum "informationElementDescription";
+			enum "informationElementName";
+			enum "informationElementRangeBegin";
+			enum "informationElementRangeEnd";
+			enum "informationElementSemantics";
+			enum "informationElementUnits";
+			enum "privateEnterpriseNumber";
+			enum "virtualStationInterfaceId";
+			enum "virtualStationInterfaceName";
+			enum "virtualStationUUID";
+			enum "virtualStationName";
+			enum "layer2SegmentId";
+			enum "layer2OctetDeltaCount";
+			enum "layer2OctetTotalCount";
+			enum "ingressUnicastPacketTotalCount";
+			enum "ingressMulticastPacketTotalCount";
+			enum "ingressBroadcastPacketTotalCount";
+			enum "egressUnicastPacketTotalCount";
+			enum "egressBroadcastPacketTotalCount";
+			enum "monitoringIntervalStartMilliSeconds";
+			enum "monitoringIntervalEndMilliSeconds";
+			enum "portRangeStart";
+			enum "portRangeEnd";
+			enum "portRangeStepSize";
+			enum "portRangeNumPorts";
+			enum "staMacAddress";
+			enum "staIPv4Address";
+			enum "wtpMacAddress";
+			enum "ingressInterfaceType";
+			enum "egressInterfaceType";
+			enum "rtpSequenceNumber";
+			enum "userName";
+			enum "applicationCategoryName";
+			enum "applicationSubCategoryName";
+			enum "applicationGroupName";
+			enum "originalFlowsPresent";
+			enum "originalFlowsInitiated";
+			enum "originalFlowsCompleted";
+			enum "distinctCountOfSourceIPAddress";
+			enum "distinctCountOfDestinationIPAddress";
+			enum "distinctCountOfSourceIPv4Address";
+			enum "distinctCountOfDestinationIPv4Address";
+			enum "distinctCountOfSourceIPv6Address";
+			enum "distinctCountOfDestinationIPv6Address";
+			enum "valueDistributionMethod";
+			enum "rfc3550JitterMilliseconds";
+			enum "rfc3550JitterMicroseconds";
+			enum "rfc3550JitterNanoseconds";
+			enum "dot1qDEI";
+			enum "dot1qCustomerDEI";
+			enum "flowSelectorAlgorithm";
+			enum "flowSelectedOctetDeltaCount";
+			enum "flowSelectedPacketDeltaCount";
+			enum "flowSelectedFlowDeltaCount";
+			enum "selectorIDTotalFlowsObserved";
+			enum "selectorIDTotalFlowsSelected";
+			enum "samplingFlowInterval";
+			enum "samplingFlowSpacing";
+			enum "flowSamplingTimeInterval";
+			enum "flowSamplingTimeSpacing";
+			enum "hashFlowDomain";
+			enum "transportOctetDeltaCount";
+			enum "transportPacketDeltaCount";
+			enum "originalExporterIPv4Address";
+			enum "originalExporterIPv6Address";
+			enum "originalObservationDomainId";
+			enum "intermediateProcessId";
+			enum "ignoredDataRecordTotalCount";
+			enum "dataLinkFrameType";
+			enum "sectionOffset";
+			enum "sectionExportedOctets";
+			enum "dot1qServiceInstanceTag";
+			enum "dot1qServiceInstanceId";
+			enum "dot1qServiceInstancePriority";
+			enum "dot1qCustomerSourceMacAddress";
+			enum "dot1qCustomerDestinationMacAddress";
+			enum "postLayer2OctetDeltaCount";
+			enum "postMCastLayer2OctetDeltaCount";
+			enum "postLayer2OctetTotalCount";
+			enum "postMCastLayer2OctetTotalCount";
+			enum "minimumLayer2TotalLength";
+			enum "maximumLayer2TotalLength";
+			enum "droppedLayer2OctetDeltaCount";
+			enum "droppedLayer2OctetTotalCount";
+			enum "ignoredLayer2OctetTotalCount";
+			enum "notSentLayer2OctetTotalCount";
+			enum "layer2OctetDeltaSumOfSquares";
+			enum "layer2OctetTotalSumOfSquares";
+			enum "layer2FrameDeltaCount";
+			enum "layer2FrameTotalCount";
+			enum "pseudoWireDestinationIPv4Address";
+			enum "ignoredLayer2FrameTotalCount";
+		}
+	}
+
+	augment /service:service {
+		container flow-monitoring {
+			configd:help "Flow-Monitoring traffic monitoring configuration";
+			configd:validate "exportd-config.pl --action=validate_all_interfaces";
+			configd:end "exportd-config.pl --action=apply";
+
+			list exporter {
+				configd:help "Flow-Monitoring exporter configuration";
+				key "exporter-name";
+
+				leaf exporter-name {
+					configd:help "Flow monitoring exporter configuration";
+					type module-name;
+				}
+				container udp-collector {
+					configd:help "Flow-Monitoring export destination configuration";
+
+					leaf address {
+						type union {
+							type types:ipv4-address;
+							type types:ipv6-address;
+						}
+						mandatory true;
+						configd:help "Collector address";
+					}
+
+					leaf port {
+						type inet:port-number;
+						mandatory true;
+						configd:help "Collector UDP port";
+					}
+
+					leaf mtu {
+						type uint16 {
+							range 92..65535;
+						}
+						default 1400;
+						configd:help "Collector UDP MTU size";
+					}
+				}
+
+				leaf protocol-version {
+					configd:help "Flow-Monitoring export protocol";
+					type enumeration {
+						enum "NFV9";
+						enum "IPFIX";
+					}
+					default "NFV9";
+				}
+
+				leaf max-record-rate {
+					configd:help "Maximum number of flow records per second sent to collector";
+					type uint32;
+					default 0;
+				}
+
+				leaf template-refresh-interval {
+					configd:help "Interval for periodic sending of templates";
+					type uint32 {
+						range 1..3600;
+					}
+					default 20;
+				}
+
+			}
+
+			list aggregator {
+				configd:help "Flow-Monitoring aggregator configuration";
+				key "aggregator-name";
+
+				leaf aggregator-name {
+					configd:help "Flow monitoring aggregator configuration";
+					type module-name;
+				}
+
+				container rule {
+					configd:help "Aggregator Rule configuration";
+
+					leaf-list key {
+						configd:help "Key field to aggregate on";
+						type fields;
+						min-elements 1;
+					}
+
+					leaf-list non-key {
+						configd:help "Non key field to collect";
+						type fields;
+					}
+				}
+
+				container expiration {
+					configd:help "Aggregator Expiration configuration";
+					leaf inactive-timeout {
+						configd:help "Expiration timeout for idle/inactive flows";
+						type uint32;
+						default 0;
+					}
+					leaf active-timeout {
+						configd:help "Expiration timeout for long-lasting flows";
+						type uint32;
+						default 0;
+					}
+				}
+
+				leaf hashtable-bits {
+					configd:help "Length of hashtable used for aggregation in bits";
+					type uint32 {
+						range 1..32;
+					}
+					default 17;
+				}
+
+				uses next;
+			}
+
+			list ipfix-udp-collector {
+				if-feature ipfix-collector;
+				configd:help "Flow monitoring collector configuration";
+				key "collector-name";
+
+				leaf collector-name {
+					configd:help "Flow-Monitoring collector configuration";
+					type module-name;
+				}
+
+				leaf address {
+					type types:ipv4-address;
+					configd:help "IP address at which collector receives IPFIX Messages";
+				}
+
+				leaf port {
+					type inet:port-number;
+					configd:help "UDP port at which collector receives IPFIX Messages";
+				}
+
+				uses next;
+			}
+
+			list selector {
+				configd:help "Flow-Monitoring selector configuration";
+				configd:end "vplane-netflow.pl --cmd=configure_all";
+				key "selector-name";
+
+				leaf selector-name {
+					configd:help "Flow-Monitoring selector configuration";
+					type module-name;
+				}
+
+				container randomly {
+					presence "true";
+					configd:help "Random sampling";
+
+					leaf out-of {
+						configd:help "The rate to sample at";
+						type uint32 {
+							range 10..10000;
+						}
+						default 1000;
+					}
+				}
+			}
+		}
+	}
+
+	grouping interface-parameters {
+		container flow-monitoring {
+			presence "Enable monitoring of flows on this interface";
+			configd:help "Flow-Monitoring configuration for interface";
+			configd:end "exportd-config.pl --action=apply";
+
+			leaf selector {
+				type module-name;
+				mandatory true;
+				configd:help "Flow-Monitoring selector name";
+				configd:allowed "exportd-config.pl --action=list_selectors";
+				configd:validate "exportd-config.pl --action=validate_interface_selector --selector=$VAR(@)";
+				configd:end "vplane-netflow.pl --intf=$VAR(../../@) --type=$VAR(../..)";
+			}
+
+			uses next-exp;
+			uses next-agg;
+		}
+	}
+
+	augment /if:interfaces/interfaces-dataplane:dataplane {
+		uses interface-parameters;
+	}
+}

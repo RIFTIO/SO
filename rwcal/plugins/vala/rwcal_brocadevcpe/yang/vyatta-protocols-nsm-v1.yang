@@ -1,0 +1,88 @@
+module vyatta-protocols-nsm-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-protocols-nsm:1";
+	prefix vyatta-protocols-nsm-v1;
+
+	import vyatta-protocols-v1 {
+		prefix protocols;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-06 {
+		description "Initial revision of version 1";
+	}
+
+	augment /protocols:protocols {
+		container nsm {
+			configd:priority "650";
+			configd:help "NSM parameters";
+			container log {
+				configd:help "NSM logging parameters";
+				leaf all {
+					type empty;
+					configd:help "Enable all NSM logs";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/nsm/log/configd_create.sh";
+				  configd:delete "/opt/vyatta/share/tmplscripts/protocols/nsm/log/configd_delete.pl $VAR(@)";
+
+				}
+				leaf events {
+					type empty;
+					configd:help "Enable NSM events logs";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/nsm/log/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/nsm/log/configd_delete.pl $VAR(@)";
+				}
+				leaf kernel {
+					type empty;
+					configd:help "Enable NSM kernel logs";
+					configd:create "/opt/vyatta/share/tmplscripts/protocols/nsm/log/configd_create.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/protocols/nsm/log/configd_delete.pl $VAR(@)";
+				}
+				container ha {
+					configd:help "NSM HA logs";
+					leaf all {
+						type empty;
+						configd:help "Enable NSM HA logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/nsm/log/ha/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/nsm/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+				}
+				container packet {
+					configd:help "NSM packet logs";
+					leaf all {
+						type empty;
+						configd:help "Enable NSM packet all logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/nsm/log/packet/configd_create.sh";
+					 	configd:delete "/opt/vyatta/share/tmplscripts/protocols/nsm/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf detail {
+						type empty;
+						configd:help "Enable NSM packet detail logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/nsm/log/packet/configd_create.sh";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/nsm/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf send {
+						type empty;
+						configd:help "Enable NSM packet send logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/nsm/log/packet/configd_create.sh";
+				   	configd:delete "/opt/vyatta/share/tmplscripts/protocols/nsm/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+					leaf recv {
+						type empty;
+						configd:help "Enable NSM packet recv logs";
+						configd:create "/opt/vyatta/share/tmplscripts/protocols/nsm/log/packet/configd_create.sh";
+				   	configd:delete "/opt/vyatta/share/tmplscripts/protocols/nsm/log/configd_delete.pl $VAR(../@) $VAR(@)";
+					}
+				}
+			}
+		}
+	}
+}

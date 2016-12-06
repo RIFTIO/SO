@@ -1,0 +1,22 @@
+module vyatta-protocols-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-protocols:1";
+	prefix vyatta-protocols-v1;
+
+	import configd-v1 { prefix configd; }
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		 	 San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-05 {
+		description "Initial revision of version 1.";
+	}
+
+	container protocols {
+		configd:help "Routing protocol parameters";
+	}
+}

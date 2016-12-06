@@ -1,0 +1,169 @@
+module vyatta-op-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-op:1";
+	prefix vyatta-op-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	description "Supported RPC calls.
+		     Do not add anything to this file.";
+	organization "Brocade Communications Systems, Inc.";
+	contact	"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	rpc ping {
+		description "Generates Ping and return response";
+		input {
+			leaf host {
+				type union {
+					type types:ip-address;
+					type types:domain-name;
+				}
+				mandatory true;
+			}
+			leaf count {
+				type uint32 {
+					range 1..30;
+				}
+				default 3;
+				description "Number of ping echo request message to send";
+			}
+			leaf ttl {
+				type uint8;
+				default "255";
+				description "IP Time To Live";
+			}
+		}
+		output {
+			leaf tx-packet-count {
+				type uint32;
+				description "Transmitted Packet count";
+			}
+			leaf rx-packet-count {
+				type uint32;
+				description "Received packet count";
+			}
+			leaf min-delay {
+				type uint32;
+				units "milliseconds";
+				description "Minimum packet delay";
+			}
+			leaf average-delay {
+				type uint32;
+				units "milliseconds";
+				description "Average packet delay";
+			}
+			leaf max-delay {
+				type uint32;
+				units "millisecond";
+				description "Minimum packet delay";
+			}
+		}
+		configd:call-rpc "/opt/vyatta/bin/yangop-ping.pl";
+	}
+	rpc interface {
+		input {
+			leaf name {
+				type string {
+					length 1..16;
+				}
+				mandatory true;
+				description "Interface name to query";
+			}
+		}
+		output {
+			list address {
+				key ip;
+				leaf ip {
+					type types:ip-prefix;
+					description "Interface IP address";
+				}
+			}
+			leaf admin-status {
+				type enumeration {
+					enum up;
+					enum down;
+					enum testing;
+				}
+				description "Interface's desired state";
+			}
+			leaf oper-status {
+				type enumeration {
+					enum up;
+					enum down;
+					enum testing;
+					enum unknown;
+					enum dormant;
+					enum notpresent;
+					enum lowerlayerdown;
+				}
+				description "Interface's current operational state";
+			}
+			leaf description {
+				type string;
+				description "Interface description";
+			}
+		}
+		configd:call-rpc "/opt/vyatta/bin/yangop-interface.pl";
+	}
+	rpc route {
+		typedef destination {
+			type union {
+				type types:ip-address;
+				type types:ip-prefix;
+			}
+		}
+		input {
+			leaf family {
+				type enumeration {
+					enum ipv4;
+					enum ipv6;
+				}
+				default ipv4;
+			}
+			leaf destination {
+				type destination;
+				description "Destination host or network";
+			}
+		}
+		output {
+			list route {
+				key destination;
+				leaf destination {
+					type destination;
+					description "Destination";
+				}
+				leaf source {
+					type types:ip-address;
+					description "Source address";
+				}
+				list path {
+					key entry;
+					leaf entry {
+						type uint64;
+					}
+					leaf device {
+						type string;
+						description "Device name";
+					}
+					leaf next-hop {
+						type types:ip-address;
+						description "Next-hop";
+					}
+				}
+			}
+		}
+		configd:call-rpc "/opt/vyatta/bin/yangop-route.pl";
+	}
+}

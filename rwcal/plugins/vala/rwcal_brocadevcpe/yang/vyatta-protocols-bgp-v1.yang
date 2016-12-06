@@ -1,0 +1,1278 @@
+module vyatta-protocols-bgp-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-protocols-bgp:1";
+	prefix vyatta-protocols-bgp-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-protocols-v1 {
+		prefix protocols;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}   
+	import vyatta-service-snmp-v1 {
+		prefix service-snmp;
+	} 
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-09-23 {
+		description "Initial revision of version 1";
+	}
+
+	grouping neighbor-route-map {
+		container route-map {
+			configd:help "Route-map to filter route updates to/from this entity (neighbor or peer-group)";
+			leaf export {
+				type string;
+				configd:help "Route-map to filter outgoing route updates to this peer-group";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+			}
+			leaf import {
+				type string;
+				configd:help "Route-map to filter incoming route updates from this entity (neighbor or peer-group)";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+			}
+		}
+	}
+	grouping neighbor-vrrp-failover {
+		list interface          {
+			description "This list is added to link the BGP VRRP group with interface VRRP group";
+			max-elements "1";
+			configd:help "VRRP Interface";
+			configd:allowed "/opt/vyatta/sbin/vyatta-interfaces.pl --show all";
+			key "ifname";
+			leaf ifname {
+				description "VRRP Interface Name";
+				type types:interface-ifname;
+			}
+			container vrrp-failover {
+				description "Configure VRRP Failover Action";
+				presence "VRRP Failover Action";
+				configd:help "VRRP Failover";
+				list vrrp-group {
+					description "VRRP Group to associate the neighbor with";
+					max-elements "1";
+					configd:help "VRRP Group to associate the neighbor with";
+					configd:create "${vyatta_sbindir}/vyatta-async-notify-bgp.pl $VAR(@) $VAR(../../@)";
+					key "groupid";
+					leaf groupid {
+						description "VRRP Group ID";
+						type uint8 {
+							range 1..max;
+						}
+						configd:help "VRRP Group ID";
+					}
+					leaf prepend-as {
+						description "Prepend AS Path for outbound routes while VRRP is backup";
+						type string {
+							pattern '[0-9]+( [0-9]+)*' {
+								error-message "as-path should be string of numbers";
+							}
+							configd:syntax "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-group/vrrp-failover/prepend-as/configd_syntax1.cli";
+						}
+						configd:help "Prepend AS Path";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-group/vrrp-failover/prepend-as/configd_validate1.cli";
+					}
+					leaf med {
+						description "Set MED value for outbound routes while VRRP is backup";
+						type uint32 {
+							range 1..4294967294;
+						}
+						configd:help "Set MED value for outbound routes while VRRP is backup";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-group/vrrp-failover/med/configd_validate1.cli";
+					}
+					leaf route-map {
+						description "Route-map to modify route attributes while VRRP is backup";
+						type string {
+							length "1..63";
+						}
+						configd:help "Route-map to modify route attributes";
+						configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+					}
+				}
+			}
+		}
+	}
+	grouping neighbor-med-out {
+		container med-out {
+			configd:help "Allow MED to be sent out";
+			configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/neighbor/med-out/configd_validate1.cli";
+			container igp {
+				presence "true";
+				configd:help "Send MED based on IGP metric";
+				leaf delay-updates {
+					type empty;
+					configd:help "Delay updates of MED";
+				}
+			}
+			leaf minimum-igp {
+				type empty;
+				configd:help "Send MED based on minimal IGP metric";
+			}
+		}
+	}
+	grouping neighbor-cluster-id {
+		leaf cluster-id {
+			configd:help "Neighbor Cluster-id";
+			configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/neighbor/cluster-id/configd_validate.cli";
+			type union {
+				type types:ipv4-address{
+					configd:syntax "/opt/vyatta/sbin/vyatta-bgp.pl --validate-id $VAR(@)";
+				}
+				type uint32 {
+					range 1..max;
+					configd:help "Neighbor Cluster-id as 32-bit number";
+				}
+			}
+		}
+	}
+	grouping ipv4-aggregate-address {
+		list aggregate-address {
+			configd:help "BGP aggregate network";
+			key "tagnode";
+			leaf tagnode {
+				type types:ipv4-prefix {
+					configd:syntax "/opt/vyatta/share/tmplscripts/protocols/bgp/address-family/ipv4-unicast/aggregate-address/configd_syntax1.cli";
+				}
+				configd:help "BGP aggregate network";
+			}
+			leaf as-set {
+				type empty;
+				configd:help "Generate AS-set path information for this aggregate address";
+			}
+			leaf summary-only {
+					type empty;
+					configd:help "Announce the aggregate summary network only";
+				}
+			}
+	}
+	grouping ipv6-aggregate-address {
+		list aggregate-address {
+				configd:help "BGP aggregate network";
+				key "tagnode";
+				leaf tagnode {
+					type types:ipv6-prefix {
+						configd:syntax "/opt/vyatta/share/tmplscripts/protocols/bgp/address-family/ipv6-unicast/aggregate-address/configd_syntax1.cli";
+					}
+				configd:help "BGP IPv6 aggregate network";
+				}
+				leaf as-set {
+					type empty;
+					configd:help "Generate AS-set path information for this aggregate address";
+				}
+				leaf summary-only {
+					type empty;
+					configd:help "Announce the aggregate summary network only";
+				}
+			}
+	}
+
+	grouping parameters-distance {
+		container distance {
+			presence "true";
+			configd:help "Administrative distances for BGP routes";
+			container global {
+				presence "true";
+				configd:help "Global administrative distances for BGP routes";
+				leaf local {
+					type uint32 {
+						range 1..255;
+					}
+					configd:help "Administrative distance for local BGP routes";
+					default "200";
+				}
+				leaf internal {
+					type uint32 {
+						range 1..255;
+					}
+					configd:help "Administrative distance for internal BGP routes";
+					default "200";
+				}
+				leaf external {
+					type uint32 {
+						range 1..255;
+					}
+					configd:help "Administrative distance for external BGP routes";
+					default "20";
+				}
+			}
+		}
+	}
+	grouping parameters-dampening {
+		container dampening {
+			presence "true";
+			configd:help "Enable route-flap dampening";
+			configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/address-family/parameters/dampening/configd_validate1.cli";
+			leaf re-use {
+				type uint32 {
+					range 1..20000;
+				}
+				default "750";
+				configd:help "Penalty value to start reusing a route [REQUIRED]";
+			}
+			leaf half-life {
+				type uint32 {
+					range 1..45;
+				}
+				default "15";
+				configd:help "Half-life time for dampening [REQUIRED]";
+			}
+			leaf start-suppress {
+				type uint32 {
+					range 1..20000;
+				}
+				default "2000";
+				configd:help "Penalty value to start suppressing a route [REQUIRED]";
+			}
+			leaf max-suppress-time {
+				type uint32 {
+					range 1..255;
+				}
+				default "60";
+				configd:help "Maximum duration to suppress a stable route [REQUIRED]";
+			}
+			leaf un-reachability-half-life {
+				type uint32 {
+					range 1..45;
+				}
+				configd:help "Un-reachability half-life time for the penalty in minutes";
+			}
+		}
+	}
+	
+	grouping network-ipv4 {
+		list network {
+			configd:help "BGP network";
+			configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/address-family/ipv4-unicast/network/configd_validate1.cli";
+			key "tagnode";
+			leaf tagnode {
+				type types:ipv4-prefix {
+					configd:syntax "/opt/vyatta/share/tmplscripts/protocols/bgp/address-family/ipv4-unicast/network/configd_syntax1.cli";
+				}
+				configd:help "BGP network";
+			}
+			leaf backdoor {
+				type empty;
+				configd:help "Network as a backdoor route";
+			}
+			leaf route-map {
+				type string;
+				configd:help "Route-map to modify route attributes";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+			}
+		}
+	}
+	
+	grouping redistribute-ipv4 {
+		container redistribute {
+			presence "true";
+			configd:help "Redistribute routes from other protocols into BGP";
+			container kernel {
+				presence "true";
+				configd:help "Redistribute kernel routes into BGP";
+				leaf route-map {
+					type string;
+					configd:help "Route map to filter redistributed routes";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+				}
+			}
+			container rip {
+				presence "true";
+				configd:help "Redistribute RIP routes into BGP";
+				leaf route-map {
+					type string;
+					configd:help "Route map to filter redistributed routes";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+				}
+			}
+			container connected {
+				presence "true";
+				configd:help "Redistribute connected routes into BGP";
+				leaf route-map {
+					type string;
+					configd:help "Route map to filter redistributed routes";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+				}
+			}
+			container static {
+				presence "true";
+				configd:help "Redistribute static routes into BGP";
+				leaf route-map {
+					type string;
+					configd:help "Route map to filter redistributed routes";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+				}
+			}
+			container ospf {
+				presence "true";
+				configd:help "Redistribute OSPF routes into BGP";
+				leaf route-map {
+					type string;
+					configd:help "Route map to filter redistributed routes";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+				}
+			}
+		}
+	}
+	
+	grouping network-ipv6 {
+		list network {
+			configd:help "BGP IPv6 network";
+			configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/address-family/ipv6-unicast/network/configd_validate1.cli";
+			key "tagnode";
+			leaf tagnode {
+				type types:ipv6-prefix {
+					configd:syntax "/opt/vyatta/share/tmplscripts/protocols/bgp/address-family/ipv6-unicast/network/configd_syntax1.cli";
+				}
+				configd:help "BGP IPv6 network";
+			}
+			leaf backdoor {
+				type empty;
+				configd:help "Network as a backdoor route";
+			}
+			leaf route-map {
+				type string;
+				configd:help "Route-map to modify route attributes";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+			}
+		}
+	}
+	
+	grouping redistribute-ipv6 {
+		container redistribute {
+			presence "true";
+			configd:help "Redistribute routes from other protocols into BGP";
+			container kernel {
+				presence "true";
+				configd:help "Redistribute kernel routes into BGP";
+				leaf route-map {
+					type string;
+					configd:help "Route map to filter redistributed routes";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+				}
+			}
+			container ripng {
+				presence "true";
+				configd:help "Redistribute RIP routes into BGP";
+				leaf route-map {
+					type string;
+					configd:help "Route map to filter redistributed routes";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+				}
+			}
+			container connected {
+				presence "true";
+				configd:help "Redistribute connected routes into BGP";
+				leaf route-map {
+					type string;
+					configd:help "Route map to filter redistributed routes";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+				}
+			}
+			container static {
+				presence "true";
+				configd:help "Redistribute static routes into BGP";
+				leaf route-map {
+					type string;
+					configd:help "Route map to filter redistributed routes";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+				}
+			}
+			container ospfv3 {
+				presence "true";
+				configd:help "Redistribute OSPF routes into BGP";
+				leaf route-map {
+					type string;
+					configd:help "Route map to filter redistributed routes";
+					configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+				}
+			}
+		}	
+	}
+	
+	/* BGP Global parameters
+	protocols bgp <as-num> parameters
+	   - extended-asn-capability
+	   - nexthop-trigger [enable | delay <1-100>]
+	*/
+	grouping bgp-global-params {
+		leaf extended-asn-capability {
+			type empty;
+			configd:help "Enable Extended ASN Capability (4 octet ASN)";
+		}
+	}
+	
+	grouping bgp_confederation {
+		container confederation {
+			presence "true";
+			configd:help "AS confederation parameters";
+			leaf identifier {
+				type uint32 {
+					range 1..max;
+				}
+				configd:validate "/opt/vyatta/sbin/vyatta-bgp.pl --extended-ASN-check $VAR(@) --as $VAR(../../../@)";
+				configd:help "Confederation AS identifier [REQUIRED]";
+			}
+			leaf-list peers {
+				type uint32 {
+					range 1..max;
+				}
+				ordered-by "user";
+				configd:help "Peer ASs in the BGP confederation";
+				configd:validate "/opt/vyatta/sbin/vyatta-bgp.pl --extended-ASN-check $VAR(@) --as $VAR(../../../@)";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/parameters/confederation/peers/configd_validate1.cli";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/parameters/confederation/peers/configd_validate2.cli";
+				configd:delete "/opt/vyatta/sbin/vyatta-bgp.pl --confed-iBGP-ASN-check-del $VAR(@) --as $VAR(../../../@)";
+			}
+		} /*confederation*/
+	}
+	
+	grouping neigh_peer_grp_ipv4_lists {
+		container prefix-list {
+			configd:help "Prefix-list to filter route updates to/from this entity (neighbor or peer-group)";
+			leaf export {
+				type string;
+				configd:help "Prefix-list to filter outgoing route updates to this peer-group";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh prefix-list ipv4-unicast";
+			}
+			leaf import {
+				type string;
+				configd:help "Prefix-list to filter incoming route updates from this peer-group";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh prefix-list ipv4-unicast";
+			}
+		}
+		container distribute-list {
+			configd:help "Access-list to filter route updates to/from this entity (peer-group or neighbor)";
+			leaf export {
+				type uint32 {
+					range 1..65535;
+				}
+				configd:help "Access-list to filter outgoing route updates to this entity (peer-group or neighbor)";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh distribute-list ipv4-unicast";
+			}
+			leaf import {
+				type uint32 {
+					range 1..65535;
+				}
+				configd:help "Access-list to filter incoming route updates from this entity (peer-group or neighbor)";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh distribute-list ipv4-unicast";
+			}
+		}
+	}
+	
+	grouping neigh_peer_grp_ipv6_lists {
+		container prefix-list {
+			presence "true";
+			configd:help "Prefix-list to filter route updates to/from this entity (neighbor or peer-group)";
+			leaf export {
+				type string;
+				configd:help "Prefix-list to filter outgoing route updates to this peer-group";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh prefix-list ipv6-unicast";
+			}
+			leaf import {
+				type string;
+				configd:help "Prefix-list to filter incoming route updates from this peer-group";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh prefix-list ipv6-unicast";
+			}
+		}
+		container distribute-list {
+			presence "true";
+			configd:help "Access-list to filter route updates to/from this entity (peer-group or neighbor)";
+			leaf export {
+				type uint32 {
+					range 1..65535;
+				}
+				configd:help "Access-list to filter outgoing route updates to this entity (peer-group or neighbor)";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh distribute-list ipv6-unicast";
+			}
+			leaf import {
+				type uint32 {
+					range 1..65535;
+				}
+				configd:help "Access-list to filter incoming route updates from this entity (peer-group or neighbor)";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh distribute-list ipv6-unicast";
+			}
+		}
+	}
+	
+	/* BGP per instance parameters
+	protocols bgp <as-num> parameters
+	   - no-rtm
+	   - cluster-id <text>
+	   - always-compare-med
+	   - confederation  (identifier <1-65535> | peer  <1-65535>)
+	   - default local-pref <0-4294967295>
+	   - graceful-restart [graceful-reset | restart-time <1-3600> | stalepath-time <1-3600>]
+	   - bestpath (as-path (confed | ignore) | compare-routerid |
+	                med (confed | missing-as-worst))
+	   - log-neighbor-changes
+	   - no-fast-external-failover
+	   - enforce-first-as
+	   - scan-time <5-60>
+	   - no-client-to-client-reflection
+	   - deterministic-med
+	   - maximum-paths (ebgp|ibgp) <2-64>
+	   - router-id <x.x.x.x>
+	*/
+	grouping bgp-per-inst-params {
+		leaf no-rtm {
+			type empty;
+			configd:help "Prevent the installation of BGP learned routes into rtm";
+		}
+		leaf cluster-id {
+			type types:ipv4-address {
+				configd:syntax "/opt/vyatta/sbin/vyatta-bgp.pl --validate-id $VAR(@)"; 
+			}
+			configd:help "Route-reflector cluster-id";
+		}
+		leaf always-compare-med {
+			type empty;
+			configd:help "Always compare MEDs from different neighbors";
+		}
+		container default {
+			presence "true";
+			configd:help "BGP defaults";
+			leaf local-pref {
+				type uint32;
+				configd:help "Default local preference (higher=more preferred)";
+			}
+		}
+		uses bgp_confederation;
+		container graceful-restart {
+			presence "true";
+			configd:help "Graceful restart capability parameters";
+			leaf graceful-reset {
+				type empty;
+				configd:help "Enable graceful reset capability";
+			}
+			leaf restart-time {
+				type uint32 {
+					range 1..3600;
+				}
+				default "90";
+				configd:help "Max time needed for Neighbor(s) to restart";
+			}
+			leaf stalepath-time {
+				type uint32 {
+					range 1..3600;
+				}
+				default "360";
+				configd:help "Maximum time to hold onto restarting peer's stale paths";
+			}
+		} /*graceful-restart*/
+		container bestpath {
+			presence "true";
+			configd:help "Default bestpath selection mechanism";
+			container med {
+				presence "true";
+				configd:help "MED attribute comparison parameters";
+				container confed {
+					presence "true";
+					configd:help "Compare MEDs among confederation paths";
+					leaf missing-as-worst {
+						type empty;
+						configd:help "Treat missing route as a MED as the least preferred one";
+					}
+				}
+				leaf missing-as-worst {
+					type empty;
+					configd:help "Treat missing route as a MED as the least preferred one";
+				}
+			}
+			container as-path {
+				presence "true";
+				configd:help "AS-path attribute comparison parameters";
+				leaf ignore {
+					type empty;
+					configd:help "Ignore AS-path length in selecting a route";
+				}
+				leaf confed {
+					type empty;
+					configd:help "Compare AS-path lengths including confederation sets & sequences";
+				}
+			}
+			leaf compare-routerid {
+				type empty;
+				configd:help "Compare the router-id for identical eBGP paths";
+			}
+			leaf igp-metric-ignore {
+				type empty;
+				configd:help "Ignore IGP metric in BGP paths comparison";
+			}
+		} /*bestpath*/
+		leaf log-neighbor-changes {
+			type empty;
+			configd:help "Log neighbor up/down changes and reset reason";
+		}
+		leaf no-fast-external-failover {
+			type empty;
+			configd:help "Disable immediate session reset if peer's connected link goes down";
+		}
+		leaf enforce-first-as {
+			type empty;
+			configd:help "Require first AS in the path to match peer's AS";
+		}
+		leaf scan-time {
+			type uint32 {
+				range 5..60;
+			}
+			configd:help "BGP route scanner interval";
+		}
+		leaf maximum-as-limit {
+			description "maximum-as-limit specifies maximum length of AS numbers in ASPATH or AS4PATH attribute";
+			type uint8 {
+				range 1..254; 
+			}
+			configd:help "BGP maximum-as-limit for update message";
+			default "254";
+		}
+		leaf med-out-delay {
+			type uint32 {
+				range 10..600;
+			}
+			configd:help "Max time to defer MED updates";
+		}
+		container no-client-to-client-reflection {
+			configd:help "Disable client to client route reflection";
+			leaf all {
+				type empty;
+				configd:help "Disable all client to client route reflection";
+			}
+			leaf-list cluster-id {
+				configd:help "Configure intra-cluster reflection";
+				type union {
+					type types:ipv4-address {
+						configd:syntax "/opt/vyatta/sbin/vyatta-bgp.pl --validate-id $VAR(@)"; 
+					}
+					type enumeration {
+						enum "any";
+						configd:help "Configure intra-cluster reflection for any cluster id";
+					}
+				}
+			}
+		}
+		leaf deterministic-med {
+			type empty;
+			configd:help "Compare MEDs between different peers in the same AS";
+		}
+		container maximum-paths {
+			configd:help "BGP multipaths";
+			leaf ibgp {
+				type uint32 {
+					range 2..64;
+				}
+				configd:help "Maximum iBGP multipaths";
+			}
+			leaf ebgp {
+				type uint32 {
+					range 2..64;
+				}
+				configd:help "Maximum eBGP multipaths";
+			}
+		}
+		leaf router-id {
+			type types:ipv4-address{
+				configd:syntax "/opt/vyatta/sbin/vyatta-bgp.pl --validate-id $VAR(@)"; 
+			}
+			configd:help "BGP router id";
+		}
+	}
+	/*Peer-group and neighbor common settings (no families)
+	   - advertisement-interval <0-65535>
+	   - as-origination-interval <1-65535>
+	   - capability dynamic
+	   - capability route-refresh
+	   - disable-capability-negotiation
+	   - description <text>
+	   - ebgp-multihop [ max-hop <1-255>]
+	   - enforce-multihop
+	   - local-as <1-4294967295>
+	   - passive
+	   - port <1-65535>
+	   - remote-as <1-4294967295>
+	   - shutdown
+	   - timers (holdtime <0|3-65535>  keepalive <0-65535> | connect <1-65535>)
+	   - ttl-security <1-255>
+	   - update-source <text> 
+	   - override-capability
+	   - password
+	   - strict-capability-match
+	   - vrrp-failover
+	   - cluster-id*/
+	grouping peer-grp-neighbor-common-options {
+		uses neighbor-vrrp-failover;
+		uses neighbor-med-out;
+		uses neighbor-cluster-id;
+		leaf strict-capability-match {
+			type empty;
+			configd:help "Enable strict capability negotiation";
+		}		
+		leaf password {
+			type string {
+				configd:syntax "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-grp-neigh/password/configd_syntax1.cli";
+			}
+			configd:secret "true";
+			configd:help "BGP MD5 password";
+		}
+		leaf override-capability {
+			type empty;
+			configd:help "Ignore capability negotiation with specified neighbor";
+		}
+		list local-as {
+			max-elements "1";
+			configd:help "Local AS to allow customization of AS number";
+			key "tagnode";
+			leaf tagnode {
+				type uint32 {
+					range 1..max;
+					configd:help "Minimum interval between routing updates";
+				}
+				configd:validate "/opt/vyatta/sbin/vyatta-bgp.pl --extended-ASN-check $VAR(@) --as $VAR(../../@)";
+			}
+		}
+		leaf as-origination-interval {
+			type uint32 {
+				range 1..65535;
+			}
+			configd:help "Minimum interval between AS origination routing updates";
+		}
+		container ttl-security {
+			presence "true";
+			configd:help "Ttl security mechanism for this entity (neighbor or peer-group)";
+			leaf hops {
+				type uint32 {
+					range 1..254;
+				}
+				configd:help "Number of the maximum number of hops to the BGP peer";
+			}
+		}
+		container capability {
+			presence "true";
+			configd:help "Advertise capabilities to this entity (neighbor or peer-group)";
+			leaf dynamic {
+				type empty;
+				configd:help "Advertise dynamic capability to this entity (neighbor or peer-group)";
+			}
+			leaf route-refresh {
+				type empty;
+				configd:help "Enable route-refresh capability advertisement for this entity (neighbor or peer-group)";
+			}
+		}
+		leaf disable-capability-negotiation {
+				type empty;
+				configd:help "Disable capability negotiation with this entity (neighbor or peer-group)";
+		}
+		leaf enforce-multihop {
+			type empty;
+			configd:help "Enforce multihop for eBGP neighbors";
+		}
+		leaf description {
+			type string {
+				configd:syntax "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-grp-neigh/description/configd_syntax1.cli";
+			}
+			configd:help "Description for this entity (neighbor or peer-group)";
+		}
+		leaf update-source {
+			type union {
+				type types:ipv4-address;
+				type types:ipv6-address;
+				type types:interface-ifname;
+			}
+			configd:help "Source address or interface of routing updates";
+		}
+		leaf advertisement-interval {
+			type uint32 {
+				range 0..65535;
+			}
+			configd:help "Minimum interval for sending routing updates";
+		}
+		leaf passive {
+			type empty;
+			configd:help "Do not initiate a session with this entity (neighbor or peer-group)";
+		}
+		leaf port {
+			type uint32 {
+				range 1..65535;
+			}
+			configd:help "Neighbor's/Peer-group's BGP port";
+		}
+		leaf shutdown {
+			type empty;
+			configd:help "Administratively shut down neighbor";
+		}
+		container timers {
+			presence "true";
+			configd:help "Neighbor/Peer-group timers";
+			leaf connect {
+				type uint32 {
+					range 1..65535;
+				}
+				configd:help "BGP connect timer for this entity (neighbor or peer-group)";
+			}
+			leaf holdtime {
+				type uint32 {
+					range "0 | 3..65535";
+				}
+				default "90";
+				configd:help "BGP hold timer for this entity (neighbor or peer-group)";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/timers/holdtime/configd_holdtime_validate.sh";
+			}
+			leaf keepalive {
+				type uint32 {
+					range 0..65535;
+				}
+				default "30";
+				configd:help "BGP keepalive interval for this neighbor";
+			}
+		}
+		leaf ebgp-multihop {
+			type uint32 {
+				range 1..255;
+			}
+			configd:help "Allow this eBGP neighbor to not be on a directly connected network";
+		}
+		leaf remote-as {
+			type uint32 {
+				range 1..max;
+			}
+			configd:validate "/opt/vyatta/sbin/vyatta-bgp.pl --extended-ASN-check $VAR(@) --as $VAR(../../@)";
+			configd:help "Entity (peer-group or neighbor) BGP AS number [REQUIRED]";
+		}
+	}
+
+	/*Peer-group & neighbor common parameters
+	neighbor (<x.x.x.x>| <h:h:h:h:h:h:h:h>) | peer-group <text> [address-family (ipv4-unicast| ipv6-unicast)
+	   - allowas-in [number <1-10>]
+	   - attribute-unchanged [as-path]|[next-hop]|[med]
+	   - filter-list (import <text> | export <text>)
+	   - maximum-prefix <1-4294967295> [threshold | warning-only]
+	   - remove-private-as
+	   - route-reflector-client
+	   - disable-send-community (extended | standard)
+	   - weight <1-65535>
+	   - capability graceful-restart
+	   - route-map (import <text> | export <text>)
+	   - default-originate [route-map <text>]
+	   - soft-reconfiguration inbound
+	   - unsuppress-map
+	   - capability orf prefix-list (both|receive|send))
+	   - route-server-client
+	   - nexthop-self*/
+	grouping peer-grp-neighbor-afi-common-settings {
+		uses neighbor-route-map;	
+		container filter-list {
+			presence "true";
+			configd:help "As-path-list to filter route updates to/from this entity (peer-group or neighbor)";
+			leaf export {
+				type string;
+				configd:help "As-path-list to filter outgoing route updates to this entity (peer-group or neighbor)";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh filter-list";
+			}
+			leaf import {
+				type string;
+				configd:help "As-path-list to filter incoming route updates from this entity (peer-group or neighbor)";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh filter-list";
+			}
+		}
+		container attribute-unchanged {
+			configd:help "BGP attributes are sent unchanged";
+			leaf next-hop {
+				type empty;
+				configd:help "Send nexthop unchanged";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/neighbor/address-family/ipv4-unicast/attribute-unchanged/next-hop/configd_validate.sh";
+			}
+			leaf med {
+				type empty;
+				configd:help "Send multi-exit discriminator unchanged";
+			}
+			leaf as-path {
+				type empty;
+				configd:help "Send AS path unchanged";
+			}
+		}
+		leaf remove-private-as {
+			type empty;
+			configd:help "Remove private AS numbers from AS path in outbound route updates";
+		}
+		leaf route-reflector-client {
+			type empty;
+			configd:help "Peer-group as a route reflector client";
+		}
+		list maximum-prefix {
+			max-elements "1";
+			configd:help "Maximum number of prefixes to accept from this entity (neighbor or peer-group)";
+			key "tagnode";
+			leaf tagnode {
+				type uint32 {
+					range 1..max;
+				}
+				configd:help "Maximum number of prefixes to accept from this entity (neighbor or peer-group)";
+			}
+			leaf warning-only {
+				type empty;
+				configd:help "Only give warning message when limit is exceeded";
+			}
+			list threshold {
+				max-elements "1";
+				configd:help "Threshold value (percentage) at which to generate a warning msg";
+				key "tagnode";
+				leaf tagnode {
+					type uint32 {
+						range 1..100;
+					}
+					configd:help "Threshold value (percentage) at which to generate a warning msg";
+				}
+				leaf warning-only {
+					type empty;
+					configd:help "Only give warning message when limit is exceeded";
+				}
+			}
+		}
+		container allowas-in {
+			presence "true";
+			configd:help "Accept a route that contains the local-AS in the as-path";
+			leaf number {
+				type uint32 {
+					range 1..10;
+				}
+				configd:help "Number of occurrences of AS number";
+			}
+		}
+		leaf weight {
+			type uint32 {
+				range 1..65535;
+			}
+			configd:help "Default weight for routes from this entity (neighbor or peer-group)";
+		}
+		
+		container disable-send-community {
+			presence "true";
+			configd:help "Disable sending community attributes to this peer-group";
+			leaf extended {
+				type empty;
+				configd:help "Disable sending extended community attributes to this entity (neighbor or peer-group)";
+			}
+			leaf standard {
+				type empty;
+				configd:help "Disable sending standard community attributes to this entity (neighbor or peer-group)";
+			}
+		}
+		
+		container capability {
+			presence "true";
+			configd:help "Advertise capabilities to this entity (neighbor or peer-group)";
+			container graceful-restart {
+				presence "true";
+				configd:help "Advertise the graceful-restart capability to this entity (neighbor or peer-group)";
+				leaf disable {
+					type empty;
+					configd:help "Disable the advertisement of the graceful-restart capability to this entity (neighbor or peer-group)";
+				}
+			}
+			container orf {
+				presence "true";
+				configd:help "Advertise ORF capability to this neighbor";
+				container prefix-list {
+					presence "true";
+					configd:help "Advertise prefix-list ORF capability to this entity (neighbor or peer-group)";
+					leaf receive {
+						type empty;
+						configd:help "Capability to receive the ORF";
+					}
+					leaf send {
+						type empty;
+						configd:help "Capability to send the ORF";
+					}
+				}
+			}
+		}
+		container soft-reconfiguration {
+			presence "true";
+			configd:help "Soft reconfiguration for neighbor";
+			configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-grp-neigh/address-family/configd_validate1.cli";
+			leaf inbound {
+				type empty;
+				configd:help "Inbound soft reconfiguration for this entity (neighbor or peer-group) [REQUIRED]";
+			}
+		}
+		container default-originate {
+			presence "true";
+			configd:help "Send default route to this neighbor";
+			leaf route-map {
+				type string;
+				configd:help "Route-map to specify criteria of the default";
+				configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+			}
+		}
+		leaf unsuppress-map {
+			type string;
+			configd:help "Route-map to selectively unsuppress suppressed routes";
+			configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh route-map";
+			configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/route-map/configd_validate1.cli";
+		}
+		leaf nexthop-self {
+			type empty;
+			configd:help "Nexthop for routes sent to this peer-group to be the local router";
+		}
+		leaf route-server-client {
+			type empty;
+			configd:help "Peer-group as route server client";
+		}
+	}
+	
+	augment /protocols:protocols {
+		list bgp {
+			configd:priority "730";
+			configd:help "Border Gateway Protocol (BGP) parameters";
+			configd:end "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_end.sh";
+			configd:validate "/opt/vyatta/sbin/vyatta-bgp.pl --check-for-as --as $VAR(@)";
+			key "tagnode";
+			leaf tagnode {
+				type uint32 {
+					range 1..max;
+				}
+				configd:help "Border Gateway Protocol (BGP) parameters";
+			}
+			container parameters {
+				presence "true";
+				configd:help "BGP parameters";
+				uses bgp-global-params;
+				uses bgp-per-inst-params;
+			}
+			container timers {
+				presence "true";
+				configd:help "BGP protocol timers";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/timers/configd_validate1.cli";
+				configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/timers/configd_validate2.cli";
+				leaf holdtime {
+					type uint32 {
+						range "0 | 3..65535";
+					}
+					configd:help "BGP holdtime interval";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/timers/holdtime/configd_holdtime_validate.sh";
+					default "90";
+				}
+				leaf keepalive {
+					type uint32 {
+						range 0..65535;
+					}
+					default "30";
+					configd:help "Keepalive interval";
+					configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/timers/keepalive/configd_keepalive_validate.sh";
+				}
+			}
+			list peer-group {
+				configd:help "BGP peer-group";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						configd:syntax "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-group/configd_syntax1.cli";
+					}
+					configd:help "BGP peer-group";
+				}
+				uses peer-grp-neighbor-common-options;
+				container address-family {
+					presence "true";
+					configd:help "BGP peer-group address-family parameters";
+					container ipv4-unicast {
+						presence "true";
+						configd:help "BGP peer-group IPv4 unicast parameters";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-grp-neigh/address-family/configd_validate1.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-group/address-family/configd_delete1.cli";
+						uses peer-grp-neighbor-afi-common-settings;
+						uses neigh_peer_grp_ipv4_lists;
+					}
+					container ipv6-unicast {
+						presence "true";
+						configd:help "BGP peer-group IPv6 unicast parameters";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-grp-neigh/address-family/configd_validate1.cli";
+						configd:delete "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-group/address-family/configd_delete1.cli";
+						uses peer-grp-neighbor-afi-common-settings;
+						uses neigh_peer_grp_ipv6_lists;
+					}
+				}
+			}
+			list neighbor {
+				configd:help "BGP neighbor";
+				key "tagnode";
+				leaf tagnode {
+					type union {
+						type types:ipv4-address;
+						type types:ipv6-address;
+					}
+					configd:validate "/opt/vyatta/sbin/vyatta-bgp.pl --check-neighbor-ip --neighbor $VAR(@)";
+					configd:help "BGP neighbor";
+				}
+				uses peer-grp-neighbor-common-options;
+				uses neighbor-route-map;
+				container address-family {
+					presence "true";
+					configd:help "Parameters relating to IPv4 or IPv6 routes";
+					container ipv4-unicast {
+						presence "true";
+						configd:help "BGP neighbor parameters";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-grp-neigh/address-family/configd_validate1.cli";
+						uses peer-grp-neighbor-afi-common-settings;
+						uses neigh_peer_grp_ipv4_lists;
+						leaf peer-group {
+							type string;
+							configd:help "IPv4 peer group for this peer";
+							configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh peer-groups $VAR(../../../../@)";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/bgp/neighbor/address-family/peer-group/configd_update1.cli";
+						}
+					}
+					container ipv6-unicast {
+						presence "true";
+						configd:help "BGP neighbor parameters";
+						configd:validate "/opt/vyatta/share/tmplscripts/protocols/bgp/peer-grp-neigh/address-family/configd_validate1.cli";
+						uses peer-grp-neighbor-afi-common-settings;
+						uses neigh_peer_grp_ipv6_lists;
+						leaf peer-group {
+							type string;
+							configd:help "IPv6 peer group for this peer";
+							configd:allowed "/opt/vyatta/share/tmplscripts/protocols/bgp/configd_allowed.sh peer-groups $VAR(../../../../@)";
+							configd:update "/opt/vyatta/share/tmplscripts/protocols/bgp/neighbor/address-family/peer-group/configd_update1.cli";
+						}
+					}
+				}
+			}
+			container address-family {
+				presence "true";
+				configd:help "BGP address-family parameters";
+				container ipv4-unicast {
+					presence "true";
+					configd:help "BGP IPv4 settings";
+					container parameters {
+						presence "true";
+						configd:help "BGP parameters for the ipv4-unicast address family";
+						leaf synchronization {
+							type empty;
+							configd:help "Enable BGP synchronization for the ipv4-unicast address family";
+						}
+						leaf network-synchronization {
+							type empty;
+							configd:help "Enable BGP network synchronization for the ipv4-unicast address family";
+						}
+						uses parameters-distance;
+						uses parameters-dampening;
+					}
+					uses ipv4-aggregate-address;
+					uses network-ipv4;
+					uses redistribute-ipv4;
+					leaf auto-summary {
+						type empty;
+						configd:help "Enable automatic network number summarization";
+					}
+				}
+				container ipv6-unicast {
+					presence "true";
+					configd:help "BGP IPv6 settings";
+					container parameters {
+						presence "true";
+						configd:help "BGP parameters for the ipv6-unicast address family";
+						leaf synchronization {
+							type empty;
+							configd:help "Enable BGP synchronization for the ipv6-unicast address family";
+						}
+						leaf network-synchronization {
+							type empty;
+							configd:help "Enable BGP network synchronization for the ipv6-unicast address family";
+						}
+						uses parameters-distance;
+						uses parameters-dampening;
+					}
+					uses ipv6-aggregate-address;
+					uses network-ipv6;
+					uses redistribute-ipv6;
+					leaf auto-summary {
+						type empty;
+						configd:help "Enable automatic network number summarization";
+					}
+				}
+			}
+			container log {
+				configd:help "BGP logging parameters";
+				leaf all {
+					type empty;
+					configd:help "Enable all BGP logs";
+				}
+				leaf events {
+					type empty;
+					configd:help "Enable BGP events logs";
+				}
+				leaf filters {
+					type empty;
+					configd:help "Enable BGP filters logs";
+				}
+				leaf fsm {
+					type empty;
+					configd:help "Enable BGP fsm logs";
+				}
+				leaf nsm {
+					type empty;
+					configd:help "Enable BGP nsm logs";
+				}
+				leaf keepalive {
+					type empty;
+					configd:help "Enable BGP keepalive logs";
+				}
+				container update  {
+					configd:help "BGP update logs";
+					leaf in {
+						type empty;
+						configd:help "Enable BGP update in logs";
+					}
+					leaf out {
+						type empty;
+						configd:help "Enable BGP update out logs";
+					}
+					leaf all {
+						type empty;
+						configd:help "Enable BGP update all logs";
+					}
+				}
+			}
+		}
+	}
+
+    /* Augmenting trap notifications */
+    augment /service:service/service-snmp:snmp/service-snmp:notification {
+        container bgp {
+            configd:help "BGP Notifications";
+            leaf all {
+                type empty;
+                configd:help "BGP Notifications";
+                configd:create "vtysh -c \"configure terminal\" -c \"bgp notification all\"";
+                configd:delete "vtysh -c \"configure terminal\" -c \"no bgp notification\"";
+            }
+        }
+    }
+
+}

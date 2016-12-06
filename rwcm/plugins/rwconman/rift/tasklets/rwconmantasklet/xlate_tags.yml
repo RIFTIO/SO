@@ -1,0 +1,58 @@
+# """
+# # 
+#   Copyright 2016 RIFT.IO Inc
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+
+# @file xlate_tags.yml
+# @author Manish Patel (Manish.Patel@riftio.com)
+# @date 01/14/2016
+# """
+
+# This file contains the tags that needs translation
+# One can add some tags with processing limitations by the translation script.
+
+# Add Regular expressions here (connection-points received dynamically from VNFR)
+
+# Translate connection point names (Connection point name is read using RegEx)
+
+xlate_cp_list :
+  - <rw_connection_point_name (.*?)>
+
+# Literal string translations
+xlate_str_list :
+  - <rw_mgmt_ip>
+  - <rw_username>
+  - <rw_password>
+
+# This list contains 2 tags separated by colon (:)
+xlate_colon_list :
+  # Fetch CP from the member_index dictionary (I.e. CP of a particular VNF)
+  - <rw_unique_index:rw_connection_point_name (.*?)>
+  # Generate network address from CP address and mask (mask is expected to be a hard coded number in config)
+  - <rw_connection_point:masklen_network (.*?)>
+  # Generate broadcast address from CP address and mask (mask is expected to be a hard coded number in config)
+  - <rw_connection_point:masklen_broadcast (.*?)>
+
+# This list contains 3 tags separated by colon (:)  
+xlate_multi_colon_list :
+  # Generate network address from CP of a particular VNF (mask is expected to be a hard coded number in config))
+  - <rw_unique_index:rw_connection_point:masklen_network (.*?)>
+  # Generate broadcast address from CP of a particular VNF (mask is expected to be a hard coded number in config))
+  - <rw_unique_index:rw_connection_point:masklen_broadcast (.*?)>
+
+# This translates connection point name and generates tuple with name:resolved IP
+xlate_cp_to_tuple_list :
+  - <rw_connection_point_tuple (.*?)>
+  

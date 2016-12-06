@@ -1,0 +1,233 @@
+module vyatta-interfaces-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-interfaces:1";
+	prefix vyatta-if-v1;
+
+	import configd-v1 { prefix configd; }
+	import vyatta-types-v1 { prefix types; }
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		 	 San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2016-03-28 {
+		description "Remove use of bash in action scripts";
+	}
+	revision 2015-08-05 {
+		description "Initial revision of version 1.";
+	}
+
+	typedef address {
+		type union {
+			type types:ipv4-prefix {
+				configd:help "IPv4 Address";
+				configd:syntax "valid_address $VAR(@)";
+			}
+			type types:ipv6-prefix {
+				configd:help "IPv6 Address";
+				configd:syntax "valid_address $VAR(@)";
+			}
+			configd:normalize "normalize ip";
+		}
+	}
+
+	typedef address-dhcp {
+		type union {
+			type enumeration {
+				enum dhcp {
+					configd:help "Use DHCP to acquire an address";
+				}
+				enum dhcpv6  {
+					configd:help "Use DHCPv6 to acquire an address";
+				}
+			}
+			type address;
+			configd:normalize "normalize ip";
+		}
+	}
+
+	typedef description {
+		type string {
+			length "1..256";
+		}
+	}
+
+	grouping if-status {
+		leaf admin-status {
+			type enumeration {
+				enum up;
+				enum down;
+				enum testing;
+			}
+			description "Interface's desired state";
+			config false;
+		}
+		leaf oper-status {
+			type enumeration {
+				enum up;
+				enum down;
+				enum testing;
+				enum unknown;
+				enum dormant;
+				enum notpresent;
+				enum lowerlayerdown;
+			}
+			description "Interface's current operational state";
+			config false;
+		}
+	}
+
+	grouping if-parameters-base {
+		leaf disable {
+			type empty;
+			configd:help "Disable interface";
+			configd:create "ip link set $VAR(../@) down";
+		}
+		leaf disable-link-detect {
+			type empty;
+			configd:help "Ignore link state changes";
+			configd:create "vyatta-link-detect $VAR(../@) off";
+			configd:delete "vyatta-link-detect $VAR(../@) on";
+		}
+		container ip {
+			configd:help "IPv4 parameters";
+
+			leaf enable-proxy-arp {
+				type empty;
+				configd:help "Enable proxy-arp on this interface";
+				configd:create "sysctl -wq /net/ipv4/conf/$VAR(../../@)/proxy_arp=1";
+				configd:delete "sysctl -wq /net/ipv4/conf/$VAR(../../@)/proxy_arp=0";
+			}
+			leaf rpf-check {
+				type enumeration {
+					enum "disable" {
+						value 0;
+						configd:help "No source validation";
+					}
+					enum "strict" {
+						value 1;
+						configd:help "Enable Strict Reverse Path Forwarding as defined in RFC3704";
+					}
+					enum "loose" {
+						value 2;
+						configd:help "Enable Loose Reverse Path Forwarding as defined in RFC3704";
+					}
+				}
+				configd:help "Reverse path filter policy (see RFC3704)";
+				default "disable";
+				configd:update "set-rpf-check $VAR(@) $VAR(../../@)";
+				configd:delete "set-rpf-check disable $VAR(../../@)";
+			}
+			leaf gratuitous-arp-count {
+				type uint32 {
+					range 0..10;
+				}
+				configd:help "# of unsolicited arps sent on link up (0 to disable)";
+				default "1";
+			}
+		}
+
+		container ipv6 {
+			configd:help "IPv6 parameters";
+		}
+	}
+
+	grouping if-parameters {
+		leaf description {
+			type description;
+			configd:help "Interface Description";
+			configd:update "ip li set dev $VAR(../@) alias '$VAR(@)'";
+			configd:delete "vyatta-interfaces.pl --dev=$VAR(../@) --delete-description";
+		}
+		uses if-parameters-base {
+			augment ip {
+				leaf disable-forwarding {
+					type empty;
+					configd:help "Disable IPv4 forwarding on this interface";
+					configd:create "sysctl -wq /net/ipv4/conf/$VAR(../../@)/forwarding=0";
+					configd:delete "sysctl -wq /net/ipv4/conf/$VAR(../../@)/forwarding=1";
+				}
+			}
+		}
+		leaf log_martians {
+			type empty;
+			configd:help "Enable the logging of bogus packets";
+			configd:create "sysctl -wq /net/ipv4/conf/$VAR(../@)/log_martians=1";
+			configd:delete "sysctl -wq /net/ipv4/conf/$VAR(../@)/log_martians=0";
+		}
+	}
+
+	/* Repeat of if-parameters with reference to VIF device */
+	grouping vif-parameters-base {
+		leaf disable {
+			type empty;
+			configd:help "Disable interface";
+			configd:create "ip link set $VAR(../../@).$VAR(../@) down";
+		}
+		leaf log_martians {
+			type empty;
+			configd:help "Enable the logging of bogus packets";
+			configd:create "sysctl -wq /net/ipv4/conf/$VAR(../../@).$VAR(../@)/log_martians=1";
+			configd:delete "sysctl -wq /net/ipv4/conf/$VAR(../../@).$VAR(../@)/log_martians=0";
+		}
+		container ip {
+			configd:help "IPv4 parameters";
+
+			leaf disable-forwarding {
+				type empty;
+				configd:help "Disable IPv4 forwarding on this interface";
+				configd:create "sysctl -wq /net/ipv4/conf/$VAR(../../../@).$VAR(../../@)/forwarding=0";
+				configd:delete "sysctl -wq /net/ipv4/conf/$VAR(../../../@).$VAR(../../@)/forwarding=1";
+			}
+			leaf enable-proxy-arp {
+				type empty;
+				configd:help "Enable proxy-arp on this interface";
+				configd:create "sysctl -wq /net/ipv4/conf/$VAR(../../../@).$VAR(../../@)/proxy_arp=1";
+				configd:delete "sysctl -wq /net/ipv4/conf/$VAR(../../../@).$VAR(../../@)/proxy_arp=0";
+			}
+			leaf rpf-check {
+				type enumeration {
+					enum "disable" {
+						value 0;
+						configd:help "No source validation";
+					}
+					enum "strict" {
+						value 1;
+						configd:help "Enable Strict Reverse Path Forwarding as defined in RFC3704";
+					}
+					enum "loose" {
+						value 2;
+						configd:help "Enable Loose Reverse Path Forwarding as defined in RFC3704";
+					}
+				}
+				configd:help "Reverse path filter policy (see RFC3704)";
+				default "disable";
+				configd:update "set-rpf-check $VAR(@) $VAR(../../../@).$VAR(../../@)";
+				configd:delete "set-rpf-check disable $VAR(../../../@).$VAR(../../@)";
+			}
+		}
+		container ipv6 {
+			configd:help "IPv6 parameters";
+		}
+	}
+
+	grouping vif-parameters {
+		leaf description {
+			type description;
+			configd:help "Virtual sub-interface Description";
+			configd:update "ip li set dev $VAR(../../@).$VAR(../@) alias '$VAR(@)'";
+			configd:delete "vyatta-interfaces.pl --dev=$VAR(../../@).$VAR(../@) --delete-description";
+		}
+		uses vif-parameters-base;
+	}
+
+	container interfaces {
+		configd:help "Network interfaces";
+		configd:begin "/opt/vyatta/sbin/vyatta-delete-addrs.pl";
+		configd:end "/bin/run-parts ${vyatta_datarootdir}/tmplscripts${CONFIGD_PATH}/configd_end.d";
+		configd:validate "vyatta-interfaces.pl --valid-addrs-commit";
+	}
+}

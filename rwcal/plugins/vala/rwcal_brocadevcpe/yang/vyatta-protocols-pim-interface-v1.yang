@@ -1,0 +1,122 @@
+module vyatta-protocols-pim-interface-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-protocols-pim-interface:1";
+	prefix vyatta-pim-interface-v1;
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-07-27 {
+		description "Initial version";
+	}
+	grouping pim-interface-parameters {
+		configd:priority "950";
+		leaf propagation-delay {
+			configd:help "Configure a propagation delay value";
+			type enumeration {
+				enum "1000";
+				enum "2000";
+				enum "3000";
+				enum "4000";
+				enum "5000";
+			}
+		}
+		leaf unicast-bsm {
+			configd:help "Enable support for sending and receiving unicast Bootstrap Messages (BSM) on an interface";
+			type empty;
+		}
+		container state-refresh {
+			presence "PIM State Refresh configuration";
+			configd:help "PIM-DM State Refresh";
+			leaf origination-interval {
+				description "Configure an origination interval value";
+				configd:help "Configure an origination interval value";
+				type uint32 {
+					range 1..100;
+				}
+				mandatory true;
+			}
+		}
+		leaf hello-interval {
+			configd:help "Configure a hello interval value";
+			type uint32 {
+				range 1..18724;
+			}
+			default "30";
+		}
+		leaf bsr-border {
+			configd:help "Disable bootstrap router (BSR) messages from being sent or received through an interface";
+			type empty;
+		}
+		leaf mode {
+			configd:help "PIM mode";
+			mandatory true;
+			type enumeration {
+				enum "sparse" {
+				configd:help "Set sparse mode";
+				}
+				enum "dense" {
+				configd:help "Set dense mode";
+				}
+				enum "sparse-passive" {
+				configd:help "Set sparse passive mode";
+				}
+				enum "dense-passive" {
+				configd:help "Set dense passive mode";
+				}
+			}
+		}
+		leaf hello-holdtime {
+			configd:help "Configure a hello holdtime value";
+			type uint32 {
+				range 1..65535;
+			}
+			default "105";
+		}
+		leaf dr-priority {
+			configd:help "Set the designated router's priority value";
+			type uint32 {
+				range 0..max;
+			}
+		}
+		leaf exclude-genid {
+			configd:help "Exclude the GenID (generated ID) option from Hello packets on an interface";
+			type empty;
+		}
+	}
+
+	grouping pim4-interface-parameters {
+		container pim {
+			configd:help "Protocol Independent Multicasting (PIM)";
+			presence "IPV4 PIM interface parameters";
+			uses pim-interface-parameters;
+			leaf neighbor-filter {
+				configd:help "Enable filtering of neighbors on the interface";
+				type uint32 {
+					range 1..99;
+				}
+			        configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/all/ip/pim/neighbor-filter/configd_allowed.sh";
+			}
+		}
+	}
+
+	grouping pim6-interface-parameters {
+		container pim {
+			configd:help "Protocol Independent Multicasting (PIM)";
+			presence "IPV6 PIM interface parameters";
+			uses pim-interface-parameters;
+			leaf neighbor-filter {
+				configd:help "Enable filtering of neighbors on the interface";
+				type string;
+			        configd:allowed "/opt/vyatta/share/tmplscripts/interfaces/all/ipv6/pim/neighbor-filter/configd_allowed.sh";
+			}
+		}
+	}
+}

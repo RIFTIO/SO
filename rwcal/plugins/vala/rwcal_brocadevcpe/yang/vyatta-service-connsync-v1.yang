@@ -1,0 +1,59 @@
+module vyatta-service-connsync-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-service-connsync:1";
+	prefix vyatta-service-connsync-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-services-v1 {
+		prefix service;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-10-22 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /service:service {
+		container connsync {
+			presence "connsync";
+			configd:help "Connection tracking synchronization (conn-sync) service";
+			configd:priority "995";
+			configd:validate "/opt/vyatta/sbin/vyatta-connsync.pl --action=validate";
+			configd:end "/opt/vyatta/share/tmplscripts/service/connsync/configd_end.sh";
+			leaf interface {
+				type string;
+				mandatory true;
+				configd:help "Interface to use for syncing flow entries [REQUIRED]";
+				configd:allowed "/opt/vyatta/sbin/vyatta-interfaces.pl --show all";
+			}
+			leaf remote-peer {
+				type types:ipv4-address;
+				mandatory true;
+				configd:help "Peer IP address [REQUIRED]";
+			}
+			container failover-mechanism {
+				configd:help "Failover mechanism to use for conntrack-sync [REQUIRED]";
+				container vrrp {
+					configd:help "VRRP as failover-mechanism to use for conn-sync";
+					leaf sync-group {
+						type string;
+						mandatory true;
+						configd:help "VRRP sync group [REQUIRED]";
+						configd:allowed "/opt/vyatta/sbin/vyatta-connsync.pl --action=vrrp-sync-grps";
+					}
+				}
+			}
+		}
+	}
+}

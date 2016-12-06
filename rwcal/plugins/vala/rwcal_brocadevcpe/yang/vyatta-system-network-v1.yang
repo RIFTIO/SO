@@ -1,0 +1,166 @@
+module vyatta-system-network-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-system-network:1";
+	prefix vyatta-system-network-v1;
+
+	import vyatta-types-v1 {
+		prefix types;
+	}
+	import vyatta-system-v1 {
+		prefix system;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /system:system {
+		leaf domain-name {
+			type types:domain-name;
+			configd:priority "400";
+			configd:help "System domain name";
+			configd:update "/opt/vyatta/share/tmplscripts/system/domain-name/configd_update.sh";
+			configd:delete "/opt/vyatta/share/tmplscripts/system/domain-name/configd_delete.sh";
+		}
+		container domain-search {
+			presence "true";
+			configd:priority "400";
+			configd:help "Domain Name Server (DNS) domain completion order";
+			leaf-list domain {
+				type string {
+					pattern '[-a-zA-Z0-9\.]+' {
+						configd:error-message "invalid domain name $VAR(@)";
+					}
+				}
+				ordered-by "user";
+				configd:help "DNS domain completion order";
+				configd:create "/opt/vyatta/share/tmplscripts/system/domain-search/domain/configd_create1.cli";
+				configd:delete "/opt/vyatta/share/tmplscripts/system/domain-search/domain/configd_delete1.cli";
+			}
+		}
+		leaf host-name {
+			type string {
+				pattern '[0-9A-Za-z][-\.0-9A-Za-z]*[0-9A-Za-z]' {
+					configd:error-message "invalid host name $VAR(@)";
+				}
+				length "2..63";
+			}
+			configd:priority "100";
+			configd:help "System host name (default: vyatta)";
+			default "vyatta";
+			configd:update "/opt/vyatta/share/tmplscripts/system/host-name/configd_update.sh";
+			configd:delete "/opt/vyatta/share/tmplscripts/system/host-name/configd_delete.sh";
+		}
+		container ip {
+			presence "true";
+			configd:priority "400";
+			configd:help "IPv4 settings";
+			leaf arp {
+				type empty;
+				configd:help "Parameters for ARP cache";
+			}
+			leaf disable-forwarding {
+				type empty;
+				configd:help "Disable IPv4 forwarding";
+				configd:create "/opt/vyatta/share/tmplscripts/system/ip/disable-forwarding/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/system/ip/disable-forwarding/configd_delete.sh";
+			}
+		}
+		container ipv6 {
+			presence "true";
+			configd:help "IPv6 settings";
+			leaf disable {
+				type empty;
+				configd:priority "400";
+				configd:help "Disable assignment of IPv6 addresses on all interfaces";
+				configd:create "vyatta-ipv6-disable create";
+				configd:delete "vyatta-ipv6-disable delete";
+			}
+			leaf strict-dad {
+				type empty;
+				configd:priority "290";
+				configd:help "Disable IPv6 operation on interface when DAD fails on LL addr";
+				configd:create "/opt/vyatta/share/tmplscripts/system/ipv6/strict-dad/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/system/ipv6/strict-dad/configd_delete.sh";
+			}
+			container neighbor {
+				presence "true";
+				configd:priority "400";
+				configd:help "Parameters for Neighbor cache";
+				leaf table-size {
+					type enumeration {
+						enum "1024";
+						enum "2048";
+						enum "4096";
+						enum "8192";
+						enum "16384";
+						enum "32768";
+					}
+					configd:help "Maximum number of entries to keep in the Neighbor cache";
+					default "8192";
+					configd:allowed "/opt/vyatta/share/tmplscripts/system/ipv6/neighbor/table-size/configd_allowed.sh";
+					configd:update "/opt/vyatta/share/tmplscripts/system/ipv6/neighbor/table-size/configd_update.sh";
+				}
+			}
+			leaf disable-forwarding {
+				type empty;
+				configd:priority "400";
+				configd:help "Disable IPv6 forwarding on all interfaces";
+				configd:create "/opt/vyatta/share/tmplscripts/system/ipv6/disable-forwarding/configd_create.sh";
+				configd:delete "/opt/vyatta/share/tmplscripts/system/ipv6/disable-forwarding/configd_delete.sh";
+			}
+		}
+		leaf-list name-server {
+			type union {
+				type types:ipv4-address;
+				type types:ipv6-address;
+			}
+			ordered-by "user";
+			configd:priority "400";
+			configd:help "Domain Name Server (DNS)";
+			configd:create "/opt/vyatta/share/tmplscripts/system/name-server/configd_create.sh";
+			configd:delete "/opt/vyatta/share/tmplscripts/system/name-server/configd_delete.sh";
+		}
+		container static-host-mapping {
+			presence "true";
+			configd:priority "400";
+			configd:help "Map host names to addresses";
+			list host-name {
+				configd:help "Host name for static address mapping";
+				configd:end "/opt/vyatta/share/tmplscripts/system/static-host-mapping/host-name/configd_end.sh";
+				configd:validate "/opt/vyatta/share/tmplscripts/system/static-host-mapping/host-name/configd_validate1.cli";
+				key "tagnode";
+				leaf tagnode {
+					type string {
+						pattern '[0-9A-Za-z][-\.0-9A-Za-z]*[0-9A-Za-z]' {
+							configd:error-message "invalid host name $VAR(@)";
+						}
+					}
+					configd:help "Host name for static address mapping";
+				}
+				leaf inet {
+					type union {
+						type types:ipv4-address;
+						type types:ipv6-address;
+					}
+					configd:help "Address [REQUIRED]";
+				}
+				leaf-list alias {
+					type string;
+					ordered-by "user";
+					configd:help "Alias for this address";
+				}
+			}
+		}
+	}
+}

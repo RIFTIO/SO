@@ -1,0 +1,184 @@
+module vyatta-system-alg-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-system-alg:1";
+	prefix vyatta-system-alg-v1;
+
+	import vyatta-system-v1 {
+		prefix system;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-12-16 {
+		description "Add rsh ALG control.";
+	}
+	revision 2015-10-22 {
+		description "Initial revision.";
+	}
+
+	augment /system:system {
+		container alg {
+			presence "true";
+			description "ALG control options.";
+			configd:help "Connection tracking modules settings";
+			container icmp {
+				presence "true";
+				description "ICMP ALG control options.";
+				configd:help "ICMP connection tracking settings";
+				configd:end "vyatta-dp-npf-alg.pl --module=icmp";
+				leaf disable {
+					type empty;
+					configd:help "Disable ICMP connection tracking";
+				}
+			}
+			container pptp {
+				presence "true";
+				description "PPTP ALG control options.";
+				configd:help "PPTP connection tracking settings";
+				configd:end "vyatta-dp-npf-alg.pl --module=pptp";
+				leaf disable {
+					type empty;
+					configd:help "Disable PPTP connection tracking";
+				}
+			}
+			container tftp {
+				presence "true";
+				description "TFTP ALG control options.";
+				configd:help "TFTP connection tracking settings";
+				configd:end "vyatta-dp-npf-alg.pl --module=tftp";
+				leaf disable {
+					type empty;
+					configd:help "Disable TFTP connection tracking";
+				}
+				leaf-list port {
+					max-elements 32;
+					configd:help "TFTP control port";
+					type uint16 {
+						range 1..65535;
+					}
+					must "(not(current() = ../../ftp/port))" {
+						error-message "TFTP ports cannot contain FTP ports.";
+					}
+					must "((../../ftp/disable or count(../../ftp/port) > 0) or current() != 21)" {
+						error-message "TFTP cannot set port 21 unless FTP has port(s) set or is disabled.";
+					}
+					must "(not(current() = ../../sip/port))" {
+						error-message "TFTP ports cannot contain SIP ports.";
+					}
+					must "((../../sip/disable or count(../../sip/port) > 0) or current() != 5060)" {
+						error-message "TFTP cannot set port 5060 unless SIP has port(s) set or is disabled.";
+					}
+					must "(../../rpc/disable or current() != 111)" {
+						error-message "TFTP cannot set port 111 unless RPC ALG is disabled";
+					}
+					must "(../../rsh/disable or current() != 514)" {
+						error-message "TFTP cannot set port 514 unless RSH ALG is disabled";
+					}
+				}
+			}
+			container ftp {
+				presence "true";
+				description "FTP ALG control options.";
+				configd:help "FTP connection tracking settings";
+				configd:end "vyatta-dp-npf-alg.pl --module=ftp";
+				leaf disable {
+					type empty;
+					configd:help "Disable FTP connection tracking";
+				}
+				leaf-list port {
+					max-elements 32;
+					configd:help "FTP control port";
+					type uint16 {
+						range 1..65535;
+					}
+					must "(not(current() = ../../tftp/port))" {
+						error-message "FTP ports cannot contain TFTP ports.";
+					}
+					must "((../../tftp/disable or count(../../tftp/port) > 0) or current() != 69)" {
+						error-message "FTP cannot set port 69 unless TFTP has port(s) set or is disabled.";
+					}
+					must "(not(current() = ../../sip/port))" {
+						error-message "FTP ports cannot contain SIP ports.";
+					}
+					must "((../../sip/disable or count(../../sip/port) > 0) or current() != 5060)" {
+						error-message "FTP cannot set port 5060 unless SIP has port(s) set or is disabled.";
+					}
+					must "(../../rpc/disable or current() != 111)" {
+						error-message "FTP cannot set port 111 unless RPC ALG is disabled";
+					}
+					must "(../../rsh/disable or current() != 514)" {
+						error-message "FTP cannot set port 514 unless RSH ALG is disabled";
+					}
+				}
+			}
+			container sip {
+				presence "true";
+				description "SIP ALG control options.";
+				configd:help "SIP connection tracking settings";
+				configd:end "vyatta-dp-npf-alg.pl --module=sip";
+				leaf disable {
+					type empty;
+					configd:help "Disable SIP connection tracking";
+				}
+				leaf-list port {
+					max-elements 32;
+					configd:help "SIP control port";
+					type uint16 {
+						range 1..65535;
+					}
+					must "(not(current() = ../../tftp/port))" {
+						error-message "SIP ports cannot contain TFTP ports.";
+					}
+					must "((../../tftp/disable or count(../../tftp/port) > 0) or current() != 69)" {
+						error-message "SIP cannot set port 69 unless TFTP has port(s) set or is disabled.";
+					}
+					must "(not(current() = ../../ftp/port))" {
+						error-message "SIP ports cannot contain FTP ports.";
+					}
+					must "((../../ftp/disable or count(../../ftp/port) > 0) or current() != 21)" {
+						error-message "SIP cannot set port 21 unless FTP has port(s) set or is disabled.";
+					}
+					must "(../../rpc/disable or current() != 111)" {
+						error-message "SIP cannot set port 111 unless RPC ALG is disabled";
+					}
+					must "(../../rsh/disable or current() != 514)" {
+						error-message "SIP cannot set port 514 unless RSH ALG is disabled";
+					}
+				}
+			}
+			container rpc {
+				presence "true";
+				description "RPC ALG control options.";
+				configd:help "RPC connection tracking settings";
+				configd:end "vyatta-dp-npf-alg.pl --module=rpc";
+				leaf disable {
+					type empty;
+					configd:help "Disable RPC connection tracking";
+				}
+				leaf-list program {
+					type uint32;
+					max-elements 32;
+					configd:help "Configure allowed RPC programs";
+				}
+
+			}
+			container rsh {
+				description "RSH ALG control options.";
+				configd:help "RSH connection tracking settings";
+				configd:end "vyatta-dp-npf-alg.pl --module=rsh";
+				leaf disable {
+					type empty;
+					configd:help "Disable RSH connection tracking";
+				}
+			}
+		}
+	}
+}

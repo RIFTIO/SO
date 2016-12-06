@@ -1,0 +1,45 @@
+# Object file directories
+.install
+.obj
+.build
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+.elc
+auto-save-list
+tramp
+.\#*
+
+# vi
+*.swp
+*.swo
+*.swn
+
+libunwind/libunwind-1.1/doc/unw_get_proc_info.man
+
+#cscope
+cscope.files
+cscope.out
+
+autom4te.cache
+
+*.pyc
+core.*
+!core.py
+*.sock
+*.pyc
+*.swo
+*.swp
+.idea
+
+#Rope
+.ropeproject
+
+#node_modules
+node_modules/
+*.log
+
+.cache

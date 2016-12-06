@@ -1,0 +1,160 @@
+module vyatta-resources-service-users-v1 {
+	namespace "urn:vyatta.com:mgmt:vyatta-resources-service-users:1";
+	prefix vyatta-resources-service-users-v1;
+
+	import vyatta-resources-v1 {
+		prefix resources;
+	}
+	import configd-v1 {
+		prefix configd;
+	}
+
+	organization "Brocade Communications Systems, Inc.";
+	contact
+		"Brocade Communications Systems, Inc.
+		 Postal: 130 Holger Way
+		         San Jose, CA 95134
+		 E-mail: support@Brocade.com
+		 Web: www.brocade.com";
+
+	revision 2015-08-14 {
+		description "Initial revision of version 1.";
+	}
+
+	augment /resources:resources {
+		container service-users {
+			presence "true";
+			configd:help "Service-User management";
+			configd:end "/opt/vyatta/share/tmplscripts/resources/service-users/configd_end.sh";
+			list ldap {
+				configd:help "LDAP profile name";
+				configd:delete "/opt/vyatta/share/tmplscripts/resources/service-users/ldap/configd_delete.sh";
+				key "tagnode";
+				leaf tagnode {
+					type string;
+					configd:help "LDAP profile name";
+				}
+				leaf base-dn {
+					type string;
+					configd:help "Base Distinguished Name (Base DN) for authorization";
+				}
+				leaf search-filter {
+					type string;
+					configd:help "LDAP search filter for authorization";
+				}
+				leaf bind-dn {
+					type string;
+					configd:help "Bind DN user to authenticate against LDAP server";
+				}
+				leaf schema {
+					type string;
+					configd:help "LDAP schema standard";
+				}
+				leaf password {
+					type string;
+					configd:help "LDAP Bind Password";
+				}
+				container group {
+					presence "true";
+					configd:help "LDAP group tree options";
+					leaf base-dn {
+						type string;
+						configd:help "Base DN for group-based LDAP authorization";
+					}
+					leaf member-attribute {
+						type string;
+						configd:help "The member attribute to use for LDAP group-based authorization";
+					}
+				}
+				leaf url {
+					type string {
+						pattern "ldap://.*" {
+							error-message "Needs to start with ldap://";
+						}
+					}
+					configd:help "URL to LDAP server";
+				}
+				leaf follow-referrals {
+					type empty;
+					configd:help "Follow LDAP Referrals";
+				}
+				container tls {
+					presence "true";
+					configd:help "Transport Layer Security (TLS) options for LDAP server connection";
+					leaf reqcert {
+						type string;
+						configd:help "Request and perform check on TLS certificate of the LDAP server";
+					}
+					leaf cacert {
+						type string {
+							configd:syntax "/opt/vyatta/share/tmplscripts/resources/service-users/ldap/tls/cacert/configd_syntax1.cli";
+						}
+						configd:help "File containing certificate for Certificate Authority (CA)";
+					}
+				}
+			}
+			container local {
+				presence "true";
+				configd:help "Local service user management";
+				leaf-list group {
+					type string {
+						pattern "[a-zA-Z_][a-zA-Z0-9_-]*$?" {
+							configd:error-message "Invalid group name $VAR(@)";
+						}
+						configd:syntax "/opt/vyatta/share/tmplscripts/resources/service-users/local/group/configd_syntax1.cli";
+					}
+					ordered-by "user";
+					configd:help "Group for service-users";
+					configd:allowed "/opt/vyatta/share/tmplscripts/resources/service-users/local/group/configd_allowed.sh";
+					configd:delete "/opt/vyatta/share/tmplscripts/resources/service-users/local/group/configd_delete.sh";
+				}
+				list user {
+					configd:help "Service user account information";
+					configd:delete "/opt/vyatta/share/tmplscripts/resources/service-users/local/user/configd_delete.sh";
+					configd:validate "/opt/vyatta/share/tmplscripts/resources/service-users/local/user/configd_validate1.cli";
+					key "tagnode";
+					leaf tagnode {
+						type string;
+						configd:help "Service user account information";
+					}
+					container auth {
+						presence "true";
+						configd:help "Authentication password";
+						leaf plaintext-password {
+							type string;
+							configd:secret "true";
+							configd:help "Plaintext password for encryption";
+							configd:subst "/opt/vyatta/share/tmplscripts/resources/service-users/local/user/auth/plaintext-password/configd_subst1.cli";
+						}
+						leaf encrypted-password {
+							type string {
+								configd:syntax "/opt/vyatta/share/tmplscripts/resources/service-users/local/user/auth/encrypted-password/configd_syntax1.cli";
+							}
+							configd:help "Encrypted password";
+						}
+					}
+					leaf-list group {
+						type string {
+							configd:syntax "/opt/vyatta/share/tmplscripts/resources/service-users/local/user/group/configd_syntax1.cli";
+						}
+						ordered-by "user";
+						configd:help "Service-user group name";
+						configd:allowed "/opt/vyatta/share/tmplscripts/resources/service-users/local/user/group/configd_allowed.sh";
+					}
+					leaf lock {
+						type empty;
+						configd:help "Lock local service-user";
+					}
+					leaf full-name {
+						type string {
+							pattern "[^:]*" {
+								error-message "Cannot use ':' in full name";
+							}
+						}
+						configd:help "Full name of the user (use quotes for names with spaces)";
+					}
+				}
+			}
+		}
+	}
+}
