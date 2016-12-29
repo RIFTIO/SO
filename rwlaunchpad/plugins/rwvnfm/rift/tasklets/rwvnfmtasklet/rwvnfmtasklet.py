@@ -509,7 +509,7 @@ class VirtualDeploymentUnitRecord(object):
         self._log.debug("Current cloud init dict is {}".format(cloud_init_dict))
 
         for key_pair in self._vnfr._vnfr_msg.cloud_config.key_pair:
-            if "ssh_authorized_key" not in cloud_init_dict:
+            if "ssh_authorized_keys" not in cloud_init_dict:
                 cloud_init_dict["ssh_authorized_keys"] = list()
             cloud_init_dict["ssh_authorized_keys"].append(key_pair.key)
 
