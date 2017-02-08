@@ -308,7 +308,11 @@ class RwcalOpenstackPlugin(GObject.Object, RwCal.Cloud):
         img = RwcalYang.ImageInfoItem()
         img.name = img_info['name']
         img.id = img_info['id']
-        img.checksum = img_info['checksum']
+        
+        # check if checksum is available. It may not be if image is currently being queued
+        if 'checksum' in img_info:
+            img.checksum = img_info['checksum']
+
         img.disk_format = img_info['disk_format']
         img.container_format = img_info['container_format']
         if img_info['status'] == 'active':
