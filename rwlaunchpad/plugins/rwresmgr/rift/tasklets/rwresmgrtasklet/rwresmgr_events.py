@@ -118,6 +118,9 @@ class ResourceMgrEvent(object):
                                                                                  vdu.cloud_account,
                                                                                  vdu.request_info
                                                                                  )
+                response_xpath = "/rw-resource-mgr:resource-mgmt/rw-resource-mgr:vdu-event/rw-resource-mgr:vdu-event-data[rw-resource-mgr:event-id='{}']/resource-info".format(
+                    vdu.event_id.strip())
+                asyncio.ensure_future(monitor_vdu_state(response_xpath, vdu.event_id), loop=self._loop)
             if (xact_event == rwdts.MemberEvent.INSTALL):
               vdu_cfg = self._vdu_reg.elements
               for vdu in vdu_cfg:
@@ -128,6 +131,30 @@ class ResourceMgrEvent(object):
             """ The transaction has been committed """
             self._log.debug("Received link request commit (xact_info: %s)", xact_info)
             return rwdts.MemberRspCode.ACTION_OK
+
+        @asyncio.coroutine
+        def allocate_vlink_task(ks_path, event_id, cloud_account, request_info):
+            response_xpath = ks_path.to_xpath(RwResourceMgrYang.get_schema()) + "/resource-info"
+            schema = RwResourceMgrYang.VirtualLinkEventData().schema()
+            pathentry = schema.keyspec_to_entry(ks_path)
+            try:
+                response_info = yield from self._parent.allocate_virtual_network(pathentry.key00.event_id,
+                                                                                 cloud_account,
+                                                                                 request_info)
+            except Exception as e:
+                self._log.error("Encountered exception: %s while creating virtual network", str(e))
+                self._log.exception(e)
+                response_info = RwResourceMgrYang.VirtualLinkEventData_ResourceInfo()
+                response_info.resource_state = 'failed'
+                response_info.resource_errors = str(e)
+                yield from self._dts.query_update(response_xpath,
+                                                  rwdts.XactFlag.ADVISE,
+                                                  response_info)
+            else:
+                yield from self._dts.query_update(response_xpath,
+                                                  rwdts.XactFlag.ADVISE,
+                                                  response_info)
+
 
         @asyncio.coroutine
         def on_link_request_prepare(xact_info, action, ks_path, request_msg):
@@ -142,9 +169,19 @@ class ResourceMgrEvent(object):
 
             if action == rwdts.QueryAction.CREATE:
                 try:
-                    response_info = yield from self._parent.allocate_virtual_network(pathentry.key00.event_id,
-                                                                                 request_msg.cloud_account,
-                                                                                 request_msg.request_info)
+                    response_info = RwResourceMgrYang.VirtualLinkEventData_ResourceInfo()
+                    response_info.resource_state = 'pending'
+                    request_msg.resource_info = response_info
+                    self.create_record_dts(self._link_reg,
+                                           None,
+                                           ks_path.to_xpath(RwResourceMgrYang.get_schema()),
+                                           request_msg)
+
+                    asyncio.ensure_future(allocate_vlink_task(ks_path,
+                                                              pathentry.key00.event_id,
+                                                              request_msg.cloud_account,
+                                                              request_msg.request_info),
+                                                              loop = self._loop)
                 except Exception as e:
                     self._log.error("Encountered exception: %s while creating virtual network", str(e))
                     self._log.exception(e)
@@ -154,9 +191,6 @@ class ResourceMgrEvent(object):
                     yield from self._dts.query_update(response_xpath,
                                                       rwdts.XactFlag.ADVISE,
                                                       response_info)
-                else:
-                    request_msg.resource_info = response_info
-                    self.create_record_dts(self._link_reg, None, ks_path.to_xpath(RwResourceMgrYang.get_schema()), request_msg)
             elif action == rwdts.QueryAction.DELETE:
                 yield from self._parent.release_virtual_network(pathentry.key00.event_id)
                 self.delete_record_dts(self._link_reg, None, ks_path.to_xpath(RwResourceMgrYang.get_schema()))
@@ -176,7 +210,7 @@ class ResourceMgrEvent(object):
             self._log.debug("Received vdu request commit (xact_info: %s)", xact_info)
             return rwdts.MemberRspCode.ACTION_OK
 
-        def monitor_vdu_state(response_xpath, pathentry):
+        def monitor_vdu_state(response_xpath, event_id):
             self._log.info("Initiating VDU state monitoring for xpath: %s ", response_xpath)
             time_to_wait = 300
             sleep_time = 2
@@ -185,7 +219,7 @@ class ResourceMgrEvent(object):
                 self._log.debug("VDU state monitoring for xpath: %s. Sleeping for 2 second", response_xpath)
                 yield from asyncio.sleep(2, loop = self._loop)
                 try:
-                    response_info = yield from self._parent.read_virtual_compute_info(pathentry.key00.event_id)
+                    response_info = yield from self._parent.read_virtual_compute_info(event_id)
                 except Exception as e:
                     self._log.info("VDU state monitoring: Received exception %s in VDU state monitoring for %s. Aborting monitoring",
                                    str(e),response_xpath)
@@ -239,7 +273,7 @@ class ResourceMgrEvent(object):
                                                       rwdts.XactFlag.ADVISE,
                                                       response_info)
                 else:
-                    asyncio.ensure_future(monitor_vdu_state(response_xpath, pathentry),
+                    asyncio.ensure_future(monitor_vdu_state(response_xpath, pathentry.key00.event_id),
                                           loop = self._loop)
 
 

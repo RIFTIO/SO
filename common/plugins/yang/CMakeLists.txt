@@ -21,14 +21,25 @@
 # Yang targets
 ##
 rift_add_yang_target(
+  TARGET rwsdn_yang
+  YANG_FILES rw-sdn.yang
+  COMPONENT ${PKG_LONG_NAME}
+  LIBRARIES
+    rwsdnal_yang_gen
+  DEPENDS
+    rwsdnal_yang
+)
+
+rift_add_yang_target(
   TARGET rwcloud_yang
-  YANG_FILES rw-cloud.yang rw-sdn.yang
+  YANG_FILES rw-cloud.yang 
   COMPONENT ${PKG_LONG_NAME}
   LIBRARIES
     rwsdn_yang_gen
     rwcal_yang_gen
   DEPENDS
     rwcal_yang
+    rwsdnal_yang
 )
 
 rift_add_yang_target(

@@ -55,6 +55,7 @@ rift_python_install_tree(
     rift/package/checksums.py
     rift/package/config.py
     rift/package/convert.py
+    rift/package/handler.py
     rift/package/icon.py
     rift/package/image.py
     rift/package/package.py

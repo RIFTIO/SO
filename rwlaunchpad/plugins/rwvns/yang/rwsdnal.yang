@@ -1,7 +1,7 @@
 
 /*
  * 
- *   Copyright 2016 RIFT.IO Inc
+ *   Copyright 2016-2017 RIFT.IO Inc
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -18,10 +18,10 @@
  *
  */
 
-module rwsdn
+module rwsdnal
 {
-  namespace "http://riftio.com/ns/riftware-1.0/rwsdn";
-  prefix "rwsdn";
+  namespace "http://riftio.com/ns/riftware-1.0/rwsdnal";
+  prefix "rwsdnal";
 
   import rw-base {
     prefix rwbase;
@@ -90,6 +90,7 @@ module rwsdn
       enum odl;
       enum mock;
       enum sdnsim;
+      enum openstack;
     }
   }
 
@@ -144,6 +145,62 @@ module rwsdn
           default "rwsdn_sim";
         }
       }
+
+      container openstack {
+        leaf key {
+          type string;
+          mandatory true;
+        }
+
+        leaf secret {
+          type string;
+          mandatory true;
+        }
+
+        leaf auth_url {
+          type string;
+          mandatory true;
+        }
+
+        leaf tenant {
+          type string;
+          mandatory true;
+        }
+
+        leaf admin {
+          type boolean;
+          default false;
+        }
+
+        leaf user-domain {
+          type string;
+          default "Default";
+          description "Domain of the OpenStack user";
+        }
+
+        leaf project-domain {
+          type string;
+          default "Default";
+          description "Domain of the OpenStack project";
+        }
+
+        leaf region {
+          type string;
+          default "RegionOne";
+        }
+
+        leaf plugin-name {
+          type string;
+          default "rwsdn_openstack";
+        }
+
+        leaf cert-validate {
+          type boolean;
+          default false;
+          description "Certificate validatation policy in case of SSL/TLS connection";
+        }
+      }
+
     }
   }
 
@@ -326,6 +383,9 @@ module rwsdn
       }
       leaf rsp-name {
         type string;
+      }
+      leaf rsp-id {
+        type yang:uuid;
       }
       leaf port-id {
         rwpb:field-inline "true";

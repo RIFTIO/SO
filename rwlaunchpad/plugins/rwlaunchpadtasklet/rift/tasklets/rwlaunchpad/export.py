@@ -21,6 +21,8 @@ import os.path
 import stat
 import time
 import uuid
+import collections
+import json
 
 import tornado.web
 
@@ -37,11 +39,16 @@ from . import tosca
 import gi
 gi.require_version('NsdYang', '1.0')
 gi.require_version('VnfdYang', '1.0')
+gi.require_version('RwPkgMgmtYang', '1.0')
 
 from gi.repository import (
         NsdYang,
         VnfdYang,
-        )
+        RwPkgMgmtYang)
+import rift.mano.dts as mano_dts
+
+
+RPC_PACKAGE_EXPORT_ENDPOINT = RwPkgMgmtYang.YangOutput_RwPkgMgmt_PackageExport
 
 
 class ExportStart(message.StatusMessage):
@@ -77,12 +84,12 @@ class DescriptorPackageArchiveExporter(object):
     def __init__(self, log):
         self._log = log
 
-    def _create_archive_from_package(self, archive_hdl, package, open_fn):
+    def _create_archive_from_package(self, archive_hdl, package, open_fn, top_level_dir=None):
         orig_open = package.open
         try:
             package.open = open_fn
             archive = rift.package.archive.TarPackageArchive.from_package(
-                    self._log, package, archive_hdl
+                    self._log, package, archive_hdl, top_level_dir
                     )
             return archive
         finally:
@@ -152,7 +159,7 @@ class DescriptorPackageArchiveExporter(object):
 
             return open_fn(rel_path)
 
-        archive = self._create_archive_from_package(archive_hdl, package, open_wrapper)
+        archive = self._create_archive_from_package(archive_hdl, package, open_wrapper, new_desc_msg.name)
 
         return archive
 
@@ -192,80 +199,88 @@ class DescriptorPackageArchiveExporter(object):
         return archive_path
 
 
-class ExportHandler(tornado.web.RequestHandler):
-    def options(self, *args, **kargs):
-        pass
+class ExportRpcHandler(mano_dts.AbstractRpcHandler):
+    def __init__(self, log, dts, loop, application, store_map, exporter, onboarder, catalog_map):
+        """
+        Args:
+            application: UploaderApplication
+            store_map: dict containing VnfdStore & NsdStore
+            exporter : DescriptorPackageArchiveExporter
+            calalog_map: Dict containing Vnfds and Nsd onboarding.
+        """
+        super().__init__(log, dts, loop)
 
-    def set_default_headers(self):
-        self.set_header('Access-Control-Allow-Origin', '*')
-        self.set_header('Access-Control-Allow-Headers',
-                        'Content-Type, Cache-Control, Accept, X-Requested-With, Authorization')
-        self.set_header('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE')
-
-    def initialize(self, log, loop, store_map, exporter, catalog_map):
-        self.loop = loop
-        self.transaction_id = str(uuid.uuid4())
-        self.log = message.Logger(
-                log,
-                self.application.messages[self.transaction_id],
-                )
+        self.application = application
         self.store_map = store_map
         self.exporter = exporter
+        self.onboarder = onboarder
         self.catalog_map = catalog_map
+        self.log = log
 
-    def get(self, desc_type):
+    @property
+    def xpath(self):
+        return "/rw-pkg-mgmt:package-export"
+
+    @asyncio.coroutine
+    def callback(self, ks_path, msg):
+        transaction_id = str(uuid.uuid4())
+        log = message.Logger(
+                self.log,
+                self.application.messages[transaction_id],
+                )
+
+        file_name = self.export(transaction_id, log, msg)
+
+        rpc_out = RPC_PACKAGE_EXPORT_ENDPOINT.from_dict({
+            'transaction_id': transaction_id,
+            'filename': file_name})
+
+        return rpc_out
+
+    def export(self, transaction_id, log, msg):
+        log.message(ExportStart())
+        desc_type = msg.package_type.lower()
+
         if desc_type not in self.catalog_map:
-            raise tornado.web.HTTPError(400, "unknown descriptor type: {}".format(desc_type))
-
-        self.log.message(ExportStart())
+            raise ValueError("Invalid package type: {}".format(desc_type))
 
         # Parse the IDs
-        ids_query = self.get_query_argument("ids")
-        ids = [id.strip() for id in ids_query.split(',')]
-        if len(ids) != 1:
-            raise message.MessageException(ExportSingleDescriptorOnlyError)
-        desc_id = ids[0]
-
+        desc_id = msg.package_id
         catalog = self.catalog_map[desc_type]
 
         if desc_id not in catalog:
-            raise tornado.web.HTTPError(400, "unknown descriptor id: {}".format(desc_id))
+            raise ValueError("Unable to find package ID: {}".format(desc_id))
 
         desc_msg = catalog[desc_id]
 
         # Get the schema for exporting
-        schema = self.get_argument("schema", default="rift")
+        schema = msg.export_schema.lower()
 
         # Get the grammar for exporting
-        grammar = self.get_argument("grammar", default="osm")
+        grammar = msg.export_grammar.lower()
 
         # Get the format for exporting
-        format_ = self.get_argument("format", default="yaml")
+        format_ = msg.export_format.lower()
 
-        filename = None
+        # Initial value of the exported filename 
+        self.filename = "{name}_{ver}".format(
+                name=desc_msg.name, 
+                ver=desc_msg.version)
 
         if grammar == 'tosca':
-            filename = "{}.zip".format(self.transaction_id)
-            self.export_tosca(schema, format_, desc_type, desc_id, desc_msg)
-            self.log.message(message.FilenameMessage(filename))
+            self.export_tosca(schema, format_, desc_type, desc_id, desc_msg, log, transaction_id)
+            filename = "{}.zip".format(self.filename)
+            log.message(message.FilenameMessage(filename))
         else:
-            filename = "{}.tar.gz".format(self.transaction_id)
-            self.export_rift(schema, format_, desc_type, desc_id, desc_msg)
-            self.log.message(message.FilenameMessage(filename))
+            self.export_rift(schema, format_, desc_type, desc_id, desc_msg, log, transaction_id)
+            filename = "{}.tar.gz".format(self.filename)
+            log.message(message.FilenameMessage(filename))
 
-        self.log.message(ExportSuccess())
+        log.message(ExportSuccess())
 
-        if filename is not None:
-            self.write(tornado.escape.json_encode({
-                "transaction_id": self.transaction_id,
-                "filename": filename,
-            }))
-        else:
-            self.write(tornado.escape.json_encode({
-                "transaction_id": self.transaction_id,
-            }))
+        return filename
 
-    def export_rift(self, schema, format_, desc_type, desc_id, desc_msg):
+    def export_rift(self, schema, format_, desc_type, desc_id, desc_msg, log, transaction_id):
         convert = rift.package.convert
         schema_serializer_map = {
                 "rift": {
@@ -273,8 +288,8 @@ class ExportHandler(tornado.web.RequestHandler):
                     "nsd": convert.RwNsdSerializer,
                     },
                 "mano": {
-                    "vnfd": convert.VnfdSerializer,
-                    "nsd": convert.NsdSerializer,
+                    "vnfd": convert.RwVnfdSerializer,
+                    "nsd": convert.RwNsdSerializer,
                     }
                 }
 
@@ -282,7 +297,7 @@ class ExportHandler(tornado.web.RequestHandler):
             raise tornado.web.HTTPError(400, "unknown schema: {}".format(schema))
 
         if format_ != "yaml":
-            self.log.warn("Only yaml format supported for export")
+            log.warn("Only yaml format supported for export")
 
         if desc_type not in schema_serializer_map[schema]:
             raise tornado.web.HTTPError(400, "unknown descriptor type: {}".format(desc_type))
@@ -299,31 +314,50 @@ class ExportHandler(tornado.web.RequestHandler):
         try:
             package = package_store.get_package(desc_id)
         except rift.package.store.PackageNotFoundError:
-            self.log.debug("stored package not found.  creating package from descriptor config")
+            log.debug("stored package not found.  creating package from descriptor config")
 
             desc_yaml_str = src_serializer.to_yaml_string(desc_msg)
             with io.BytesIO(desc_yaml_str.encode()) as hdl:
                 hdl.name = "{}__{}.yaml".format(desc_msg.id, desc_type)
                 package = rift.package.package.DescriptorPackage.from_descriptor_file_hdl(
-                    self.log, hdl
+                    log, hdl
                     )
+
+        # Try to get the updated descriptor from the api endpoint so that we have 
+        # the updated descriptor file in the exported archive and the name of the archive 
+        # tar matches the name in the yaml descriptor file. Proceed with the current 
+        # file if there's an error
+        #
+        json_desc_msg = src_serializer.to_json_string(desc_msg)
+        desc_name, desc_version = desc_msg.name, desc_msg.version
+        try: 
+            d = collections.defaultdict(dict)
+            sub_dict = self.onboarder.get_updated_descriptor(desc_msg)
+            root_key, sub_key = "{0}:{0}-catalog".format(desc_type), "{0}:{0}".format(desc_type)
+            # root the dict under "vnfd:vnfd-catalog" 
+            d[root_key] = sub_dict
+            
+            json_desc_msg = json.dumps(d)
+            desc_name, desc_version = sub_dict[sub_key]['name'], sub_dict[sub_key]['version']
+
+        except Exception as e:
+            msg = "Exception {} raised - {}".format(e.__class__.__name__, str(e)) 
+            self.log.debug(msg)
+
+        # exported filename based on the updated descriptor name
+        self.filename = "{}_{}".format(desc_name, desc_version)
 
         self.exporter.export_package(
                 package=package,
                 export_dir=self.application.export_dir,
-                file_id=self.transaction_id,
-                json_desc_str=src_serializer.to_json_string(desc_msg),
+                file_id = self.filename,
+                json_desc_str=json_desc_msg,
                 dest_serializer=dest_serializer,
                 )
 
-    def export_tosca(self, format_, schema, desc_type, desc_id, desc_msg):
+    def export_tosca(self, format_, schema, desc_type, desc_id, desc_msg, log, transaction_id):
         if format_ != "yaml":
-            self.log.warn("Only yaml format supported for TOSCA export")
-
-        if desc_type != "nsd":
-            raise tornado.web.HTTPError(
-                400,
-                "NSD need to passed to generate TOSCA: {}".format(desc_type))
+            log.warn("Only yaml format supported for TOSCA export")
 
         def get_pkg_from_store(id_, type_):
             package = None
@@ -333,33 +367,44 @@ class ExportHandler(tornado.web.RequestHandler):
                 package = package_store.get_package(id_)
 
             except rift.package.store.PackageNotFoundError:
-                self.log.debug("stored package not found for {}.".format(id_))
+                log.debug("stored package not found for {}.".format(id_))
             except rift.package.store.PackageStoreError:
-                self.log.debug("stored package error for {}.".format(id_))
+                log.debug("stored package error for {}.".format(id_))
 
             return package
 
-        pkg = tosca.ExportTosca()
+        if desc_type == "nsd":
+            pkg = tosca.ExportTosca()
 
-        # Add NSD and related descriptors for exporting
-        nsd_id = pkg.add_nsd(desc_msg, get_pkg_from_store(desc_id, "nsd"))
+            # Add NSD and related descriptors for exporting
+            nsd_id = pkg.add_nsd(desc_msg, get_pkg_from_store(desc_id, "nsd"))
 
-        catalog = self.catalog_map["vnfd"]
-        for const_vnfd in desc_msg.constituent_vnfd:
-            vnfd_id = const_vnfd.vnfd_id_ref
-            if vnfd_id in catalog:
-                pkg.add_vnfd(nsd_id,
-                             catalog[vnfd_id],
-                             get_pkg_from_store(vnfd_id, "vnfd"))
-            else:
-                raise tornado.web.HTTPError(
-                    400,
-                    "Unknown VNFD descriptor {} for NSD {}".
-                    format(vnfd_id, nsd_id))
+            catalog = self.catalog_map["vnfd"]
+            for const_vnfd in desc_msg.constituent_vnfd:
+                vnfd_id = const_vnfd.vnfd_id_ref
+                if vnfd_id in catalog:
+                    pkg.add_vnfd(nsd_id,
+                                 catalog[vnfd_id],
+                                 get_pkg_from_store(vnfd_id, "vnfd"))
+                else:
+                    raise tornado.web.HTTPError(
+                        400,
+                        "Unknown VNFD descriptor {} for NSD {}".
+                        format(vnfd_id, nsd_id))
 
-        # Create the archive.
-        pkg.create_archive(self.transaction_id,
-                           dest=self.application.export_dir)
+            # Create the archive.
+            pkg.create_archive(transaction_id,
+                               dest=self.application.export_dir)
+        if desc_type == "vnfd":
+            pkg = tosca.ExportTosca()
+            vnfd_id = desc_msg.id
+            pkg.add_single_vnfd(vnfd_id,
+                                 desc_msg,
+                                 get_pkg_from_store(vnfd_id, "vnfd"))
+
+            # Create the archive.
+            pkg.create_archive(transaction_id,
+                               dest=self.application.export_dir)
 
 
 class ExportStateHandler(state.StateHandler):

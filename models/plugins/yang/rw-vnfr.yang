@@ -298,6 +298,23 @@ module rw-vnfr
     uses vnfd-ref-count;
   }
 
+  augment /vnfr:vnfr-catalog/vnfr:vnfr/vnfr:vnfd/vnfr:mgmt-interface {
+    leaf ssh-key {
+      description
+        "Whether SSH keys need to be generated and passed
+             to the RO and VCA during instantiation.";
+      type boolean;
+    }
+  }
+
+  augment /vnfr:vnfr-catalog/vnfr:vnfr/vnfr:vnfd {
+    leaf meta {
+      description
+        "Any meta-data needed by the UI";
+      type string;
+    }
+  }
+
   container vnfr-console {
     config false;
     list vnfr {

@@ -24,6 +24,7 @@
 
 import os
 import pytest
+import re
 import subprocess
 import sys
 import time
@@ -47,14 +48,23 @@ from gi.repository import (
 class TestSetupPingpongNsd(object):
     def test_onboard(self, mgmt_session, descriptors):
         for descriptor in descriptors:
-            rift.auto.descriptor.onboard(mgmt_session.host, descriptor)
+            rift.auto.descriptor.onboard(mgmt_session, descriptor)
 
     def test_install_sar(self, mgmt_session):
-        install_cmd = 'ssh {mgmt_ip} -q -n -o BatchMode=yes -o StrictHostKeyChecking=no -- sudo yum install sysstat --assumeyes'.format(
-                mgmt_ip=mgmt_session.host,
-        )
+        get_platform_cmd = 'ssh {host} -q -n -o BatchMode=yes -o StrictHostKeyChecking=no -- python3 -mplatform'
+        platform_result = subprocess.check_output(get_platform_cmd.format(host=mgmt_session.host), shell=True)
+        platform_match = re.search('(Ubuntu|fedora)-(\d+)', platform_result.decode('ascii'))
+        assert platform_match is not None
+        (dist, ver) = platform_match.groups()
+        if dist == 'fedora':
+            install_cmd = 'ssh {host} -q -n -o BatchMode=yes -o StrictHostKeyChecking=no -- sudo yum install sysstat --assumeyes'.format(
+                    host=mgmt_session.host,
+            )
+        elif dist == 'Ubuntu':
+            install_cmd = 'ssh {host} -q -n -o BatchMode=yes -o StrictHostKeyChecking=no -- sudo apt-get -q -y install sysstat'.format(
+                    host=mgmt_session.host,
+            )
         subprocess.check_call(install_cmd, shell=True)
-
 
 @pytest.fixture(scope='function', params=[5,10,15,20,25])
 def service_count(request):
@@ -100,6 +110,7 @@ class TestScaling(object):
                         attempts = 0 # Made some progress so reset the number of attempts remaining
                     except rift.auto.session.ProxyWaitForError:
                         mgmt_session.proxy(RwNsrYang).delete_config("/ns-instance-config/nsr[id='{}']".format(ns_instance_config_ref))
+                        time.sleep(5)
 
         def monitor_launchpad_performance(service_count, interval=30, samples=1):
             sar_cmd = "ssh {mgmt_ip} -q -n -o BatchMode=yes -o StrictHostKeyChecking=no -- sar -A {interval} {samples}".format(

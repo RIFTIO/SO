@@ -207,7 +207,7 @@ class ConfigManagerConfig(object):
                 done = False
                 if 'nsrid' in task:
                     nsrid = task['nsrid']
-                    self._log.debug("Will execute pending task for NSR id(%s)", nsrid)
+                    self._log.debug("Will execute pending task for NSR id: %s", nsrid)
                     try:
                         # Try to configure this NSR
                         task['retries'] -= 1
@@ -224,7 +224,7 @@ class ConfigManagerConfig(object):
                             done = True
 
                     if done:
-                        self._log.debug("Finished pending task NSR id(%s):", nsrid)
+                        self._log.debug("Finished pending task NSR id: %s", nsrid)
                     else:
                         self._log.error("Failed configuring NSR(%s), retries remained:%d!",
                                         nsrid, task['retries'])
@@ -245,7 +245,7 @@ class ConfigManagerConfig(object):
         # Initialize all handles that needs to be registered
         for reg in self.reg_handles:
             yield from reg.register()
-        
+
     @asyncio.coroutine
     def register_cm_state_opdata(self):
 
@@ -297,16 +297,16 @@ class ConfigManagerConfig(object):
         except Exception as e:
             self._log.error("Failed to register for opdata as (%s)", e)
 
+    def get_config_method(self, vnf_config):
+        cfg_types = ['netconf', 'juju', 'script']
+        for method in cfg_types:
+            if method in vnf_config:
+                return method
+        return None
+
     @asyncio.coroutine
     def process_nsd_vnf_configuration(self, nsr_obj, vnfr):
 
-        def get_config_method(vnf_config):
-            cfg_types = ['netconf', 'juju', 'script']
-            for method in cfg_types:
-                if method in vnf_config:
-                    return method
-            return None
-            
         def get_cfg_file_extension(method,  configuration_options):
             ext_dict = {
                 "netconf" : "xml",
@@ -354,6 +354,9 @@ class ConfigManagerConfig(object):
             target : running
         '''
 
+        # Get vnf_configuration from vnfr
+        vnf_config = vnfr['vnf_configuration']
+
         # Save some parameters needed as short cuts in flat structure (Also generated)
         vnf_cfg = vnfr['vnf_cfg']
         # Prepare unique name for this VNF
@@ -364,9 +367,6 @@ class ConfigManagerConfig(object):
             nsr_obj.this_nsr_dir, vnfr['short_name'], vnfr['member_vnf_index_ref'])
         nsr_vnfr = '{}/{}_{}'.format(
             vnf_cfg['nsr_name'], vnfr['short_name'], vnfr['member_vnf_index_ref'])
-
-        # Get vnf_configuration from vnfr
-        vnf_config = vnfr['vnf_configuration']
 
         self._log.debug("vnf_configuration = %s", vnf_config)
 
@@ -380,7 +380,7 @@ class ConfigManagerConfig(object):
             # No VNFR with this priority yet, initialize the list
             nsr_obj.nsr_cfg_config_attributes_dict[cfg_priority_order] = []
 
-        method = get_config_method(vnf_config)
+        method = self.get_config_method(vnf_config)
         if method is not None:
             # Create all sub dictionaries first
             config_priority = {
@@ -389,9 +389,12 @@ class ConfigManagerConfig(object):
                 'member_vnf_index' : vnfr['member_vnf_index_ref'],
             }
 
-            if 'config_delay' in vnf_config['config_attributes']:
-                config_priority['configuration_delay'] = vnf_config['config_attributes']['config_delay']
-                vnf_cfg['config_delay'] = config_priority['configuration_delay']
+            if ('config_attributes' in vnf_config) and \
+               ('config_delay' in vnf_config['config_attributes']):
+                    config_priority['configuration_delay'] = vnf_config['config_attributes']['config_delay']
+                    vnf_cfg['config_delay'] = config_priority['configuration_delay']
+            else:
+                vnf_cfg['config_delay'] = 0
 
             configuration_options = {}
             self._log.debug("config method=%s", method)
@@ -421,16 +424,14 @@ class ConfigManagerConfig(object):
             vnf_cp_dict['rw_mgmt_ip'] = vnf_cfg['mgmt_ip_address']
             vnf_cp_dict['rw_username'] = vnf_cfg['username']
             vnf_cp_dict['rw_password'] = vnf_cfg['password']
-            
 
-            # TBD - see if we can neatly include the config in "config_attributes" file, no need though
-            #config_priority['config_template'] = vnf_config['config_template']
-            # Create config file
-            vnf_cfg['juju_script'] = os.path.join(self._parent.cfg_dir, 'juju_if.py')
 
             if 'config_template' in vnf_config:
-                vnf_cfg['cfg_template'] = '{}_{}_template.cfg'.format(nsr_obj.cfg_path_prefix, config_priority['configuration_type'])
-                vnf_cfg['cfg_file'] = '{}.{}'.format(nsr_obj.cfg_path_prefix, get_cfg_file_extension(method, configuration_options))
+                vnf_cfg['cfg_template'] = '{}_{}_template.cfg'.format(nsr_obj.cfg_path_prefix,
+                                                                      config_priority['configuration_type'])
+                vnf_cfg['cfg_file'] = '{}.{}'.format(nsr_obj.cfg_path_prefix,
+                                                     get_cfg_file_extension(method,
+                                                                            configuration_options))
                 vnf_cfg['xlate_script'] = os.path.join(self._parent.cfg_dir, 'xlate_cfg.py')
                 try:
                     # Now write this template into file
@@ -460,6 +461,350 @@ class ConfigManagerConfig(object):
 
         # Update the cm-state
         nsr_obj.populate_vm_state_from_vnf_cfg()
+
+    @asyncio.coroutine
+    def update_config_primitives(self, nsr_obj):
+
+         # Process all config-primitives in the member VNFs
+        for vnfr in nsr_obj.vnfrs:
+            vnfd = vnfr['vnf_cfg']['agent_vnfr'].vnfd
+
+            try:
+                prims = vnfd.vnf_configuration.config_primitive
+                if not prims:
+                    self._log.debug("VNFR {} with VNFD {} has no config primitives defined".
+                                    format(vnfr['name'], vnfd.name))
+                    return
+            except AttributeError as e:
+                self._log.error("No config primitives found on VNFR {} ({})".
+                                format(vnfr['name'], vnfd.name))
+                continue
+
+            cm_state = nsr_obj.find_vnfr_cm_state(vnfr['id'])
+            srcs = cm_state['config_parameter']['config_parameter_source']
+            reqs = cm_state['config_parameter']['config_parameter_request']
+
+            vnf_configuration = vnfd.vnf_configuration.as_dict()
+            vnf_configuration['config_primitive'] = []
+            for prim in prims:
+                confp = prim.as_dict()
+                if 'parameter' not in confp:
+                    continue
+
+                for param in confp['parameter']:
+                    # First check the param in capabilities
+                    found = False
+                    for src in srcs:
+                        for p in src['parameter']:
+                            if (p['config_primitive_ref'] == confp['name']) \
+                               and (p['parameter_ref'] == param['name']):
+                                param['default_value'] = src['value']
+                                param['read_only'] = True
+                                found = True
+                                break
+                        if found:
+                            break
+
+                    if not found:
+                        for req in reqs:
+                            for p in req['parameter']:
+                                if (p['config_primitive_ref'] == confp['name']) \
+                                   and (p['parameter_ref'] == param['name']):
+                                    param['default_value'] = req['value']
+                                    param['read_only'] = True
+                                    found = True
+                                    break
+                            if found:
+                                break
+
+                self._log.debug("Config primitive: {}".format(confp))
+                vnf_configuration['config_primitive'].append(confp)
+
+            cm_state['vnf_configuration'] = vnf_configuration
+
+    @asyncio.coroutine
+    def get_resolved_xpath(self, xpath, name, vnf_name, xpath_prefix):
+        # For now, use DTS to resolve the path
+        # TODO (pjoseph): Add better xpath support
+
+        dts_path = xpath
+        if xpath.startswith('../'):
+            prefix = xpath_prefix
+            xp = xpath
+            while xp.startswith('../'):
+                idx = prefix.rfind('/')
+                if idx == -1:
+                    raise ValueError("VNF {}, Did not find the xpath specified: {}".
+                                     format(vnf_name, xpath))
+                prefix = prefix[:idx]
+                xp = xp[3:]
+
+            dts_path = prefix + '/' + xp
+
+        elif xpath.startswith('/'):
+            dts_path = 'C,' + xpath
+        elif xpath.startswith('C,/') or xpath.startswith('D,/'):
+            dts_path = xpath
+        else:
+            self._log.error("Invalid xpath {} for source {} in VNF {}".
+                            format(xpath, name, vnf_name))
+            raise ValueError("Descriptor xpath {} in source {} for VNF {} "
+                             "is invalid".
+                             format(xpath, name, vnf_name))
+        return dts_path
+
+    @asyncio.coroutine
+    def resolve_xpath(self, xpath, name, vnfd):
+        xpath_prefix = "C,/vnfd:vnfd-catalog/vnfd[id='{}']/config-parameter" \
+                "/config-parameter-source[name='{}']" \
+                "/descriptor".format(vnfd.id, name)
+
+        dts_path = yield from self.get_resolved_xpath(xpath, name,
+                                                      vnfd.name, xpath_prefix)
+        idx = dts_path.rfind('/')
+        if idx == -1:
+            raise ValueError("VNFD {}, descriptor xpath {} should point to " \
+                             "an attribute".format(vnfd.name, xpath))
+
+        attr = dts_path[idx+1:]
+        dts_path = dts_path[:idx]
+        self._log.debug("DTS path: {}, attribute: {}".format(dts_path, attr))
+
+        resp = yield from self.cmdts_obj.get_xpath(dts_path)
+        if resp is None:
+            raise ValueError("Xpath {} in capability {} for VNFD {} is not found".
+                             format(xpath, name, vnfd.name))
+        self._log.debug("DTS response: {}".format(resp.as_dict()))
+
+        try:
+            val = getattr(resp, attr)
+        except AttributeError as e:
+            self._log.error("Did not find attribute : {}".format(attr))
+            try:
+                val = getattr(resp, attr.replace('-', '_'))
+            except AttributeError as e:
+                raise ValueError("Did not find attribute {} in XPath {} "
+                                 "for capability {} in VNF {}".
+                                 format(attr, dts_path, vnfd.name))
+
+        self._log.debug("XPath {}: {}".format(xpath, val))
+        return val
+
+    @asyncio.coroutine
+    def resolve_attribute(self, attribute, name, vnfd, vnfr):
+        idx = attribute.rfind(',')
+        if idx == -1:
+            raise ValueError ("Invalid attribute {} for capability {} in "
+                              "VNFD specified".
+                              format(attribute, name, vnfd.name))
+        xpath = attribute[:idx].strip()
+        attr = attribute[idx+1:].strip()
+        self._log.debug("Attribute {}, {}".format(xpath, attr))
+        if xpath.startswith('C,/'):
+            raise ValueError("Attribute {} for capability {} in VNFD cannot "
+                             "be a config".
+                             format(attribute, name, vnfd.name))
+
+        xpath_prefix = "D,/vnfr:vnfr-catalog/vnfr[id='{}']/config_parameter" \
+                "/config-parameter-source[name='{}']" \
+                "/attribute".format(vnfr['id'], name)
+        dts_path = yield from self.get_resolved_xpath(xpath, name,
+                                                      vnfr['name'],
+                                                      xpath_prefix)
+        self._log.debug("DTS query: {}".format(dts_path))
+
+        resp = yield from self.cmdts_obj.get_xpath(dts_path)
+        if resp is None:
+            raise ValueError("Attribute {} in request {} for VNFD {} is " \
+                             "not found".
+                             format(xpath, name, vnfd.name))
+        self._log.debug("DTS response: {}".format(resp.as_dict()))
+
+        try:
+            val = getattr(resp, attr)
+        except AttributeError as e:
+            self._log.debug("Did not find attribute {}".format(attr))
+            try:
+                val = getattr(resp, attr.replace('-', '_'))
+            except AttributeError as e:
+                raise ValueError("Did not find attribute {} in XPath {} "
+                                 "for source {} in VNF {}".
+                                 format(attr, dts_path, vnfd.name))
+
+        self._log.debug("Attribute {}: {}".format(attribute, val))
+        return val
+
+    @asyncio.coroutine
+    def process_vnf_config_parameter(self, nsr_obj):
+        nsd = nsr_obj.agent_nsr.nsd
+
+        # Process all capabilities in all the member VNFs
+        for vnfr in nsr_obj.vnfrs:
+            vnfd = vnfr['vnf_cfg']['agent_vnfr'].vnfd
+
+            try:
+                cparam = vnfd.config_parameter
+            except AttributeError as e:
+                self._log.debug("VNFR {} does not have VNF config parameter".
+                                format(vnfr.name))
+                continue
+
+            srcs = []
+            try:
+                srcs = cparam.config_parameter_source
+            except AttributeError as e:
+                self._log.debug("VNFR {} has no source defined".
+                                format(vnfr.name))
+
+            # Get the cm state dict for this vnfr
+            cm_state = nsr_obj.find_vnfr_cm_state(vnfr['id'])
+
+            cm_srcs = []
+            for src in srcs:
+                self._log.debug("VNFR {}: source {}".
+                                format(vnfr['name'], src.as_dict()))
+
+                param_refs = []
+                for p in src.parameter:
+                    param_refs.append({
+                        'config_primitive_ref': p.config_primitive_name_ref,
+                        'parameter_ref': p.config_primitive_parameter_ref
+                    })
+
+                try:
+                    val = src.value
+                    self._log.debug("Got value {}".format(val))
+                    if val:
+                        cm_srcs.append({'name': src.name,
+                                        'value': str(val),
+                                        'parameter': param_refs})
+                        continue
+                except AttributeError as e:
+                    pass
+
+                try:
+                    xpath = src.descriptor
+                    # resolve xpath
+                    if xpath:
+                        val = yield from self.resolve_xpath(xpath, src.name, vnfd)
+                        self._log.debug("Got xpath value: {}".format(val))
+                        cm_srcs.append({'name': src.name,
+                                        'value': str(val),
+                                        'parameter': param_refs})
+                        continue
+                except AttributeError as e:
+                    pass
+
+                try:
+                    attribute = src.attribute
+                    # resolve attribute
+                    if attribute:
+                        val = yield from self.resolve_attribute(attribute,
+                                                                src.name,
+                                                                vnfd, vnfr)
+                        self._log.debug("Got attribute value: {}".format(val))
+                        cm_srcs.append({'name': src.name,
+                                        'value': str(val),
+                                        'parameter': param_refs})
+                        continue
+                except AttributeError as e:
+                    pass
+
+                try:
+                    prim = src.primitive_ref
+                    if prim:
+                        raise NotImplementedError("{}: VNF config parameter {}"
+                                                  "source support for config"
+                                                  "primitive not yet supported".
+                                                  format(vnfr.name, prim))
+                except AttributeError as e:
+                    pass
+
+            self._log.debug("VNF config parameter sources: {}".format(cm_srcs))
+            cm_state['config_parameter']['config_parameter_source'] = cm_srcs
+
+            try:
+                reqs = cparam.config_parameter_request
+            except AttributeError as e:
+                self._log.debug("VNFR {} has no requests defined".
+                                format(vnfr.name))
+                continue
+
+            cm_reqs = []
+            for req in reqs:
+                self._log.debug("VNFR{}: request {}".
+                                format(vnfr['name'], req.as_dict()))
+                param_refs = []
+                for p in req.parameter:
+                    param_refs.append({
+                        'config_primitive_ref': p.config_primitive_name_ref,
+                        'parameter_ref': p.config_primitive_parameter_ref
+                    })
+                cm_reqs.append({'name': req.name,
+                                'parameter': param_refs})
+
+            self._log.debug("VNF requests: {}".format(cm_reqs))
+            cm_state['config_parameter']['config_parameter_request'] = cm_reqs
+
+        # Publish all config parameter for the VNFRs
+        # yield from nsr_obj.publish_cm_state()
+
+        cparam_map = []
+        try:
+            cparam_map = nsd.config_parameter_map
+        except AttributeError as e:
+            self._log.debug("No config parameter map specified for nsr: {}".
+                            format(nsr_obj.nsr_name))
+
+        for cp in cparam_map:
+            src_vnfr = nsr_obj.agent_nsr.get_member_vnfr(
+                cp.config_parameter_source.member_vnf_index_ref)
+            cm_state = nsr_obj.find_vnfr_cm_state(src_vnfr.id)
+            if cm_state is None:
+                raise ValueError("Config parameter sources are not defined "
+                        "for VNF member {} ({})".
+                        format(cp.config_parameter_source.member_vnf_index_ref,
+                               src_vnfr.name))
+            srcs = cm_state['config_parameter']['config_parameter_source']
+
+            src_attr = cp.config_parameter_source.config_parameter_source_ref
+            val = None
+            for src in srcs:
+                if src['name'] == src_attr:
+                    val = src['value']
+                    break
+
+            req_vnfr = nsr_obj.agent_nsr.get_member_vnfr(
+                cp.config_parameter_request.member_vnf_index_ref)
+            req_attr = cp.config_parameter_request.config_parameter_request_ref
+            cm_state = nsr_obj.find_vnfr_cm_state(req_vnfr.id)
+            try:
+                cm_reqs = cm_state['config_parameter']['config_parameter_request']
+            except KeyError as e:
+                raise ValueError("VNFR index {} ({}) has no requests defined".
+                        format(cp.config_parameter_reequest.member_vnf_index_ref,
+                               req_vnfr['name']))
+
+            for i, item in enumerate(cm_reqs):
+                if item['name'] == req_attr:
+                    item['value'] = str(val)
+                    cm_reqs[i] = item
+                    self._log.debug("Request in VNFR {}: {}".
+                                    format(req_vnfr.name, item))
+                    break
+
+        yield from self.update_config_primitives(nsr_obj)
+
+        # TODO: Confd crashing with the config-parameter publish
+        # So removing config-parameter and publishing cm-state
+        for vnfr in nsr_obj.vnfrs:
+            # Get the cm state dict for this vnfr
+            cm_state = nsr_obj.find_vnfr_cm_state(vnfr['id'])
+            del cm_state['config_parameter']['config_parameter_source']
+            del cm_state['config_parameter']['config_parameter_request']
+
+        # Publish resolved dependencies for the VNFRs
+        yield from nsr_obj.publish_cm_state()
 
     @asyncio.coroutine
     def config_NSR(self, id, event):
@@ -530,16 +875,22 @@ class ConfigManagerConfig(object):
                             if vnfr_msg:
                                 vnfr = vnfr_msg.as_dict()
                                 self._log.info("create VNF:{}/{}".format(nsr_obj.nsr_name, vnfr['short_name']))
-                                agent_vnfr = yield from nsr_obj.add_vnfr(vnfr, vnfr_msg)
+                                yield from nsr_obj.add_vnfr(vnfr, vnfr_msg)
 
                                 # Preserve order, self.process_nsd_vnf_configuration()
                                 # sets up the config agent based on the method
                                 yield from self.process_nsd_vnf_configuration(nsr_obj, vnfr)
-                                yield from self._config_agent_mgr.invoke_config_agent_plugins(
-                                    'notify_create_vnfr',
-                                    nsr_obj.agent_nsr,
-                                    agent_vnfr)
 
+
+                        # Process VNF config parameter
+                        yield from self.process_vnf_config_parameter(nsr_obj)
+
+                        # Invoke the config agent plugin
+                        for vnfr in nsr_obj.vnfrs:
+                            yield from self._config_agent_mgr.invoke_config_agent_plugins(
+                                'notify_create_vnfr',
+                                nsr_obj.agent_nsr,
+                                vnfr['vnf_cfg']['agent_vnfr'])
 
                 except Exception as e:
                     self._log.error("Failed processing NSR (%s) as (%s)", nsr_obj.nsr_name, str(e))
@@ -700,42 +1051,40 @@ class ConfigManagerConfig(object):
         self._log.info("NSR(%s/%s) is deleted", nsr_obj.nsr_name, id)
 
     def get_script_file(self, script_name, d_name, d_id, d_type):
-        # Get the full path to the script
-        script = ''
-        # If script name starts with /, assume it is full path
-        if script_name[0] == '/':
-            # The script has full path, use as is
-            script = script_name
-        else:
-            script = os.path.join(os.environ['RIFT_ARTIFACTS'],
-                                  'launchpad/packages/nsd',
-                                  d_type,
-                                  d_id,
-                                  d_name,
-                                  'scripts',
-                                  script_name)
-            self._log.debug("Checking for script at %s", script)
-            if not os.path.exists(script):
-                self._log.debug("Did not find script %s", script)
-                script = os.path.join(os.environ['RIFT_INSTALL'],
-                                      'usr/bin',
-                                      script_name)
-
-            # Seen cases in jenkins, where the script execution fails
-            # with permission denied. Setting the permission on script
-            # to make sure it has execute permission
-            perm = os.stat(script).st_mode
-            if not (perm  &  stat.S_IXUSR):
-                self._log.warn("NSRi/VNFR {} config script {} " \
-                              "without execute permission: {}".
-                              format(d_name, script, perm))
-                os.chmod(script, perm | stat.S_IXUSR)
-            return script
+          # Get the full path to the script
+          script = ''
+          # If script name starts with /, assume it is full path
+          if script_name[0] == '/':
+              # The script has full path, use as is
+              script = script_name
+          else:
+              script = os.path.join(os.environ['RIFT_ARTIFACTS'],
+                                    'launchpad/packages',
+                                    d_type,
+                                    d_id,
+                                    d_name,
+                                    'scripts',
+                                    script_name)
+              self._log.debug("Checking for script at %s", script)
+              if not os.path.exists(script):
+                  self._log.warning("Did not find script %s", script)
+                  script = os.path.join(os.environ['RIFT_INSTALL'],
+                                        'usr/bin',
+                                        script_name)
+              # Seen cases in jenkins, where the script execution fails
+              # with permission denied. Setting the permission on script
+              # to make sure it has execute permission
+              perm = os.stat(script).st_mode
+              if not (perm  &  stat.S_IXUSR):
+                  self._log.warning("NSR/VNFR {} initial config script {} " \
+                                    "without execute permission: {}".
+                                    format(d_name, script, perm))
+                  os.chmod(script, perm | stat.S_IXUSR)
+              return script
 
     @asyncio.coroutine
-    def process_event_config(self, nsr_obj, conf, script,
-                             vnfr_name=None):
-        '''Apply the initial-config-primitives specified in NSD'''
+    def process_initial_config(self, nsr_obj, conf, script, vnfr_name=None):
+        '''Apply the initial-config-primitives specified in NSD or VNFD'''
 
         def get_input_file(parameters):
             inp = {}
@@ -746,10 +1095,6 @@ class ConfigManagerConfig(object):
             # Add VNFR name if available
             if vnfr_name:
                 inp['vnfr_name'] = vnfr_name
-
-            # TODO (pjoseph): Add config agents, we need to identify which all
-            # config agents are required from this NS and provide only those
-            inp['config-agent'] = {}
 
             # Add parameters for initial config
             inp['parameter'] = {}
@@ -764,6 +1109,20 @@ class ConfigManagerConfig(object):
                         self._log.info("NSR {} initial config parameter {} with no value: {}".
                                        format(nsr_obj.nsr_name, parameter, e))
 
+
+            # Add config agents specific to each VNFR
+            inp['config-agent'] = {}
+            for vnfr in nsr_obj.agent_nsr.vnfrs:
+                # Get the config agent for the VNFR
+                # If vnfr name is specified, add only CA specific to that
+                if (vnfr_name is None) or \
+                   (vnfr_name == vnfr.name):
+                    agent = self._config_agent_mgr.get_vnfr_config_agent(vnfr.vnfr_msg)
+                    if agent:
+                        if agent.agent_type != riftcm_config_plugin.DEFAULT_CAP_TYPE:
+                            inp['config-agent'][vnfr.member_vnf_index] = agent.agent_data
+                            inp['config-agent'][vnfr.member_vnf_index] \
+                                ['service-name'] = agent.get_service_name(vnfr.id)
 
             # Add vnfrs specific data
             inp['vnfr'] = {}
@@ -781,23 +1140,24 @@ class ConfigManagerConfig(object):
                 if 'connection_point' in vnfr:
                     v['connection_point'] = []
                     for cp in vnfr['connection_point']:
-                        v['connection_point'].append(
-                            {
-                                'name': cp['name'],
-                                'ip_address': cp['ip_address'],
-                                'connection_point_id': cp['connection_point_id'],
-                            }
-                        )
+                        cp_info = dict(name=cp['name'],
+                                       ip_address=cp['ip_address'],
+                                       connection_point_id=cp['connection_point_id'])
+                        
+                        if 'virtual_cps' in cp:
+                            cp_info['virtual_cps'] = [ {k:v for k,v in vcp.items()
+                                                        if k in ['ip_address', 'mac_address']}
+                                                       for vcp in cp['virtual_cps'] ]
+                        v['connection_point'].append(cp_info)
 
-                v['vdur'] = []
+
                 vdu_data = [(vdu['name'], vdu['management_ip'], vdu['vm_management_ip'], vdu['id'])
-                        for vdu in vnfr['vdur']]
+                            for vdu in vnfr['vdur']]
 
-                for data in vdu_data:
-                    data = dict(zip(['name', 'management_ip', 'vm_management_ip', 'id'] , data))
-                    v['vdur'].append(data)
+                v['vdur'] = [ dict(zip(['name', 'management_ip', 'vm_management_ip', 'id', 'vdu_id_ref'] , data)) for data in vdu_data ]
 
                 inp['vnfr'][vnfr['member_vnf_index_ref']] = v
+
 
             self._log.debug("Input data for {}: {}".
                             format((vnfr_name if vnfr_name else nsr_obj.nsr_name),
@@ -830,35 +1190,33 @@ class ConfigManagerConfig(object):
         self._log.debug("Running the CMD: {}".format(cmd))
 
         process = yield from asyncio.create_subprocess_shell(cmd,
-                                                             loop=self._loop)
-        yield from process.wait()
+                                                             loop=self._loop,
+                                                             stdout=subprocess.PIPE,
+                                                             stderr=subprocess.PIPE)
+        stdout, stderr = yield from process.communicate()
+        rc = yield from process.wait()
 
-        if process.returncode:
-            msg = "NSR/VNFR {} initial config using {} failed with {}". \
+        if rc:
+            msg = "NSR/VNFR {} initial config using {} failed with {}: {}". \
                   format(vnfr_name if vnfr_name else nsr_obj.nsr_name,
-                         script, process.returncode)
+                         script, rc, stderr)
             self._log.error(msg)
             raise InitialConfigError(msg)
-        else:
+
+        try:
             os.remove(inp_file)
+        except Exception as e:
+            self._log.debug("Error removing input file {}: {}".
+                            format(inp_file, e))
 
     @asyncio.coroutine
     def process_ns_initial_config(self, nsr_obj):
         '''Apply the initial-config-primitives specified in NSD'''
-
         nsr = yield from self.cmdts_obj.get_nsr(nsr_obj.nsr_id)
         if 'initial_config_primitive' not in nsr:
             return
-
         if nsr is not None:
-            self._nsr = nsr
-            nsr_cfg_msg = yield from self.cmdts_obj.get_nsr_config(nsr_obj.nsr_id)
-            self._nsr_cfg_msg = nsr_cfg_msg
-            if nsr_cfg_msg is not None:
-                nsd = nsr_cfg_msg.nsd
-            else:
-                raise LookupError("NSR %s config was not found", nsr_id)
-
+            nsd = yield from self.cmdts_obj.get_nsd(nsr_obj.nsr_id)
             for conf in nsr['initial_config_primitive']:
                 self._log.debug("NSR {} initial config: {}".
                                 format(nsr_obj.nsr_name, conf))
@@ -867,7 +1225,34 @@ class ConfigManagerConfig(object):
                                               nsd.id,
                                               'nsd')
 
-                yield from self.process_event_config(nsr_obj, conf, script)
+                yield from self.process_initial_config(nsr_obj, conf, script)
+
+    @asyncio.coroutine
+    def process_vnf_initial_config(self, nsr_obj, vnfr):
+        '''Apply the initial-config-primitives specified in VNFD'''
+        vnfr_name = vnfr.name
+
+        vnfd = vnfr.vnfd
+        vnf_cfg = vnfd.vnf_configuration
+
+        for conf in vnf_cfg.initial_config_primitive:
+                self._log.debug("VNFR {} initial config: {}".
+                                format(vnfr_name, conf))
+
+                if not conf.user_defined_script:
+                    self._log.debug("VNFR {} did not fine user defined script: {}".
+                                    format(vnfr_name, conf))
+                    continue
+
+                script = self.get_script_file(conf.user_defined_script,
+                                              vnfd.name,
+                                              vnfd.id,
+                                              'vnfd')
+
+                yield from self.process_initial_config(nsr_obj,
+                                                       conf.as_dict(),
+                                                       script,
+                                                       vnfr_name=vnfr_name)
 
     @asyncio.coroutine
     def process_ns_terminate_config(self, nsr_obj):
@@ -878,7 +1263,7 @@ class ConfigManagerConfig(object):
             return
 
         if nsr is not None:
-            nsd = self._nsr_cfg_msg.nsd
+            nsd = nsr_obj.agent_nsr.nsd
             for conf in nsr['terminate_config_primitive']:
                 self._log.debug("NSR {} terminate config: {}". 
                                 format(nsr_obj.nsr_name, conf))
@@ -888,7 +1273,7 @@ class ConfigManagerConfig(object):
                                               'nsd')
 
                 try:
-                    yield from self.process_event_config(nsr_obj, conf, script)
+                    yield from self.process_initial_config(nsr_obj, conf, script)
 
                 except Exception as e:
                     # Ignore any failures on terminate
@@ -902,13 +1287,7 @@ class ConfigManagerConfig(object):
 
         vnfr_name = vnfr.name
 
-        vnfd = yield from self.cmdts_obj.get_vnfd(vnfr.vnfd_ref)
-        if vnfd is None:
-            msg = "VNFR {}, unable to get VNFD {}". \
-                  format(vnfr_name, vnfr.vnfd_ref)
-            self._log.error(msg)
-            raise InitialConfigError(msg)
-
+        vnfd = vnfr.vnfd
         vnf_cfg = vnfd.vnf_configuration
 
         for conf in vnf_cfg.initial_config_primitive:
@@ -925,7 +1304,7 @@ class ConfigManagerConfig(object):
                                               vnfd.name,
                                               'vnfd')
 
-                yield from self.process_event_config(nsr_obj,
+                yield from self.process_initial_config(nsr_obj,
                                                      conf.as_dict(),
                                                      script,
                                                      vnfr_name=vnfr_name)
@@ -1019,7 +1398,7 @@ class ConfigManagerNSR(object):
                             caller._nsr['name_ref'], self.this_nsr_dir)
         self.config_attributes_file = os.path.join(self.this_nsr_dir, "configuration_config_attributes.yml")
         self.xlate_dict_file = os.path.join(self.this_nsr_dir, "nsr_xlate_dict.yml")
-        
+
     def xlate_conf(self, vnfr, vnf_cfg):
 
         # If configuration type is not already set, try to read from attributes
@@ -1078,30 +1457,31 @@ class ConfigManagerNSR(object):
             self._cp_dict['rw_mgmt_ip'] = vnf_cfg['mgmt_ip_address']
             self._cp_dict['rw_username'] = vnf_cfg['username']
             self._cp_dict['rw_password'] = vnf_cfg['password']
-            ############################################################
-            # TBD - Need to lookup above 3 for a given VNF, not global #
-            # Once we do that no need to dump below file again before  #
-            # each VNF configuration translation.                      #
-            # This will require all existing config templates to be    #
-            # changed for above three tags to include member index     #
-            ############################################################
-            try:
-                nsr_obj = vnf_cfg['nsr_obj']
-                # Generate config_config_attributes.yaml (For debug reference)
-                with open(nsr_obj.xlate_dict_file, "w") as yf:
-                    yf.write(yaml.dump(nsr_obj._cp_dict, default_flow_style=False))
-            except Exception as e:
-                self._log.error("NS:(%s) failed to write nsr xlate tags file as (%s)", nsr_obj.nsr_name, str(e))
-            
+
             if 'cfg_template' in vnf_cfg:
-                script_cmd = 'python3 {} -i {} -o {} -x "{}"'.format(vnf_cfg['xlate_script'], vnf_cfg['cfg_template'], vnf_cfg['cfg_file'], self.xlate_dict_file)
-                self._log.debug("xlate script command (%s)", script_cmd)
-                #xlate_msg = subprocess.check_output(script_cmd).decode('utf-8')
-                xlate_msg = subprocess.check_output(script_cmd, shell=True).decode('utf-8')
-                self._log.info("xlate script output (%s)", xlate_msg)
+                try:
+                    nsr_obj = vnf_cfg['nsr_obj']
+                    # Generate config_config_attributes.yaml (For debug reference)
+                    with open(nsr_obj.xlate_dict_file, "w") as yf:
+                        yf.write(yaml.dump(nsr_obj._cp_dict, default_flow_style=False))
+                except Exception as e:
+                    self._log.error("NS:(%s) failed to write nsr xlate tags "
+                                    "file as (%s)", nsr_obj.nsr_name, str(e))
+
+                if 'cfg_template' in vnf_cfg:
+                    script_cmd = 'python3 {} -i {} -o {} -x "{}"'. \
+                                 format(vnf_cfg['xlate_script'],
+                                        vnf_cfg['cfg_template'],
+                                        vnf_cfg['cfg_file'],
+                                        self.xlate_dict_file)
+                    self._log.debug("xlate script command (%s)", script_cmd)
+                    xlate_msg = subprocess.check_output(script_cmd, shell=True).decode('utf-8')
+                    self._log.info("xlate script output (%s)", xlate_msg)
+
         except Exception as e:
             vnf_cm_state['state'] = self.state_to_string(conmanY.RecordState.CFG_PROCESS_FAILED)
-            self._log.error("Failed to execute translation script for VNF: %s with (%s)", log_this_vnf(vnf_cfg), str(e))
+            self._log.error("Failed to execute translation script for VNF: %s with (%s)",
+                            log_this_vnf(vnf_cfg), str(e))
             return
 
         self._log.info("Applying config to VNF: %s = %s!", log_this_vnf(vnf_cfg), vnf_cfg)
@@ -1233,6 +1613,11 @@ class ConfigManagerNSR(object):
                 'cfg_type' : vnf_cfg['config_method'],
                 'cfg_location' : vnf_cfg['cfg_file'],
                 'connection_point' : [],
+                'config_parameter' :
+                {
+                    'config_parameter_source' : [],
+                    'config_parameter_request' : [],
+                },
             }
             self.cm_nsr['cm_vnfr'].append(vnf_cm_state)
 
@@ -1314,7 +1699,8 @@ class ConfigManagerNSR(object):
             # Add this vnfr to the list for show, or single traversal
             self._vnfr_list.append(vnfr)
         else:
-            self._log.warning("NSR(%s) : VNF Record for name=%s, id=%s already exists, overwriting", self._nsr_id, vnfr['short_name'], vnfr['id'])
+            self._log.warning("NSR(%s) : VNF Record for name=%s, id=%s already exists, overwriting",
+                              self._nsr_id, vnfr['short_name'], vnfr['id'])
 
         # Make vnfr available by id as well as by name
         unique_name = get_vnf_unique_name(self.nsr_name, vnfr['short_name'], vnfr['member_vnf_index_ref'])
@@ -1371,16 +1757,19 @@ class ConfigManagerNSR(object):
 
                 for cp_item_dict in cp_list:
                     # Populate global dictionary
-                    self._cp_dict[
-                        cp_item_dict['name']
-                    ] = cp_item_dict['ip_address']
+                    try:
+                        self._cp_dict[
+                            cp_item_dict['name']
+                        ] = cp_item_dict['ip_address']
 
-                    # Populate unique member specific dictionary
-                    self._cp_dict[
-                        vnfr['member_vnf_index_ref']
-                    ][
-                        cp_item_dict['name']
-                    ] = cp_item_dict['ip_address']
+                        # Populate unique member specific dictionary
+                        self._cp_dict[
+                            vnfr['member_vnf_index_ref']
+                        ][
+                            cp_item_dict['name']
+                        ] = cp_item_dict['ip_address']
+                    except Exception as e:
+                        self._log.exception("Exception while processing connection point info  %s", str(e))
 
                     # Fill in the subnets from vlr
                     if 'vlr_ref' in cp_item_dict:
@@ -1390,7 +1779,7 @@ class ConfigManagerNSR(object):
         if 'internal_vlr' in vnfr:
             for ivlr in vnfr['internal_vlr']:
                 yield from populate_subnets_from_vlr(ivlr['vlr_ref'])
-                
+
         # Update vnfr
         vnf_cfg['agent_vnfr']._vnfr = vnfr
         return vnf_cfg['agent_vnfr']
@@ -1413,7 +1802,7 @@ class XPaths(object):
                 ("[vnfr:id='{}']".format(k) if k is not None else ""))
 
     @staticmethod
-    def vnfd(k=None):
+    def vnfd_path(k=None):
         return ("C,/vnfd:vnfd-catalog/vnfd:vnfd" +
                 ("[vnfd:id='{}']".format(k) if k is not None else ""))
 
@@ -1424,11 +1813,13 @@ class XPaths(object):
 
     @staticmethod
     def nsr_config(k=None):
-        return ("C,/nsr:ns-instance-config/nsr:nsr[nsr:id='{}']".format(k) if k is not None else "")
+        return ("C,/nsr:ns-instance-config/nsr:nsr" +
+                ("[nsr:id='{}']".format(k) if k is not None else ""))
 
     @staticmethod
     def vlr(k=None):
-        return ("D,/vlr:vlr-catalog/vlr:vlr[vlr:id='{}']".format(k) if k is not None else "")
+        return ("D,/vlr:vlr-catalog/vlr:vlr" +
+                ("[vlr:id='{}']".format(k) if k is not None else ""))
 
 class ConfigManagerDTS(object):
     ''' This class either reads from DTS or publishes to DTS '''
@@ -1459,6 +1850,15 @@ class ConfigManagerDTS(object):
 
         return results
 
+
+    @asyncio.coroutine
+    def get_xpath(self, xpath):
+        self._log.debug("Attempting to get xpath: {}".format(xpath))
+        resp = yield from self._read_dts(xpath, False)
+        if len(resp) > 0:
+            self._log.debug("Got DTS resp: {}".format(resp[0]))
+            return resp[0]
+        return None
 
     @asyncio.coroutine
     def get_nsr(self, id):
@@ -1504,9 +1904,9 @@ class ConfigManagerDTS(object):
         return vnfr_msg
 
     @asyncio.coroutine
-    def get_vnfd(self, vnfd_id):
-        self._log.debug("Attempting to get VNFD: %s", vnfd_id)
-        vnfdl = yield from self._read_dts(XPaths.vnfd(vnfd_id), do_trace=False)
+    def get_vnfd(self, id):
+        self._log.debug("Attempting to get VNFD: %s", XPaths.vnfd_path(id))
+        vnfdl = yield from self._read_dts(XPaths.vnfd_path(id), do_trace=False)
         vnfd_msg = None
         if len(vnfdl) > 0:
             vnfd_msg = vnfdl[0]

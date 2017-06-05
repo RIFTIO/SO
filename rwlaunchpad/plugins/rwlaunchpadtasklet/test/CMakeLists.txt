@@ -36,3 +36,13 @@ rift_py3test(utest_package.py
   TEST_ARGS
   ${CMAKE_CURRENT_SOURCE_DIR}/utest_package.py
   )
+
+rift_py3test(utest_uploader_app_dts.create.py
+  TEST_ARGS
+  ${CMAKE_CURRENT_SOURCE_DIR}/utest_uploader_app_dts.py TestCase.test_package_create_rpc
+  )
+
+rift_py3test(utest_uploader_app_dts.export.py
+  TEST_ARGS
+  ${CMAKE_CURRENT_SOURCE_DIR}/utest_uploader_app_dts.py TestCase.test_package_export
+  )

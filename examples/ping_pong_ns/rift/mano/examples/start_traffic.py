@@ -41,7 +41,14 @@ def start_traffic(yaml_cfg, logger):
                        vnf_type=vnf_type)
 
         logger.debug("Executing cmd: %s", curl_cmd)
-        subprocess.check_call(curl_cmd, shell=True)
+        proc = subprocess.Popen(curl_cmd, shell=True,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+
+        proc.wait()
+        logger.debug("Process: {}".format(proc))
+
+        return proc.returncode
 
     # Enable pong service first
     for index, vnfr in yaml_cfg['vnfr'].items():
@@ -51,11 +58,15 @@ def start_traffic(yaml_cfg, logger):
         if 'pong_vnfd' in vnfr['name']:
             vnf_type = 'pong'
             port = 18889
-            enable_service(vnfr['mgmt_ip_address'], port, vnf_type)
+            rc = enable_service(vnfr['mgmt_ip_address'], port, vnf_type)
+            if rc != 0:
+                logger.error("Enable service for pong failed: {}".
+                             format(rc))
+                return rc
             break
 
     # Add a delay to provide pong port to come up
-    time.sleep(0.1)
+    time.sleep(1)
 
     # Enable ping service next
     for index, vnfr in yaml_cfg['vnfr'].items():
@@ -65,8 +76,11 @@ def start_traffic(yaml_cfg, logger):
         if 'ping_vnfd' in vnfr['name']:
             vnf_type = 'ping'
             port = 18888
-            enable_service(vnfr['mgmt_ip_address'], port, vnf_type)
+            rc = enable_service(vnfr['mgmt_ip_address'], port, vnf_type)
             break
+
+    return rc
+
 
 def main(argv=sys.argv[1:]):
     try:
@@ -79,14 +93,14 @@ def main(argv=sys.argv[1:]):
         if not os.path.exists(run_dir):
             os.makedirs(run_dir)
         log_file = "{}/ping_pong_start_traffic-{}.log".format(run_dir, time.strftime("%Y%m%d%H%M%S"))
-        logging.basicConfig(filename=log_file, level=logging.DEBUG)
-        logger = logging.getLogger()
 
-    except Exception as e:
-        print("Exception in {}: {}".format(__file__, e))
-        sys.exit(1)
+        # logging.basicConfig(filename=log_file, level=logging.DEBUG)
+        logger = logging.getLogger('ping-pong-start-traffic')
+        logger.setLevel(logging.DEBUG)
 
-    try:
+        fh = logging.FileHandler(log_file)
+        fh.setLevel(logging.DEBUG)
+
         ch = logging.StreamHandler()
         if args.verbose:
             ch.setLevel(logging.DEBUG)
@@ -95,24 +109,28 @@ def main(argv=sys.argv[1:]):
 
         # create formatter and add it to the handlers
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        fh.setFormatter(formatter)
         ch.setFormatter(formatter)
+        logger.addHandler(fh)
         logger.addHandler(ch)
 
     except Exception as e:
-        logger.exception(e)
-        raise e
+        logger.exception("Exception in {}: {}".format(__file__, e))
+        sys.exit(1)
 
     try:
+        logger.debug("Input file: {}".format(args.yaml_cfg_file.name))
         yaml_str = args.yaml_cfg_file.read()
-        # logger.debug("Input YAML file:\n{}".format(yaml_str))
         yaml_cfg = yaml.load(yaml_str)
         logger.debug("Input YAML: {}".format(yaml_cfg))
 
-        start_traffic(yaml_cfg, logger)
+        rc = start_traffic(yaml_cfg, logger)
+        logger.info("Return code: {}".format(rc))
+        sys.exit(rc)
 
     except Exception as e:
-        logger.exception(e)
-        raise e
+        logger.exception("Exception in {}: {}".format(__file__, e))
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

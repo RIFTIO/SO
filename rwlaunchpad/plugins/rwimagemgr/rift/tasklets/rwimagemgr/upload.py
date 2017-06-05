@@ -250,6 +250,8 @@ class ImageUploadJob(object):
 
         if failed_tasks:
             self._log.error("%s had %s FAILED tasks.", self, len(failed_tasks))
+            for ftask in failed_tasks:
+                self._log.error("%s : Failed to upload image : %s to cloud_account : %s", self, ftask.image_name, ftask.cloud_account)
             self.state = "FAILED"
         else:
             self._log.debug("%s tasks completed successfully", len(self._upload_tasks))

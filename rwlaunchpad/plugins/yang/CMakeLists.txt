@@ -25,6 +25,8 @@ set(source_yang_files
   rw-vnfm.yang
   rw-vns.yang
   rw-image-mgmt.yang
+  rw-pkg-mgmt.yang
+  rw-staging-mgmt.yang
   )
 
 ##

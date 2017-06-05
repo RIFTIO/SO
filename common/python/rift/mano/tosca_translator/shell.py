@@ -364,6 +364,8 @@ class TranslatorShell(object):
                         dest = os.path.join(output_dir, 'images')
                     elif ty == 'script':
                         dest = os.path.join(output_dir, 'scripts')
+                    elif ty == 'icons':
+                        dest = os.path.join(output_dir, 'icons')
                     elif ty == 'cloud_init':
                         dest = os.path.join(output_dir, 'cloud_init')
                     else:

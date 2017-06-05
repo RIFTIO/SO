@@ -1,4 +1,4 @@
-# 
+#
 #   Copyright 2016 RIFT.IO Inc
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +15,12 @@
 #
 # Author(s): Ravi Chamarty
 # Creation Date: 9/2/2015
-# 
+#
 
 from .rwvlmgr import (
     VirtualLinkRecordState,
     VirtualLinkRecord,
     VlrDtsHandler,
     VldDtsHandler,
+    VirtualLinkEventListener,
 )

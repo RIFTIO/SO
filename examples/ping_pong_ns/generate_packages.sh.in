@@ -38,6 +38,10 @@ rm -rf ${BINARY_DIR}/ping_vnfd_with_epa
 rm -rf ${BINARY_DIR}/pong_vnfd_with_epa
 rm -rf ${BINARY_DIR}/ping_pong_nsd_with_epa
 
+rm -rf ${BINARY_DIR}/ping_vnfd_with_vca
+rm -rf ${BINARY_DIR}/pong_vnfd_with_vca
+rm -rf ${BINARY_DIR}/ping_pong_nsd_with_vca
+
 
 # Generate image md5sum
 ping_md5sum="$(md5sum ${PING_QCOW_IMAGE} | cut -f1 -d" ")"
@@ -52,7 +56,6 @@ cp -r ${BINARY_DIR}/ping_vnfd ${BINARY_DIR}/ping_vnfd_with_image
 cp -r ${BINARY_DIR}/pong_vnfd ${BINARY_DIR}/pong_vnfd_with_image
 mkdir -p ${BINARY_DIR}/ping_vnfd_with_image/images
 mkdir -p ${BINARY_DIR}/pong_vnfd_with_image/images
-
 ### Generate descriptors for AWS
 ${SOURCE_DIR}/ping_pong_nsd.py --outdir=${BINARY_DIR}/aws --format=json --aws
 
@@ -74,6 +77,29 @@ mv ${BINARY_DIR}/with_epa/ping_pong_nsd ${BINARY_DIR}/ping_pong_nsd_with_epa
 
 ### ReMove the original directories
 rm -rf ${BINARY_DIR}/with_epa
+
+### Generate descriptors with VCA conf
+${SOURCE_DIR}/ping_pong_nsd.py --outdir=${BINARY_DIR}/with_vca --format=json --vca_conf --ping-image-md5=${ping_md5sum} --pong-image-md5=${pong_md5sum}
+
+### Move the generated artifacts to appropriate directories
+mv ${BINARY_DIR}/with_vca/ping_vnfd ${BINARY_DIR}/ping_vnfd_with_vca
+mv ${BINARY_DIR}/with_vca/pong_vnfd ${BINARY_DIR}/pong_vnfd_with_vca
+mv ${BINARY_DIR}/with_vca/ping_pong_nsd ${BINARY_DIR}/ping_pong_nsd_with_vca
+
+### ReMove the original directories
+rm -rf ${BINARY_DIR}/with_vca
+
+### Generate descriptors with Virtual-IP
+${SOURCE_DIR}/ping_pong_nsd.py --outdir=${BINARY_DIR}/with_vip --format=json --virtual-ip  --ping-image-md5=${ping_md5sum} --pong-image-md5=${pong_md5sum}
+
+### Move the generated artifacts to appropriate directories
+mv ${BINARY_DIR}/with_vip/ping_vnfd ${BINARY_DIR}/ping_vnfd_with_vip
+mv ${BINARY_DIR}/with_vip/pong_vnfd ${BINARY_DIR}/pong_vnfd_with_vip
+mv ${BINARY_DIR}/with_vip/ping_pong_nsd ${BINARY_DIR}/ping_pong_nsd_with_vip
+
+### ReMove the original directories
+rm -rf ${BINARY_DIR}/with_vip
+
 
 # copy a dummy image for now
 if [ -e ${PING_QCOW_IMAGE} ]; then
@@ -138,3 +164,29 @@ cp ${PING_PONG_NSD_LOGO}  ${BINARY_DIR}/ping_pong_nsd_with_epa/icons/
 ${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_vnfd_with_epa
 ${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} pong_vnfd_with_epa
 ${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_pong_nsd_with_epa
+
+# Add RIFT Logos
+mkdir -p ${BINARY_DIR}/ping_vnfd_with_vca/icons
+mkdir -p ${BINARY_DIR}/pong_vnfd_with_vca/icons
+mkdir -p ${BINARY_DIR}/ping_pong_nsd_with_vca/icons
+
+cp ${PING_VNFD_LOGO}      ${BINARY_DIR}/ping_vnfd_with_vca/icons/
+cp ${PONG_VNFD_LOGO}      ${BINARY_DIR}/pong_vnfd_with_vca/icons/
+cp ${PING_PONG_NSD_LOGO}  ${BINARY_DIR}/ping_pong_nsd_with_vca/icons/
+
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_vnfd_with_vca
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} pong_vnfd_with_vca
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_pong_nsd_with_vca
+
+
+mkdir -p ${BINARY_DIR}/ping_vnfd_with_vip/icons
+mkdir -p ${BINARY_DIR}/pong_vnfd_with_vip/icons
+mkdir -p ${BINARY_DIR}/ping_pong_nsd_with_vip/icons
+
+cp ${PING_VNFD_LOGO}      ${BINARY_DIR}/ping_vnfd_with_vip/icons/
+cp ${PONG_VNFD_LOGO}      ${BINARY_DIR}/pong_vnfd_with_vip/icons/
+cp ${PING_PONG_NSD_LOGO}  ${BINARY_DIR}/ping_pong_nsd_with_vip/icons/
+
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_vnfd_with_vip
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} pong_vnfd_with_vip
+${RIFT_INSTALL}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh ${BINARY_DIR} ping_pong_nsd_with_vip

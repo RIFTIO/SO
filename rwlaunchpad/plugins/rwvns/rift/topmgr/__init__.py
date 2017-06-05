@@ -20,7 +20,6 @@
 from .rwtopmgr import (
     NwtopDiscoveryDtsHandler,
     NwtopStaticDtsHandler,
-    SdnAccountMgr,
 )
 
 from .rwtopdatastore import (

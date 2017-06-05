@@ -15,7 +15,6 @@
 #   limitations under the License.
 #
 
-import datetime
 import logging
 import unittest
 
@@ -24,20 +23,17 @@ import rwlogger
 
 import gi
 gi.require_version('RwTypes', '1.0')
-gi.require_version('RwSdn', '1.0')
-from gi.repository import RwsdnYang
-from gi.repository import IetfNetworkYang
+from gi.repository import RwsdnalYang
 from gi.repository.RwTypes import RwStatus
-from gi.repository import RwSdn
 
 
 logger = logging.getLogger('sdnsim')
 
 def get_sdn_account():
     """
-    Creates an object for class RwsdnYang.SdnAccount()
+    Creates an object for class RwsdnalYang.SdnAccount()
     """
-    account                 = RwsdnYang.SDNAccount()
+    account                 = RwsdnalYang.SDNAccount()
     account.account_type    = "sdnsim"
     account.sdnsim.username   = "rift"
     account.sdnsim.plugin_name = "rwsdn_sim"

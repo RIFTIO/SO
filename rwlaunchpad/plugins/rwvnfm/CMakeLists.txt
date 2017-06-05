@@ -34,6 +34,7 @@ rift_python_install_tree(
   FILES
     rift/tasklets/${TASKLET_NAME}/__init__.py
     rift/tasklets/${TASKLET_NAME}/${TASKLET_NAME}.py
+    rift/tasklets/${TASKLET_NAME}/subscriber.py
   COMPONENT ${PKG_LONG_NAME}
   PYTHON3_ONLY)
 

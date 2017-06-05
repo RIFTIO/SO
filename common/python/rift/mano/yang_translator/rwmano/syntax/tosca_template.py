@@ -36,6 +36,15 @@ class ToscaTemplate(object):
         self.log.debug(_('Converting translated output to tosca template.'))
 
         templates = {}
+        vnfd_templates = {}
+
+        for resource in self.resources:
+            if resource.type == 'vnfd':
+                tmpl = resource.generate_tosca()
+                tmpl = resource.generate_tosca_template(tmpl)
+                self.log.debug(_("TOSCA template generated for {0}:\n{1}").
+                               format(resource.name, tmpl))
+                vnfd_templates[resource.name] = tmpl
 
         for resource in self.resources:
             # Each NSD should generate separate templates
@@ -44,6 +53,14 @@ class ToscaTemplate(object):
                 tmpl = resource.generate_tosca_template(tmpl)
                 self.log.debug(_("TOSCA template generated for {0}:\n{1}").
                                format(resource.name, tmpl))
+                templates[resource.name] = {self.TOSCA: self.output_to_yaml(tmpl)}
+                files = resource.get_supporting_files()
+                if len(files):
+                    templates[resource.name][self.FILES] = files
+
+        for resource in self.resources:
+            if resource.type == 'vnfd':
+                tmpl = vnfd_templates[resource.name]
                 templates[resource.name] = {self.TOSCA: self.output_to_yaml(tmpl)}
                 files = resource.get_supporting_files()
                 if len(files):
@@ -66,6 +83,7 @@ class ToscaTemplate(object):
                  ToscaResource.REQUIREMENTS,ToscaResource.ARTIFACTS,
                  ToscaResource.INTERFACES]
         new_node = OrderedDict()
+        self.log.debug("Node to oder: {}".format(node))
         for ent in order:
             if ent in node:
                 new_node.update({ent: node.pop(ent)})
@@ -87,10 +105,18 @@ class ToscaTemplate(object):
         else:
             return nodes
 
+    def ordered_nodes_sub_mapping(self, nodes):
+        new_nodes = OrderedDict()
+        if isinstance(nodes, dict):
+            for name, node in nodes.items():
+                new_nodes.update({name: node})
+            return new_nodes
+        else:
+            return nodes
+
     def output_to_yaml(self, tosca):
         self.log.debug(_('Converting translated output to yaml format.'))
         dict_output = OrderedDict()
-
         dict_output.update({'tosca_definitions_version':
                             tosca['tosca_definitions_version']})
         # Description
@@ -106,6 +132,9 @@ class ToscaTemplate(object):
         if ToscaResource.METADATA in tosca:
             dict_output.update({ToscaResource.METADATA:
                                tosca[ToscaResource.METADATA]})
+        if ToscaResource.IMPORT in tosca:
+            dict_output.update({ToscaResource.IMPORT:
+                               tosca[ToscaResource.IMPORT]})
 
         # Add all types
         types_list = [ToscaResource.DATA_TYPES, ToscaResource.CAPABILITY_TYPES,
@@ -122,9 +151,14 @@ class ToscaTemplate(object):
         if ToscaResource.TOPOLOGY_TMPL in tosca:
             tmpl = OrderedDict()
             for typ in tosca[ToscaResource.TOPOLOGY_TMPL]:
-                tmpl.update({typ:
-                             self.ordered_nodes(
-                                 tosca[ToscaResource.TOPOLOGY_TMPL][typ])})
+                if typ != ToscaResource.SUBSTITUTION_MAPPING:
+                    tmpl.update({typ:
+                                 self.ordered_nodes(
+                                     tosca[ToscaResource.TOPOLOGY_TMPL][typ])})
+                else:
+                    tmpl.update({typ:
+                                 self.ordered_nodes_sub_mapping(
+                                     tosca[ToscaResource.TOPOLOGY_TMPL][typ])})
             dict_output.update({ToscaResource.TOPOLOGY_TMPL: tmpl})
 
         yaml.add_representer(OrderedDict, self.represent_ordereddict)

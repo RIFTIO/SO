@@ -28,6 +28,7 @@ import tornado.testing
 import tornado.web
 import unittest
 import xmlrunner
+import xmltodict, json
 
 import rift.tasklets.rwmonparam.vnfr_core as mon_params
 
@@ -945,6 +946,23 @@ class vCPEStatTest(unittest.TestCase):
           kv_querier = mon_params.ObjectPathValueQuerier(logger, "$.resourceLoad[@.service is 'DPE'].mem")
           value = kv_querier.query(tornado.escape.json_encode(self.system_response))
           self.assertEqual(value, 31)
+
+
+class XMLReponseTest(unittest.TestCase):
+    xml_response = "<response status='success'><result> <entry> <current>2</current> <vsys>1</vsys> <maximum>0</maximum> <throttled>0</throttled> </entry> </result></response>"
+    try:
+      op = xmltodict.parse(xml_response)
+      x=json.dumps(op)
+      y=json.loads(x)
+      system_response = y
+    except Exception as e:
+      print("Input is Not XML formatted")
+      pass
+    
+    def test_object_path_value_querier(self):
+          kv_querier = mon_params.ObjectPathValueQuerier(logger, "$.response.result.entry.current")
+          value = kv_querier.query(tornado.escape.json_encode(self.system_response))
+          self.assertEqual(value, '2')
 
 def main(argv=sys.argv[1:]):
 

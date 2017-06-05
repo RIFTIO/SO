@@ -153,9 +153,9 @@ class MonParamsDtsTestCase(rift.test.dts.AbstractDTSTest):
 
         mock_vnfr = RwVnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr.from_dict({
             'id': '1',
-            'vnfd_ref': '1',
             'monitoring_param': ([monp.as_dict() for monp in monps] if not legacy else [])
             })
+        mock_vnfr.vnfd = vnfryang.YangData_Vnfr_VnfrCatalog_Vnfr_Vnfd.from_dict({'id': '1'})
         store.get_vnfr = mock.MagicMock(return_value=mock_vnfr)
 
         mock_nsr = RwNsrYang.YangData_Nsr_NsInstanceOpdata_Nsr.from_dict({
@@ -326,7 +326,7 @@ class MonParamsDtsTestCase(rift.test.dts.AbstractDTSTest):
         yield from self._test_publish("COUNT", 2)
 
     @rift.test.dts.async_test
-    def _test_legacy_nsr_monitor_publish_avg(self):
+    def test_legacy_nsr_monitor_publish_avg(self):
         yield from self._test_publish("AVERAGE", 1, legacy=True)
 
     @rift.test.dts.async_test

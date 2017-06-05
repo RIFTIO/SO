@@ -96,7 +96,7 @@ class OpenmanoHttpAPI(object):
 class OpenmanoCliAPI(object):
     """ This class implements the necessary funtionality to interact with  """
 
-    CMD_TIMEOUT = 30
+    CMD_TIMEOUT = 120
 
     def __init__(self, log, host, port, tenant):
         self._log = log
@@ -143,8 +143,8 @@ class OpenmanoCliAPI(object):
 
         if proc.returncode != 0:
             self._log.error(
-                    "Openmano command failed (rc=%s) with stdout: %s",
-                    proc.returncode, stdout
+                    "Openmano command %s failed (rc=%s) with stdout: %s",
+                    cmd_args[1], proc.returncode, stdout
                     )
             raise OpenmanoCommandFailed(stdout)
 
@@ -198,6 +198,7 @@ class OpenmanoCliAPI(object):
             output_lines = self._openmano_cmd(
                     ["vnf-list"],
                     )
+
         except OpenmanoCommandFailed as e:
             self._log.warning("Vnf listing returned an error: %s", str(e))
             return {}
@@ -206,8 +207,9 @@ class OpenmanoCliAPI(object):
         for line in output_lines:
             line = line.strip()
             uuid, name = line.split(" ", 1)
-            name_uuid_map[name] = uuid
+            name_uuid_map[name.strip()] = uuid.strip()
 
+        self._log.debug("VNF list: {}".format(name_uuid_map))
         return name_uuid_map
 
     def ns_create(self, ns_yaml_str, name=None):
@@ -249,8 +251,9 @@ class OpenmanoCliAPI(object):
         for line in output_lines:
             line = line.strip()
             uuid, name = line.split(" ", 1)
-            name_uuid_map[name] = uuid
+            name_uuid_map[name.strip()] = uuid.strip()
 
+        self._log.debug("Scenario list: {}".format(name_uuid_map))
         return name_uuid_map
 
     def ns_delete(self, ns_uuid):
@@ -282,8 +285,9 @@ class OpenmanoCliAPI(object):
         for line in output_lines:
             line = line.strip()
             uuid, name = line.split(" ", 1)
-            name_uuid_map[name] = uuid
+            name_uuid_map[name.strip()] = uuid.strip()
 
+        self._log.debug("Instance Scenario list: {}".format(name_uuid_map))
         return name_uuid_map
 
     def ns_instance_scenario_create(self, instance_yaml_str):
@@ -466,6 +470,10 @@ def parse_args(argv=sys.argv[1:]):
             type=valid_uuid,
             )
 
+    _ = subparsers.add_parser(
+            'vnf-list',
+            help="List all the openmano VNFs in the catalog",
+            )
 
     ns_create_parser = subparsers.add_parser(
             'scenario-create',
@@ -487,6 +495,10 @@ def parse_args(argv=sys.argv[1:]):
             type=valid_uuid,
             )
 
+    _ = subparsers.add_parser(
+            'scenario-list',
+            help="List all the openmano scenarios in the catalog",
+            )
 
     ns_instance_create_parser = subparsers.add_parser(
             'scenario-deploy',
@@ -513,7 +525,13 @@ def parse_args(argv=sys.argv[1:]):
 
 
     _ = subparsers.add_parser(
+            'instance-scenario-list',
+            help="List all the openmano scenario instances in the catalog",
+            )
+
+    _ = subparsers.add_parser(
             'datacenter-list',
+            help="List all the openmano datacenters",
             )
 
     args = parser.parse_args(argv)
@@ -538,17 +556,29 @@ def main():
     elif args.command == "vnf-delete":
         openmano_cli.vnf_delete(args.uuid)
 
+    elif args.command == "vnf-list":
+        for uuid, name in openmano_cli.vnf_list().items():
+            print("{} {}".format(uuid, name))
+
     elif args.command == "scenario-create":
         openmano_cli.ns_create(args.file.read())
 
     elif args.command == "scenario-delete":
         openmano_cli.ns_delete(args.uuid)
 
+    elif args.command == "scenario-list":
+        for uuid, name in openmano_cli.ns_list().items():
+            print("{} {}".format(uuid, name))
+
     elif args.command == "scenario-deploy":
         openmano_cli.ns_instantiate(args.scenario_name, args.instance_name)
 
     elif args.command == "instance-scenario-delete":
         openmano_cli.ns_terminate(args.instance_name)
+
+    elif args.command == "instance-scenario-list":
+        for uuid, name in openmano_cli.ns_instance_list().items():
+            print("{} {}".format(uuid, name))
 
     elif args.command == "datacenter-list":
         for uuid, name in openmano_cli.datacenter_list():

@@ -69,6 +69,8 @@ class ManoTemplate(object):
                 nsd.vendor = self.metadata['vendor']
                 nsd.short_name = self.metadata['name']
                 nsd.version = self.metadata['version']
+                if 'logo' in self.metadata:
+                    nsd.logo = self.metadata['logo']
             except Exception as e:
                 self.log.warning(_("Unable to use YANG GI to generate "
                                    "descriptors, falling back to alternate "
@@ -91,10 +93,25 @@ class ManoTemplate(object):
             if resource.type == 'vld':
                 resource.generate_yang_model(nsd, vnfds, use_gi=use_gi)
 
+        vnf_type_duplicate = []
+        vnfd_resources = []
+        vnfd_duplicate_resource_list = []
         for resource in self.resources:
-            # Do the vnfds next
             if resource.type == 'vnfd':
+                vnfd_resources.append(resource)
+
+        vnfd_resources.sort(key=lambda x: x.member_vnf_id, reverse=False)
+        vnf_type_to_vnf_id = {}
+        for resource in vnfd_resources:
+            if resource.vnf_type not in vnf_type_duplicate:
                 resource.generate_yang_model(nsd, vnfds, use_gi=use_gi)
+                vnf_type_to_vnf_id[resource.vnf_type] = resource.id
+                vnf_type_duplicate.append(resource.vnf_type)
+            else:
+                vnfd_duplicate_resource_list.append(resource)
+
+        for resource in vnfd_duplicate_resource_list:
+            resource.generate_nsd_constiuent(nsd, vnf_type_to_vnf_id[resource.vnf_type])
 
         for resource in self.resources:
             # Do the other nodes
@@ -127,7 +144,7 @@ class ManoTemplate(object):
         # Need to add support to get script names, charms, etc.
         other_files = {}
         for resource in self.resources:
-            resource.get_supporting_files(other_files)
+            resource.get_supporting_files(other_files, desc_id=nsd_id)
 
         for policy in self.policies:
             policy.get_supporting_files(other_files, desc_id=nsd_id)

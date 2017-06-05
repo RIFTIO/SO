@@ -29,8 +29,30 @@ rift_python_install_tree(
   FILES
     rift/rwcal/openstack/__init__.py
     rift/rwcal/openstack/openstack_drv.py
-    rift/rwcal/openstack/openstack_utils.py
     rift/rwcal/openstack/prepare_vm.py
+    rift/rwcal/openstack/keystone/__init__.py
+    rift/rwcal/openstack/keystone/keystone_drv.py
+    rift/rwcal/openstack/nova/nova_drv.py
+    rift/rwcal/openstack/nova/__init__.py
+    rift/rwcal/openstack/neutron/__init__.py
+    rift/rwcal/openstack/neutron/neutron_drv.py
+    rift/rwcal/openstack/glance/__init__.py
+    rift/rwcal/openstack/glance/glance_drv.py
+    rift/rwcal/openstack/cinder/__init__.py
+    rift/rwcal/openstack/cinder/cinder_drv.py
+    rift/rwcal/openstack/ceilometer/__init__.py
+    rift/rwcal/openstack/ceilometer/ceilometer_drv.py
+    rift/rwcal/openstack/session/__init__.py
+    rift/rwcal/openstack/session/session_drv.py
+    rift/rwcal/openstack/session/auth_drv.py
+    rift/rwcal/openstack/portchain/__init__.py
+    rift/rwcal/openstack/portchain/portchain_drv.py
+    rift/rwcal/openstack/utils/__init__.py
+    rift/rwcal/openstack/utils/flavor.py
+    rift/rwcal/openstack/utils/network.py
+    rift/rwcal/openstack/utils/compute.py
+    rift/rwcal/openstack/utils/image.py
+    
   PYTHON3_ONLY
   COMPONENT ${PKG_LONG_NAME})
 

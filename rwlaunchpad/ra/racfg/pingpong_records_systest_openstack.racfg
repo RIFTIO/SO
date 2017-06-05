@@ -1,4 +1,5 @@
 {
+  "license": "Apache 2.0",
   "test_name":"TC_PINGPONG_RECORDS_OPENSTACK",
   "commandline":"./pingpong_records_systest --test-name 'TC_PINGPONG_RECORDS_OPENSTACK' --cloud-type 'openstack' --cloud-host={cloud_host} --sysinfo  --user={user} {tenants} --netconf --restconf",
   "test_description":"System test for ping and pong vnf (Openstack)",

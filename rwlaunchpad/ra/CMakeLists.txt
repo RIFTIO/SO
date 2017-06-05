@@ -28,6 +28,9 @@ install(
     pingpong_lp_ha_systest
     pingpong_recovery_systest
     pingpong_scaling_systest
+    onboard_delete_vnfs_systest
+    accounts_creation_onboard_instatiate_systest
+    accounts_creation_onboard_systest
     scaling_systest
   DESTINATION usr/rift/systemtest/pingpong_vnf
   COMPONENT ${PKG_LONG_NAME})
@@ -37,6 +40,15 @@ install(
     multi_vm_vnf_slb_systest.sh
     multi_vm_vnf_trafgen_systest.sh
   DESTINATION usr/rift/systemtest/multi_vm_vnf
+  COMPONENT ${PKG_LONG_NAME})
+
+install(
+  PROGRAMS
+    accounts_creation_onboard_instatiate_systest
+    l2port_chaining_systest
+    metadata_vdud_systest
+    ns_instantiate_memory_check_systest
+  DESTINATION usr/rift/systemtest/mano
   COMPONENT ${PKG_LONG_NAME})
 
 install(
@@ -75,6 +87,7 @@ install(
   FILES
     pytest/ns/conftest.py
     pytest/ns/test_onboard.py
+    pytest/ns/test_multiple_ns_instantiation.py
   DESTINATION usr/rift/systemtest/pytest/system/ns
   COMPONENT ${PKG_LONG_NAME})
 
@@ -103,10 +116,28 @@ install(
     racfg/pingpong_records_systest_openstack_xml.racfg
     racfg/pingpong_vnf_reload_systest_openstack.racfg
     racfg/pingpong_vnf_reload_systest_openstack_xml.racfg
+    racfg/pingpong_staticip_systest_openstack.racfg
+    racfg/pingpong_portsecurity_systest_openstack.racfg
+    racfg/pingpong_vnf_dependencies_systest_openstack.racfg
+    racfg/pingpong_vnf_dependencies_systest_openstack_xml.racfg
     racfg/scaling_systest.racfg
     racfg/recovery_systest.racfg
     racfg/pingpong_lp_ha_systest_openstack.racfg
+    racfg/pingpong_update_descriptors_instantiate_systest_openstack.racfg
+    racfg/onboard_delete_vnfs_systest_openstack.racfg
+    racfg/pingpong_metadata_vdud_systest_openstack.racfg
+    racfg/pingpong_multidisk_systest_openstack.racfg
+    racfg/pingpong_multidisk_systest_openstack_xml.racfg
+    racfg/embedded_images_vnf_multiple_accounts_systest_openstack.racfg
   DESTINATION usr/rift/systemtest/pingpong_vnf
+  COMPONENT ${PKG_LONG_NAME})
+
+install(
+  FILES
+    racfg/l2port_chaining_systest_openstack.racfg
+    racfg/metadata_vdud_systest_openstack.racfg
+    racfg/ns_instantiate_memory_check.racfg
+  DESTINATION usr/rift/systemtest/mano
   COMPONENT ${PKG_LONG_NAME})
 
 install(

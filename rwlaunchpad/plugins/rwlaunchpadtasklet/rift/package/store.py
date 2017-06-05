@@ -49,6 +49,11 @@ class PackageFilesystemStore(object):
 
         self.refresh()
 
+    @property
+    def root_dir(self):
+        return self._root_dir
+    
+
     def _get_package_dir(self, package_id):
         return os.path.join(self._root_dir, package_id)
 
@@ -105,6 +110,8 @@ class PackageFilesystemStore(object):
         Raises:
             PackageStoreError- The package could not be retrieved
         """
+        self.refresh()
+
         if package_id not in self._package_dirs:
             msg = "Package %s not found in %s" % (package_id, self._root_dir)
             raise PackageNotFoundError(msg)

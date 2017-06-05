@@ -40,6 +40,8 @@ class ToscaNetworkPort(ManoResource):
                                                metadata=metadata)
         # Default order
         self.order = 0
+        self.vnf = None
+        self.cp_name = None
         pass
 
     def handle_properties(self):
@@ -68,28 +70,32 @@ class ToscaNetworkPort(ManoResource):
                 self.log.warn(err_msg)
                 raise ValidationError(message=err_msg)
 
+        self.cp_name = port_props['name']
         self.properties = port_props
 
     def handle_requirements(self, nodes):
         tosca_reqs = self.get_tosca_reqs()
+        tosca_caps = self.get_tosca_caps()
         self.log.debug("VNF {0} requirements: {1}".
                        format(self.name, tosca_reqs))
 
         vnf = None  # Need vnf ref to generate cp refs in vld
         vld = None
+        '''
         if len(tosca_reqs) != 2:
             err_msg = _("Invalid configuration as incorrect number of "
                         "requirements for CP {0} are specified"). \
                         format(self)
             self.log.error(err_msg)
             raise ValidationError(message=err_msg)
-
+        '''
         for req in tosca_reqs:
             if 'virtualBinding' in req:
                 target = req['virtualBinding']['target']
                 node = self.get_node_with_name(target, nodes)
                 if node:
                     vnf = node.vnf
+                    self.vnf = node._vnf
                     if not vnf:
                         err_msg = _("No vnfs linked to a VDU {0}"). \
                                     format(node)
@@ -129,17 +135,20 @@ class ToscaNetworkPort(ManoResource):
                     self.log.error(err_msg)
                     raise ValidationError(message=err_msg)
 
-        if vnf and vld:
+        if 'sfc' in tosca_caps and vnf:
+            if 'sfc_type' in tosca_caps['sfc']:
+                vnf.properties['service-function-chain'] = tosca_caps['sfc']['sfc_type'].upper()
+            if 'sf_type' in tosca_caps['sfc']:
+                vnf.properties['service-function-type'] = tosca_caps['sfc']['sf_type']
+
+        if vnf:
             cp_ref = {}
             cp_ref['vnfd-connection-point-ref'] = self.properties['name']
             cp_ref['vnfd-id-ref'] = vnf.properties['id']
             cp_ref['member-vnf-index-ref'] = \
                             vnf._const_vnfd['member-vnf-index']
-            if 'vnfd-connection-point-ref' not in vld.properties:
-                vld.properties['vnfd-connection-point-ref'] = []
-            vld.properties['vnfd-connection-point-ref'].append(cp_ref)
         else:
-            err_msg = _("CP {0}, VNF {1} or VL {2} not found"). \
+            err_msg = _("CP {0}, VNF {1} not found"). \
                       format(self, vnf, vld)
             self.log.error(err_msg)
             raise ValidationError(message=err_msg)

@@ -1,6 +1,5 @@
-
-# 
-#   Copyright 2016 RIFT.IO Inc
+#
+#   Copyright 2016-2017 RIFT.IO Inc
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -40,7 +39,10 @@ class RwNsPlugin(rwnsmplugin.NsmPluginBase):
         self._log = log
         self._loop = loop
 
-    def create_nsr(self, nsr_msg, nsd,key_pairs=None):
+    def set_state(self, nsr_id, state):
+        pass
+
+    def create_nsr(self, nsr_msg, nsd, key_pairs=None, ssh_key=None):
         """
         Create Network service record
         """
@@ -58,7 +60,7 @@ class RwNsPlugin(rwnsmplugin.NsmPluginBase):
         yield from nsr.instantiate(config_xact)
 
     @asyncio.coroutine
-    def instantiate_vnf(self, nsr, vnfr):
+    def instantiate_vnf(self, nsr, vnfr, scaleout=False):
         """
         Instantiate NSR with the passed nsr id
         """
@@ -91,6 +93,11 @@ class RwNsPlugin(rwnsmplugin.NsmPluginBase):
         Terminate the virtual link
         """
         yield from vlr.terminate()
+
+    @asyncio.coroutine
+    def update_vnfr(self, vnfr):
+        """ Update the virtual network function record """
+        yield from vnfr.update_vnfm()
 
 
 class NsmPlugins(object):
@@ -140,12 +147,17 @@ class CloudAccountConfigSubscriber:
         if account_name in self._cloud_sub.accounts:
             self._log.debug("Cloud accnt msg is %s",self._cloud_sub.accounts[account_name].account_msg)
             if self._cloud_sub.accounts[account_name].account_msg.has_field("sdn_account"):
-                sdn_account = self._cloud_sub.accounts[account_name].account_msg.sdn_account 
+                sdn_account = self._cloud_sub.accounts[account_name].account_msg.sdn_account
                 self._log.info("SDN associated with Cloud name %s is %s", account_name, sdn_account)
                 return sdn_account
             else:
                 self._log.debug("No SDN Account associated with Cloud name %s", account_name)
                 return None
+
+    def get_cloud_account_msg(self,account_name):
+        if account_name in self._cloud_sub.accounts:
+            self._log.debug("Cloud accnt msg is %s",self._cloud_sub.accounts[account_name].account_msg)
+            return self._cloud_sub.accounts[account_name].account_msg
 
     @asyncio.coroutine
     def register(self):

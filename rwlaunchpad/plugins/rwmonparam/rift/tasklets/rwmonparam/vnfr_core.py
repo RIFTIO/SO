@@ -36,7 +36,7 @@ from gi.repository import (
     )
 import rift.mano.dts as mano_dts
 import rwlogger
-
+import xmltodict, json
 
 class MonitoringParamError(Exception):
     """Monitoring Parameter error"""
@@ -226,12 +226,13 @@ class HTTPBasicAuth(object):
 
 
 class HTTPEndpoint(object):
-    def __init__(self, log, loop, ip_address, ep_msg):
+    def __init__(self, log, loop, ip_address, ep_msg, executor=None):
         self._log = log
         self._loop = loop
         self._ip_address = ip_address
         self._ep_msg = ep_msg
-
+        self._executor = executor
+        
         # This is to suppress HTTPS related warning as we do not support
         # certificate verification yet
         requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
@@ -268,6 +269,12 @@ class HTTPEndpoint(object):
         if self._ep_msg.has_field("method"):
            return self._ep_msg.method
         return "GET"
+
+    @property
+    def query_data(self):
+        if self._ep_msg.has_field("data"):
+           return self._ep_msg.data
+        return None
 
     @property
     def username(self):
@@ -320,9 +327,10 @@ class HTTPEndpoint(object):
     def _poll(self):
         try:
             resp = self._session.request(
-                    self.method, self.url, timeout=10, auth=self.auth,
-                    headers=self.headers, verify=False
-                    )
+                      self.method, self.url, timeout=10, auth=self.auth,
+                      headers=self.headers, verify=False, data=self.query_data
+                      )
+               
             resp.raise_for_status()
         except requests.exceptions.RequestException as e:
             msg = "Got HTTP error when request monitoring method {} from url {}: {}".format(
@@ -338,11 +346,17 @@ class HTTPEndpoint(object):
     @asyncio.coroutine
     def poll(self):
         try:
-            with concurrent.futures.ThreadPoolExecutor(1) as executor:
-                resp = yield from self._loop.run_in_executor(
+            if (self._executor is None):
+                with concurrent.futures.ThreadPoolExecutor(1) as executor:
+                    resp = yield from self._loop.run_in_executor(
                         executor,
                         self._poll,
-                        )
+                    )
+            else:
+                resp = yield from self._loop.run_in_executor(
+                    self._executor,
+                    self._poll,
+                )
 
         except MonitoringParamError as e:
             msg = "Caught exception when polling http endpoint: %s" % str(e)
@@ -437,6 +451,13 @@ class MonitoringParam(object):
             return
 
         try:
+            xml_data = xmltodict.parse(response_msg)
+            json_msg=json.dumps(xml_data)
+            response_msg = json_msg
+        except Exception as e:
+            pass
+
+        try:
             value = self._json_querier.query(response_msg)
             converted_value = self._value_converter.convert(value)
         except MonitoringParamError as e:
@@ -457,7 +478,7 @@ class EndpointMonParamsPoller(object):
         self._on_update_cb = on_update_cb
 
         self._poll_task = None
-
+    
     @property
     def poll_interval(self):
         return self._endpoint.poll_interval
@@ -474,9 +495,9 @@ class EndpointMonParamsPoller(object):
     def _apply_response_to_mon_params(self, response_msg):
         for mon_param in self._mon_params:
             mon_param.extract_value_from_response(response_msg)
-
+        
         self._notify_subscriber()
-
+    
     @asyncio.coroutine
     def _poll_loop(self):
         self._log.debug("Starting http endpoint %s poll loop", self._endpoint.url)
@@ -508,14 +529,18 @@ class EndpointMonParamsPoller(object):
 
         self._poll_task = None
 
+    def retrieve(self, xact_info, ks_path, send_handler):
+        send_handler(xact_info, self._get_mon_param_msgs())
 
+        
 class VnfMonitoringParamsController(object):
     def __init__(self, log, loop, vnfr_id, management_ip,
                  http_endpoint_msgs, monitoring_param_msgs,
-                 on_update_cb=None):
+                 on_update_cb=None, executor=None):
         self._log = log
         self._loop = loop
         self._vnfr_id = vnfr_id
+        self._executor = executor
         self._management_ip = management_ip
         self._http_endpoint_msgs = http_endpoint_msgs
         self._monitoring_param_msgs = monitoring_param_msgs
@@ -528,16 +553,15 @@ class VnfMonitoringParamsController(object):
                 self._endpoints, self._mon_params
                 )
         self._endpoint_pollers = self._create_endpoint_pollers(self._endpoint_mon_param_map)
-
+    
     def _create_endpoints(self):
         path_endpoint_map = {}
         for ep_msg in self._http_endpoint_msgs:
-            endpoint = HTTPEndpoint(
-                    self._log,
-                    self._loop,
-                    self._management_ip,
-                    ep_msg,
-                    )
+            endpoint = HTTPEndpoint(self._log,
+                                    self._loop,
+                                    self._management_ip,
+                                    ep_msg,self._executor)
+                
             path_endpoint_map[endpoint.path] = endpoint
 
         return path_endpoint_map
@@ -571,9 +595,8 @@ class VnfMonitoringParamsController(object):
                     mon_params,
                     self._on_update_cb
                     )
-
             pollers.append(poller)
-
+            
         return pollers
 
     @property
@@ -604,7 +627,11 @@ class VnfMonitoringParamsController(object):
         for poller in self._endpoint_pollers:
             poller.stop()
 
-
+    def retrieve(self, xact_info, ks_path, send_handler):
+        """Retrieve Monitoring params information """
+        for poller in self._endpoint_pollers:
+            poller.retrieve(xact_info, ks_path, send_handler)
+            
 class VnfMonitorDtsHandler(mano_dts.DtsHandler):
     """ VNF monitoring class """
     # List of list: So we need to register for the list in the deepest level
@@ -614,16 +641,17 @@ class VnfMonitorDtsHandler(mano_dts.DtsHandler):
     def from_vnf_data(cls, tasklet, vnfr_msg, vnfd_msg):
         handler = cls(tasklet.log, tasklet.dts, tasklet.loop,
                 vnfr_msg.id, vnfr_msg.mgmt_interface.ip_address,
-                vnfd_msg.monitoring_param, vnfd_msg.http_endpoint)
+                      vnfd_msg.monitoring_param, vnfd_msg.http_endpoint, tasklet.executor)
 
         return handler
 
-    def __init__(self, log, dts, loop, vnfr_id, mgmt_ip, params, endpoints):
+    def __init__(self, log, dts, loop, vnfr_id, mgmt_ip, params, endpoints, executor=None):
         super().__init__(log, dts, loop)
 
         self._mgmt_ip = mgmt_ip
         self._vnfr_id = vnfr_id
-
+        self._executor = executor
+        
         mon_params = []
         for mon_param in params:
             param = VnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr_MonitoringParam.from_dict(
@@ -643,23 +671,33 @@ class VnfMonitorDtsHandler(mano_dts.DtsHandler):
         self.log.debug(" - Monitoring Params: %s", mon_params)
 
         self._mon_param_controller = VnfMonitoringParamsController(
-                self.log,
-                self.loop,
-                self._vnfr_id,
-                self._mgmt_ip,
-                http_endpoints,
-                mon_params,
-                self.on_update_mon_params
-                )
+            self.log,
+            self.loop,
+            self._vnfr_id,
+            self._mgmt_ip,
+            http_endpoints,
+            mon_params,
+            on_update_cb = self.on_update_mon_params,
+            executor=self._executor,
+        )
+        self._nsr_mon = None
 
     def on_update_mon_params(self, mon_param_msgs):
         for param_msg in mon_param_msgs:
-            self.reg.update_element(
-                    self.xpath(param_msg.id),
-                    param_msg,
-                    rwdts.XactFlag.ADVISE
-                   )
-
+            #self.reg.update_element(
+            #       self.xpath(param_msg.id),
+            #      param_msg,
+            #     rwdts.XactFlag.ADVISE
+            #   )
+            if (self._nsr_mon is not None):
+                self._nsr_mon.apply_vnfr_mon(param_msg, self._vnfr_id)
+    
+    def update_dts_read(self, xact_info, mon_param_msgs):
+        for param_msg in mon_param_msgs:
+           xact_info.respond_xpath(rsp_code=rwdts.XactRspCode.MORE,
+                                   xpath=self.xpath(param_msg.id),
+                                   msg=param_msg)
+    
     def start(self):
         self._mon_param_controller.start()
 
@@ -681,13 +719,26 @@ class VnfMonitorDtsHandler(mano_dts.DtsHandler):
 
     def __del__(self):
         self.stop()
-
+    
     @asyncio.coroutine
     def register(self):
         """ Register with dts """
-
+        @asyncio.coroutine
+        def on_prepare(xact_info, query_action, ks_path, msg):
+            if (self.reg_ready):
+                if (query_action ==  rwdts.QueryAction.READ):
+                    self._mon_param_controller.retrieve(xact_info, ks_path, self.update_dts_read)
+                
+            xact_info.respond_xpath(rwdts.XactRspCode.ACK)
+        @asyncio.coroutine
+        def on_ready(regh, status):
+            self.reg_ready = 1
+        
+        handler = rift.tasklets.DTS.RegistrationHandler(on_prepare=on_prepare, on_ready=on_ready)
+        self.reg_ready = 0
         self.reg = yield from self.dts.register(xpath=self.xpath(),
-                  flags=rwdts.Flag.PUBLISHER|rwdts.Flag.CACHE|rwdts.Flag.NO_PREP_READ)
+                                                flags=rwdts.Flag.PUBLISHER,
+                                                handler=handler)
 
         assert self.reg is not None
 
@@ -700,3 +751,8 @@ class VnfMonitorDtsHandler(mano_dts.DtsHandler):
             self.reg.deregister()
             self.reg = None
             self._vnfr = None
+
+    def update_nsr_mon(self, nsr_mon):
+        """ update nsr mon """
+        self._nsr_mon = nsr_mon
+    

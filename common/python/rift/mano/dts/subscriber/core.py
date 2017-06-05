@@ -1,5 +1,5 @@
 """
-# 
+#
 #   Copyright 2016 RIFT.IO Inc
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,7 +64,7 @@ class SubscriberDtsHandler(DtsHandler):
 
     def get_reg_flags(self):
         """Default set of REG flags, can be over-ridden by sub classes.
-        
+
         Returns:
             Set of rwdts.Flag types.
         """
@@ -91,7 +91,7 @@ class AbstractOpdataSubscriber(SubscriberDtsHandler):
 
     Opdata subscriber can be created in one step by subclassing and implementing
     the MANDATORY get_xpath() method
-    
+
     """
 
     @asyncio.coroutine
@@ -108,11 +108,11 @@ class AbstractOpdataSubscriber(SubscriberDtsHandler):
 
                     if self.callback:
                         self.callback(msg, action)
-
-                return rwdts.MemberRspCode.ACTION_OK
             except Exception as e:
+                self.log.error("Exception when committing data for registration:{} exception:{}".format(self.get_xpath(), e))
                 self.log.exception(e)
-                return rwdts.MemberRspCode.ACTION_NA
+
+            return rwdts.MemberRspCode.ACTION_OK
 
         @asyncio.coroutine
         def on_prepare(xact_info, action, ks_path, msg):
@@ -157,7 +157,7 @@ class AbstractConfigSubscriber(SubscriberDtsHandler):
 
     Config subscriber can be created in one step by subclassing and implementing
     the MANDATORY get_xpath() method
-    
+
     """
     KEY = "msgs"
 

@@ -39,48 +39,64 @@ class ToscaNetwork(ManoResource):
                                            nodetemplate,
                                            type_='vld',
                                            metadata=metadata)
+        self._vld = {}
+        self._ip_profile = {}
 
-    def handle_properties(self):
+    def handle_vld_properties(self, nodes, vnf_type_substitution_mapping):
+        def get_vld_props(specs):
+            vld_prop = {}
+            vld_prop['id'] = self.id
+            vld_prop['name'] = self.name
+            vld_prop['short-name'] = self.name
+            vld_prop['type'] = self.get_type()
+            vld_prop['ip_profile_ref'] = "{0}_{1}".format(self.nodetemplate.name, "ip")
+            if 'description' in specs:
+                vld_prop['description'] = specs['description']
+            if 'vendor' in specs:
+                 vld_prop['vendor'] = specs['vendor']
+
+            index_count = 1
+            vld_connection_point_list = []
+            for node in nodes:
+                if node.type == "vnfd":
+                    substitution_mapping_list = vnf_type_substitution_mapping[node.vnf_type];
+                    for req_key, req_value in node._reqs.items():
+                        for mapping in substitution_mapping_list:
+                            if req_key in mapping:
+                                # link the VLD to the connection point
+                                node_vld = self.get_node_with_name(mapping[req_key][0], nodes)
+                                if node:
+                                    #print()
+                                    prop = {}
+                                    prop['member-vnf-index-ref'] = node.get_member_vnf_index()
+                                    prop['vnfd-connection-point-ref'] = node_vld.cp_name
+                                    prop['vnfd-id-ref'] = node_vld.vnf._id
+                                    vld_connection_point_list.append(prop)
+                                    index_count += 1
+                if len(vld_connection_point_list) > 1:
+                    vld_prop['vnfd-connection-point-ref'] = vld_connection_point_list
+            return vld_prop
+
+        def get_ip_profile_props(specs):
+            ip_profile_prop = {}
+            ip_profile_param = {}
+            if 'ip_profile_ref' in self._vld:
+                ip_profile_prop['name'] = self._vld['ip_profile_ref']
+
+            if 'description' in specs:
+                ip_profile_prop['description'] = specs['description']
+            if 'gateway_ip' in specs:
+                ip_profile_param['gateway-address'] = specs['gateway_ip']
+            if 'ip_version' in specs:
+                ip_profile_param['ip-version'] = 'ipv' + str(specs['ip_version'])
+            if 'cidr' in specs:
+                ip_profile_param['subnet-address'] = specs['cidr']
+                ip_profile_prop['ip-profile-params'] = ip_profile_param
+
+            return ip_profile_prop
         tosca_props = self.get_tosca_props()
-
-        if 'cidr' in tosca_props.keys():
-            self.log.warn(_("Support for subnet not yet "
-                            "available. Ignoring it"))
-        net_props = {}
-        for key, value in tosca_props.items():
-            if key in self.NETWORK_PROPS:
-                if key == 'network_name':
-                    net_props['name'] = value
-                elif key == 'network_id':
-                    net_props['id'] = value
-            else:
-                net_props[key] = value
-
-        net_props['type'] = self.get_type()
-
-        if 'name' not in net_props:
-            # Use the node name as network name
-            net_props['name'] = self.name
-
-        if 'short_name' not in net_props:
-            # Use the node name as network name
-            net_props['short-name'] = self.name
-
-        if 'id' not in net_props:
-            net_props['id'] = self.id
-
-        if 'description' not in net_props:
-            net_props['description'] = self.description
-
-        if 'vendor' not in net_props:
-            net_props['vendor'] = self.vendor
-
-        if 'version' not in net_props:
-            net_props['version'] = self.version
-
-        self.log.debug(_("Network {0} properties: {1}").
-                       format(self.name, net_props))
-        self.properties = net_props
+        self._vld = get_vld_props(tosca_props)
+        self._ip_profile = get_ip_profile_props(tosca_props)
 
     def get_type(self):
         """Get the network type based on propery or type derived from"""
@@ -107,9 +123,13 @@ class ToscaNetwork(ManoResource):
         return "ELAN"
 
     def generate_yang_model_gi(self, nsd, vnfds):
-        props = convert_keys_to_python(self.properties)
+        props            = convert_keys_to_python(self.properties)
+        vld_props        = convert_keys_to_python(self._vld)
+        ip_profile_props = convert_keys_to_python(self._ip_profile)
         try:
-            nsd.vld.add().from_dict(props)
+            nsd.vld.add().from_dict(vld_props)
+            if len(ip_profile_props) > 1:
+                nsd.ip_profiles.add().from_dict(ip_profile_props)
         except Exception as e:
             err_msg = _("{0} Exception vld from dict {1}: {2}"). \
                       format(self, props, e)

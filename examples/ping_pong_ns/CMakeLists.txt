@@ -34,7 +34,13 @@ set(PACKAGE_OUTPUT
   ${CMAKE_CURRENT_BINARY_DIR}/pong_vnfd_aws.tar.gz
   ${CMAKE_CURRENT_BINARY_DIR}/ping_pong_nsd_with_epa.tar.gz
   ${CMAKE_CURRENT_BINARY_DIR}/ping_vnfd_with_epa.tar.gz
-  ${CMAKE_CURRENT_BINARY_DIR}/pong_vnfd_with_epa.tar.gz)
+  ${CMAKE_CURRENT_BINARY_DIR}/ping_vnfd_with_vca.tar.gz
+  ${CMAKE_CURRENT_BINARY_DIR}/pong_vnfd_with_vca.tar.gz
+  ${CMAKE_CURRENT_BINARY_DIR}/ping_pong_nsd_with_vca.tar.gz
+  ${CMAKE_CURRENT_BINARY_DIR}/pong_vnfd_with_epa.tar.gz
+  ${CMAKE_CURRENT_BINARY_DIR}/ping_vnfd_with_vip.tar.gz
+  ${CMAKE_CURRENT_BINARY_DIR}/pong_vnfd_with_vip.tar.gz
+  ${CMAKE_CURRENT_BINARY_DIR}/ping_pong_nsd_with_vip.tar.gz)
 
 add_custom_command(
     OUTPUT ${PACKAGE_OUTPUT}
@@ -67,6 +73,11 @@ rift_python_install_tree(
   COMPONENT ${PKG_LONG_NAME}
   FILES
     rift/mano/examples/ping_pong_nsd.py
+    rift/mano/examples/ping_setup.py
+    rift/mano/examples/ping_rate.py
+    rift/mano/examples/ping_start_stop.py
+    rift/mano/examples/pong_setup.py
+    rift/mano/examples/pong_start_stop.py
     rift/mano/examples/start_traffic.py
     rift/mano/examples/ping_set_rate.py
     rift/mano/examples/stop_traffic.py
@@ -74,7 +85,7 @@ rift_python_install_tree(
 
 install(
   PROGRAMS
-    rift/mano/examples/ping_config.py
+    rift/mano/examples/ping_scale.py
     stand_up_ping_pong
   DESTINATION usr/bin
   COMPONENT ${PKG_LONG_NAME}

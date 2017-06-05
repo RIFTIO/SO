@@ -140,10 +140,11 @@ class AutoScalerTasklet(rift.tasklets.Tasklet, engine.ScalingPolicy.Delegate):
         @asyncio.coroutine
         def _scale_in():
 
+            instance_id_ = self.instance_id_store[(scaling_group_name, nsr_id)].pop()
             # Trigger an rpc
             rpc_ip = NsrYang.YangInput_Nsr_ExecScaleIn.from_dict({
                 'nsr_id_ref': nsr_id,
-                'instance_id': instance_id,
+                'instance_id': instance_id_,
                 'scaling_group_name_ref': scaling_group_name})
 
             rpc_out = yield from self.dts.query_rpc(
@@ -151,7 +152,9 @@ class AutoScalerTasklet(rift.tasklets.Tasklet, engine.ScalingPolicy.Delegate):
                         0,
                         rpc_ip)
 
-        self.loop.create_task(_scale_in())
+        # Check for existing scaled-out VNFs if any.
+        if len(self.instance_id_store):
+            self.loop.create_task(_scale_in())
 
     def scale_out(self, scaling_group_name, nsr_id):
         """Delegate callback for scale out requests

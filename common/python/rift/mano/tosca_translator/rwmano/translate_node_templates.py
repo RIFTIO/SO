@@ -23,6 +23,7 @@ from rift.mano.tosca_translator.common.exception import ToscaClassImportError
 from rift.mano.tosca_translator.common.exception import ToscaModImportError
 from rift.mano.tosca_translator.conf.config import ConfigProvider as translatorConfig
 from rift.mano.tosca_translator.rwmano.syntax.mano_resource import ManoResource
+from toscaparser.tosca_template import ToscaTemplate
 
 
 class TranslateNodeTemplates(object):
@@ -161,8 +162,11 @@ class TranslateNodeTemplates(object):
             for key in FIELDS_MAP:
                 if key in tosca_meta.keys():
                     metadata[FIELDS_MAP[key]] = str(tosca_meta[key])
+            if 'logo' in tosca_meta:
+                metadata['logo'] = os.path.basename(tosca_meta['logo'])
         self.log.debug(_("Metadata {0}").format(metadata))
         self.metadata = metadata
+
 
     def _recursive_handle_properties(self, resource):
         '''Recursively handle the properties of the depends_on_nodes nodes.'''
@@ -188,8 +192,52 @@ class TranslateNodeTemplates(object):
 
         self.log.debug(_('Translating the node templates.'))
         # Copy the TOSCA graph: nodetemplate
+        all_node_templates                          = []
+        node_to_artifact_map                        = {}
+        vnf_type_to_vnf_node                        = {}
+        vnf_type_to_vdus_map                        = {}
+        vnf_type_substitution_mapping               = {}
+        vnf_type_to_capability_substitution_mapping = {}
         tpl = self.tosca.tpl['topology_template']['node_templates']
+        associated_vnfd_flag = False
+
         for node in self.nodetemplates:
+            all_node_templates.append(node)
+            if node.parent_type.type == 'tosca.nodes.nfv.riftio.VNF1':
+                vnf_type_to_vnf_node[node.type] = node.name
+        for node_key in tpl:
+            if 'artifacts' in tpl[node_key]:
+                node_to_artifact_map[node_key] = tpl[node_key]['artifacts']
+        for template in self.tosca.nested_tosca_templates_with_topology:
+            tpl_node = template.tpl['node_templates']
+            vnf_type = template.substitution_mappings.node_type
+
+            vnf_type_to_vdus_map[vnf_type]                        = []
+            vnf_type_substitution_mapping[vnf_type]               = []
+            vnf_type_to_capability_substitution_mapping[vnf_type] = []
+            vnf_type_to_capability_substitution_mapping[vnf_type] = []
+            policies                                              = []
+
+            for node in template.nodetemplates:
+                all_node_templates.append(node)
+            for node_key in tpl_node:
+                if 'artifacts' in tpl_node[node_key]:
+                    node_to_artifact_map[node_key] = tpl_node[node_key]['artifacts']
+            for node in template.nodetemplates:
+                if 'VDU' in node.type:
+                    vnf_type_to_vdus_map[vnf_type].append(node.name)
+            for policy in template.policies:
+                policies.append(policy.name)
+            if template.substitution_mappings.requirements:
+                for req in template.substitution_mappings.requirements:
+                    vnf_type_substitution_mapping[template.substitution_mappings.node_type].append(req)
+            if template.substitution_mappings.capabilities:
+                for capability in template.substitution_mappings.capabilities:
+                    sub_list = template.substitution_mappings.capabilities[capability]
+                    if len(sub_list) > 0:
+                        vnf_type_to_capability_substitution_mapping[vnf_type].append({capability: sub_list[0]})
+
+        for node in all_node_templates:
             base_type = ManoResource.get_base_type(node.type_definition)
             self.log.debug(_("Translate node %(name)s of type %(type)s with "
                              "base %(base)s") %
@@ -203,47 +251,74 @@ class TranslateNodeTemplates(object):
                             metadata=self.metadata)
             # Currently tosca-parser does not add the artifacts
             # to the node
-            if mano_node.name in tpl:
-                tpl_node = tpl[mano_node.name]
-                self.log.debug("Check artifacts for {}".format(tpl_node))
-                if 'artifacts' in tpl_node:
-                    mano_node.artifacts = tpl_node['artifacts']
+            if mano_node.type == 'vnfd':
+                associated_vnfd_flag = True
+            if mano_node.name in node_to_artifact_map:
+                mano_node.artifacts = node_to_artifact_map[mano_node.name]
             self.mano_resources.append(mano_node)
             self.mano_lookup[node] = mano_node
 
+        if not associated_vnfd_flag:
+            dummy_file = "{0}{1}".format(os.getenv('RIFT_INSTALL'), "/usr/rift/mano/common/dummy_vnf_node.yaml")
+            tosca_vnf = ToscaTemplate(dummy_file, {}, True)
+            vnf_type = self.tosca.topology_template.substitution_mappings.node_type
+            vnf_type_to_vdus_map[vnf_type] = []
+
+            for node in tosca_vnf.nodetemplates:
+                all_node_templates.append(node)
+                base_type = ManoResource.get_base_type(node.type_definition)
+                vnf_type_to_vnf_node[vnf_type] = node.name
+                mano_node = TranslateNodeTemplates. \
+                        TOSCA_TO_MANO_TYPE[base_type.type](
+                            self.log,
+                            node,
+                            metadata=self.metadata)
+                mano_node.vnf_type = vnf_type
+                self.mano_resources.append(mano_node)
+
+            for node in self.tosca.nodetemplates:
+                if 'VDU' in node.type:
+                    vnf_type_to_vdus_map[vnf_type].append(node.name)
+
         # The parser currently do not generate the objects for groups
-        if 'groups' in self.tosca.tpl['topology_template']:
-            tpl = self.tosca.tpl['topology_template']['groups']
-            self.log.debug("Groups: {}".format(tpl))
-            for group, details in tpl.items():
-                self.log.debug(_("Translate group {}: {}").
-                               format(group, details))
-                group_type = details['type']
-                if group_type:
-                    group_node = TranslateNodeTemplates. \
-                                 TOSCA_TO_MANO_TYPE[group_type](
-                                     self.log,
-                                     group,
-                                     details,
-                                     metadata=self.metadata)
-                    self.mano_groups.append(group_node)
+        for group in self.tosca.topology_template.groups:
+            group_type = group.type
+            if group_type:
+                group_node = TranslateNodeTemplates. \
+                             TOSCA_TO_MANO_TYPE[group_type](
+                                 self.log,
+                                 group,
+                                 metadata=self.metadata)
+                self.mano_groups.append(group_node)
 
         # The parser currently do not generate the objects for policies
-        if 'policies' in self.tosca.tpl['topology_template']:
-            tpl = self.tosca.tpl['topology_template']['policies']
-            # for policy in self.policies:
-            for policy in tpl:
-                self.log.debug(_("Translate policy {}").
-                               format(policy))
-                policy_type = self._get_policy_type(policy)
-                if policy_type:
-                    policy_node = TranslateNodeTemplates. \
-                                  TOSCA_TO_MANO_TYPE[policy_type](
-                                      self.log,
-                                      policy,
-                                      metadata=self.metadata)
-                    self.mano_policies.append(policy_node)
 
+        for policy in self.tosca.topology_template.policies:
+            policy_type = policy.type
+            if policy_type:
+                policy_node = TranslateNodeTemplates. \
+                             TOSCA_TO_MANO_TYPE[policy_type](
+                                 self.log,
+                                 policy,
+                                 metadata=self.metadata)
+                self.mano_policies.append(policy_node)
+        for template in self.tosca.nested_tosca_templates_with_topology:
+            vnf_type = template.substitution_mappings.node_type
+            if vnf_type in vnf_type_to_vnf_node:
+                vnf_node = vnf_type_to_vnf_node[vnf_type]
+
+                for policy in template.policies:
+                    policy_type = policy.type
+                    if policy_type:
+                        policy_node = TranslateNodeTemplates. \
+                                     TOSCA_TO_MANO_TYPE[policy_type](
+                                         self.log,
+                                         policy,
+                                         metadata=self.metadata,
+                                         vnf_name=vnf_node)
+                        self.mano_policies.append(policy_node)
+
+        vnfd_resources = []
         for node in self.mano_resources:
             self.log.debug(_("Handle properties for {0} of type {1}").
                            format(node.name, node.type_))
@@ -265,6 +340,22 @@ class TranslateNodeTemplates(object):
                            format(node.name, node.type_))
             node.update_image_checksum(self.tosca.path)
 
+        for node in list(self.mano_resources):
+            if node.type == "vnfd":
+                vnfd_resources.append(node)
+                self.mano_resources.remove(node)
+
+        vnfd_resources.sort(key=lambda x: x.member_vnf_id, reverse=True)
+        vnf_type_duplicate_map = {}
+        for node in reversed(vnfd_resources):
+            if node.vnf_type in vnf_type_duplicate_map:
+                for policy in self.mano_policies:
+                    if hasattr(policy, '_vnf_name') and policy._vnf_name == node.name:
+                        policy._vnf_name = vnf_type_duplicate_map[node.vnf_type]
+                continue
+            vnf_type_duplicate_map[node.vnf_type] = node.name
+
+        self.mano_resources.extend(vnfd_resources)
         for node in self.mano_resources:
             # Handle vnf and vdu dependencies first
             if node.type == "vnfd":
@@ -272,7 +363,8 @@ class TranslateNodeTemplates(object):
                     self.log.debug(_("Handle requirements for {0} of "
                                      "type {1}").
                                    format(node.name, node.type_))
-                    node.handle_requirements(self.mano_resources)
+                    node.handle_requirements(self.mano_resources, self.mano_policies, vnf_type_to_vdus_map)
+
                 except Exception as e:
                     self.log.error(_("Exception for {0} in requirements {1}").
                                    format(node.name, node.type_))
@@ -290,11 +382,17 @@ class TranslateNodeTemplates(object):
                                    format(node.name, node.type_))
                     self.log.exception(e)
 
+        for node in self.mano_resources:
+            if node.type == "vld":
+                node.handle_vld_properties(self.mano_resources, vnf_type_substitution_mapping)
+            elif node.type == 'forwarding_path':
+                node.handle_forwarding_path_dependencies(self.mano_resources, vnf_type_to_capability_substitution_mapping)
+
         return self.mano_resources
 
     def translate_groups(self):
         for group in self.mano_groups:
-            group.handle_properties(self.mano_resources)
+            group.handle_properties(self.mano_resources, self.mano_groups)
         return self.mano_groups
 
     def translate_policies(self):

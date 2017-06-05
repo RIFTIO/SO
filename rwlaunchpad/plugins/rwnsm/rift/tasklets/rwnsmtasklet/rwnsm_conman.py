@@ -84,29 +84,39 @@ class ROConfigManager(object):
             return
 
         try:
-            nsrid = cm_nsr['id']
+            nsrid = cm_nsr.id
 
             # Update the VNFRs' config status
-            gen = []
-            if 'cm_vnfr' in cm_nsr:
-                gen = (vnfr for vnfr in cm_nsr['cm_vnfr']
-                       if vnfr['id'] in self.nsm._vnfrs)
+            gen = (vnfr for vnfr in cm_nsr.cm_vnfr
+                   if vnfr.id in self.nsm._vnfrs)
 
             for vnfr in gen:
-                vnfrid = vnfr['id']
-                new_status = ROConfigManager.map_config_status(vnfr['state'])
+                vnfrid = vnfr.id
+                new_status = ROConfigManager.map_config_status(vnfr.state)
                 self._log.debug("Updating config status of VNFR {} " \
                                 "in NSR {} to {}({})".
                                 format(vnfrid, nsrid, new_status,
-                                       vnfr['state']))
+                                       vnfr.state))
                 yield from \
                     self.nsm.vnfrs[vnfrid].set_config_status(new_status)
 
+                yield from \
+                    self.nsm.vnfrs[vnfrid].update_config_primitives(
+                        vnfr.vnf_configuration,
+                        self.nsm.nsrs[nsrid])
+
             # Update the NSR's config status
-            new_status = ROConfigManager.map_config_status(cm_nsr['state'])
-            self._log.info("Updating config status of NSR {} to {}({})".
-                           format(nsrid, new_status, cm_nsr['state']))
-            yield from self.nsm.nsrs[nsrid].set_config_status(new_status, cm_nsr.get('state_details'))
+            new_status = ROConfigManager.map_config_status(cm_nsr.state)
+            self._log.debug("Updating config status of NSR {} to {}({})".
+                                format(nsrid, new_status, cm_nsr.state))
+
+            # If terminate nsr request comes when NS instantiation is in
+            # 'Configuring state'; self.nsm.nsrs dict is already empty when
+            # self.nsm.nsrs[nsrid].set_config_status gets executed. So adding a check here.
+            if nsrid in self.nsm.nsrs:
+                yield from self.nsm.nsrs[nsrid].set_config_status(
+                    new_status,
+                    cm_nsr.state_details)
 
         except Exception as e:
             self._log.error("Failed to process cm-state for nsr {}: {}".
@@ -116,12 +126,11 @@ class ROConfigManager(object):
     @asyncio.coroutine
     def register(self):
         """ Register for cm-state changes """
-        
+
         @asyncio.coroutine
         def on_prepare(xact_info, query_action, ks_path, msg):
             """ cm-state changed """
 
-            #print("###>>> cm-state change ({}), msg_dict = {}".format(query_action, msg_dict))
             self._log.debug("Received cm-state on_prepare (%s:%s:%s)",
                             query_action,
                             ks_path,
@@ -130,10 +139,11 @@ class ROConfigManager(object):
             if (query_action == rwdts.QueryAction.UPDATE or
                 query_action == rwdts.QueryAction.CREATE):
                 # Update Each NSR/VNFR state
-                msg_dict = msg.as_dict()
-                yield from self.update_ns_cfg_state(msg_dict)
+                # msg_dict = msg.as_dict()
+                yield from self.update_ns_cfg_state(msg)
             elif query_action == rwdts.QueryAction.DELETE:
-                self._log.debug("DELETE action in on_prepare for cm-state, ignoring")
+                self._log.debug("DELETE action in on_prepare for cm-state, "
+                                "ignoring")
             else:
                 raise NotImplementedError(
                     "%s on cm-state is not supported",
@@ -142,10 +152,13 @@ class ROConfigManager(object):
             xact_info.respond_xpath(rwdts.XactRspCode.ACK)
 
         try:
-            handler = rift.tasklets.DTS.RegistrationHandler(on_prepare=on_prepare)
-            self.dts_reg_hdl = yield from self._dts.register(self.cm_state_xpath,
-                                                             flags=rwdts.Flag.SUBSCRIBER,
-                                                             handler=handler)
+            handler = rift.tasklets.DTS.RegistrationHandler(
+                on_prepare=on_prepare)
+            self.dts_reg_hdl = yield from self._dts.register(
+                self.cm_state_xpath,
+                flags=rwdts.Flag.SUBSCRIBER,
+                handler=handler)
+
         except Exception as e:
-            self._log.error("Failed to register for cm-state changes as %s", str(e))
-            
+            self._log.error("Failed to register for cm-state changes as %s",
+                            str(e))

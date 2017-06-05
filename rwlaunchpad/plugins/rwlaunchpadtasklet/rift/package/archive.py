@@ -53,13 +53,14 @@ class TarPackageArchive(object):
         self.load_archive()
 
     @classmethod
-    def from_package(cls, log, pkg, tar_file_hdl):
+    def from_package(cls, log, pkg, tar_file_hdl, top_level_dir=None):
         """ Creates a TarPackageArchive from a existing Package
 
         Arguments:
             log - logger
             pkg - a DescriptorPackage instance
             tar_file_hdl - a writeable file handle to write tar archive data
+            top_level_dir - (opt.) top level dir under which the archive will be extracted
 
         Returns:
             A TarPackageArchive instance
@@ -73,8 +74,10 @@ class TarPackageArchive(object):
             tar_info.gname = "rift"
 
         archive = TarPackageArchive(log, tar_file_hdl, mode='w:gz')
+
         for pkg_file in pkg.files:
-            tar_info = tarfile.TarInfo(name=pkg_file)
+            filename = "%s/%s" % (top_level_dir, pkg_file) if top_level_dir else pkg_file
+            tar_info = tarfile.TarInfo(name=filename)
             tar_info.type = tarfile.REGTYPE
             tar_info.mode = pkg.get_file_mode(pkg_file)
             set_common_tarinfo_fields(tar_info)
@@ -83,7 +86,8 @@ class TarPackageArchive(object):
                 archive.tarfile.addfile(tar_info, pkg_file_hdl)
 
         for pkg_dir in pkg.dirs:
-            tar_info = tarfile.TarInfo(name=pkg_dir)
+            dirname = "%s/%s" % (top_level_dir, pkg_dir) if top_level_dir else pkg_dir
+            tar_info = tarfile.TarInfo(name=dirname)
             tar_info.type = tarfile.DIRTYPE
             tar_info.mode = 0o775
             set_common_tarinfo_fields(tar_info)

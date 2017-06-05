@@ -18,6 +18,7 @@
 from rift.mano.tosca_translator.common.utils import _
 from rift.mano.tosca_translator.common.utils import convert_keys_to_python
 from rift.mano.tosca_translator.rwmano.syntax.mano_resource import ManoResource
+from toscaparser.functions import GetInput
 
 from toscaparser.common.exception import ValidationError
 
@@ -45,7 +46,7 @@ class ToscaNfvVnf(ManoResource):
                       'mgmt-interface']
     OPTIONAL_PROPS = ['version', 'vendor', 'http-endpoint', 'monitoring-param',
                       'connection-point']
-    IGNORE_PROPS = ['port']
+    IGNORE_PROPS = ['port', 'monitoring_param']
     TOSCA_CAPS = ['mgmt_interface', 'http_endpoint', 'monitoring_param_0',
                   'monitoring_param_1', 'connection_point']
 
@@ -57,6 +58,12 @@ class ToscaNfvVnf(ManoResource):
         self._const_vnfd = {}
         self._vnf_config = {}
         self._vdus = []
+        self._policies = []
+        self._cps = []
+        self.vnf_type = nodetemplate.type
+        self.member_vnf_id = None
+        self._reqs = {}
+        self.logo = None
 
     def map_tosca_name_to_mano(self, name):
         new_name = super().map_tosca_name_to_mano(name)
@@ -115,6 +122,7 @@ class ToscaNfvVnf(ManoResource):
             if key == 'id':
                 self._const_vnfd['member-vnf-index'] = int(value)
                 self._const_vnfd['vnfd-id-ref'] = self.id
+                self.member_vnf_id = int(value)
             elif key == 'vnf_configuration':
                 self._vnf_config = get_vnf_config(value)
             else:
@@ -138,6 +146,10 @@ class ToscaNfvVnf(ManoResource):
         if 'start_by_default' in vnf_props:
             self._const_vnfd['start-by-default'] = \
                                         vnf_props.pop('start_by_default')
+        if 'logo' in self.metadata:
+            vnf_props['logo'] = self.metadata['logo']
+            self.logo = self.metadata['logo']
+
 
         self.log.debug(_("VNF {0} with constituent vnf: {1}").
                        format(self.name, self._const_vnfd))
@@ -186,45 +198,44 @@ class ToscaNfvVnf(ManoResource):
         self.log.debug(_("VDU {0} properties: {1}").
                        format(self.name, self.properties))
 
-    def handle_requirements(self, nodes):
+    def handle_requirements(self, nodes, policies, vnf_type_to_vdus_map):
         tosca_reqs = self.get_tosca_reqs()
-        self.log.debug("VNF {0} requirements: {1}".
-                       format(self.name, tosca_reqs))
+        for req in tosca_reqs:
+            for key, value in req.items():
+                if 'target' in value:
+                    self._reqs[key] = value['target']
 
-        try:
-            for req in tosca_reqs:
-                if 'vdus' in req:
-                    target = req['vdus']['target']
-                    node = self.get_node_with_name(target, nodes)
-                    if node:
-                        self._vdus.append(node)
-                        node._vnf = self
-                        # Add the VDU id to mgmt-intf
-                        if 'mgmt-interface' in self.properties:
-                            self.properties['mgmt-interface']['vdu-id'] = \
-                                            node.id
-                            if 'vdu' in self.properties['mgmt-interface']:
-                                # Older yang
-                                self.properties['mgmt-interface'].pop('vdu')
-                    else:
-                        err_msg = _("VNF {0}, VDU {1} specified not found"). \
-                                  format(self.name, target)
-                        self.log.error(err_msg)
-                        raise ValidationError(message=err_msg)
+        for policy in policies:
+            if hasattr(policy, '_vnf_name') and policy._vnf_name == self.name:
+                self._policies.append(policy)
 
-        except Exception as e:
-            err_msg = _("Exception getting VDUs for VNF {0}: {1}"). \
-                      format(self.name, e)
-            self.log.error(err_msg)
-            raise e
 
-        self.log.debug(_("VNF {0} properties: {1}").
-                       format(self.name, self.properties))
+        if self.vnf_type in vnf_type_to_vdus_map:
+            for vdu_node_name in vnf_type_to_vdus_map[self.vnf_type]:
+                node = self.get_node_with_name(vdu_node_name, nodes)
+                if node:
+                    self._vdus.append(node)
+                    node._vnf = self
+                    # Add the VDU id to mgmt-intf
+                    if 'mgmt-interface' in self.properties:
+                        self.properties['mgmt-interface']['vdu-id'] = \
+                                        node.id
+                        if 'vdu' in self.properties['mgmt-interface']:
+                            # Older yang
+                            self.properties['mgmt-interface'].pop('vdu')
+                else:
+                    err_msg = _("VNF {0}, VDU {1} specified not found"). \
+                              format(self.name, target)
+                    self.log.error(err_msg)
+                    raise ValidationError(message=err_msg)
 
     def generate_yang_model_gi(self, nsd, vnfds):
         vnfd_cat = RwVnfdYang.YangData_Vnfd_VnfdCatalog()
         vnfd = vnfd_cat.vnfd.add()
         props = convert_keys_to_python(self.properties)
+        for key in ToscaNfvVnf.IGNORE_PROPS:
+            if key in props:
+                props.pop(key)
         try:
             vnfd.from_dict(props)
         except Exception as e:
@@ -237,6 +248,8 @@ class ToscaNfvVnf(ManoResource):
         # Update the VDU properties
         for vdu in self._vdus:
             vdu.generate_yang_submodel_gi(vnfd)
+        for policy in self._policies:
+            policy.generate_yang_submodel_gi(vnfd)
 
         # Update constituent vnfd in nsd
         try:
@@ -287,6 +300,12 @@ class ToscaNfvVnf(ManoResource):
             nsd['constituent-vnfd'] = []
         nsd['constituent-vnfd'].append(self._const_vnfd)
 
+    def generate_nsd_constiuent(self, nsd, vnf_id):
+        self._const_vnfd['vnfd-id-ref'] = vnf_id
+        props = convert_keys_to_python(self._const_vnfd)
+        nsd.constituent_vnfd.add().from_dict(props)
+
+
     def get_member_vnf_index(self):
         return self._const_vnfd['member-vnf-index']
 
@@ -302,4 +321,11 @@ class ToscaNfvVnf(ManoResource):
                 files[self.id].append({
                     'type': 'cloud_init',
                     'name': vdu.cloud_init,
+                },)
+        if self.logo is not None:
+            files[desc_id] = []
+            file_location = "../icons/{}".format(self.logo)
+            files[desc_id].append({
+                    'type': 'icons',
+                    'name': file_location,
                 },)

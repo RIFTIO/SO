@@ -108,15 +108,23 @@ class OnboardPackage:
         self._account = None
 
         self._ip = args.so_ip
+        self._api_server_ip = "localhost"
 
         self._uport = args.upload_port
+        self._onboard_port = args.onboard_port
+        self._rport = args.restconf_port
+        self._user = args.restconf_user
+        self._password = args.restconf_password
+        self._onboard_url = "curl -k --user \"{user}:{passwd}\" \"https://{ip}:{port}/composer/upload?api_server=https://{api_server_ip}&upload_server=https://{ip}\"". \
+                             format(ip=self._ip,
+                                    port=self._onboard_port,
+                                    user=self._user,
+                                    passwd=self._password,
+                                    api_server_ip=self._api_server_ip)
         self._upload_url = "curl -k https://{ip}:{port}/api/upload". \
                             format(ip=self._ip,
                                    port=self._uport)
 
-        self._rport = args.restconf_port
-        self._user = args.restconf_user
-        self._password = args.restconf_password
         self._headers = '-H "accept: application/json"' + \
                         ' -H "content-type: application/json"'
         self._conf_url = "curl -k {header} --user \"{user}:{passwd}\" https://{ip}:{port}/api/config". \
@@ -236,8 +244,8 @@ class OnboardPackage:
 
 
     def _upload_package(self, pkg):
-        upload_cmd = "{url} -F \"descriptor=@{pkg}\" ". \
-                                          format(url=self._upload_url,
+        upload_cmd = "{url} -F \"package=@{pkg}\" ". \
+                                          format(url=self._onboard_url,
                                                  pkg=pkg)
         self.log.debug("Upload pkg {} cmd: {}".format(pkg, upload_cmd))
 
@@ -367,14 +375,24 @@ class OnboardPackage:
                 msg = "Error instantiating NS as {} with NSD {}: ". \
                   format(self._service_name, self._nsd_id,
                          reply["rpc-error"])
-                self.log.error(msg)
+                # self.log.error(msg)
                 raise OnboardPkgInstError(msg)
 
         self.log.info("Successfully initiated instantiation of NS as {} ({})".
                       format(self._service_name, ns_id))
 
     def process(self):
-        self.validate_args()
+        try:
+            self.validate_args()
+        except Exception as e:
+            if args.verbose:
+                log.exception(e)
+
+            print("\nERROR:", e)
+            print("\n")
+            parser.print_help()
+            sys.exit(2)
+
         self.validate_connectivity()
         self.upload_packages()
         self.instantiate()
@@ -398,10 +416,12 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--vim-account",
                         help="Cloud/VIM account to instantiate on")
 
+    parser.add_argument("-o", "--onboard-port", default=8443, type=int,
+                        help="Onboarding port number - node port number, default 8443")
     parser.add_argument("-p", "--upload-port", default=4567, type=int,
                         help="Upload port number, default 4567")
-    parser.add_argument("-P", "--restconf-port", default=8888, type=int,
-                        help="RESTconf port number, default 8888")
+    parser.add_argument("-P", "--restconf-port", default=8008, type=int,
+                        help="RESTconf port number, default 8008")
     parser.add_argument("--restconf-user", default='admin',
                         help="RESTconf user name, default admin")
     parser.add_argument("--restconf-password", default='admin',
@@ -415,15 +435,24 @@ if __name__ == "__main__":
     fmt = logging.Formatter(
         '%(asctime)-23s %(levelname)-5s  (%(name)s@%(process)d:' \
         '%(filename)s:%(lineno)d) - %(message)s')
-    stderr_handler = logging.StreamHandler(stream=sys.stderr)
-    stderr_handler.setFormatter(fmt)
-    logging.basicConfig(level=logging.INFO)
     log = logging.getLogger('onboard-pkg')
-    log.addHandler(stderr_handler)
+    log.setLevel(logging.INFO)
     if args.verbose:
         log.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    ch.setFormatter(fmt)
+    log.addHandler(ch)
 
     log.debug("Input arguments: {}".format(args))
 
-    ob = OnboardPackage(log, args)
-    ob.process()
+    try:
+    	ob = OnboardPackage(log, args)
+    	ob.process()
+    except Exception as e:
+        if args.verbose:
+            log.exception(e)
+
+        print("\nERROR:", e)
+        sys.exit(1)
+

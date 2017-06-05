@@ -250,7 +250,7 @@ class ConfigPrimitiveConvertor(object):
     def extract_vnfd_config(self, vnfd, format="yaml"):
         config_prim = None
         try:
-            config_prim = vnfd.vnf_configuration.service_primitive
+            config_prim = vnfd.vnf_configuration.config_primitive
         except AttributeError:
             pass
 
@@ -339,7 +339,7 @@ class ConfigPrimitiveConvertor(object):
                 vnfd_init_cfg_prim_msg.append(prim)
 
     def merge_vnfd_config(self, vnfd, input_data):
-        for config_primitive in vnfd.vnf_configuration.service_primitive:
+        for config_primitive in vnfd.vnf_configuration.config_primitive:
             try:
                 cfg = input_data[self.CONFIG_PRIMITIVE][config_primitive.name]
             except KeyError:

@@ -28,12 +28,16 @@ set(subdirs
   rwmonitor
   rwmonparam
   rwnsm
+  rwpkgmgr
+  rwstagingmgr
   rwresmgr
   rwvnfm
   rwvns
   vala
   yang
   )
+
+
 
 ##
 # Include the subdirs

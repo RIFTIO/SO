@@ -37,12 +37,6 @@ module nsr-annotation
   tailf:annotate "/nsr:exec-ns-service-primitive" {
      tailf:actionpoint rw_actionpoint;
   }
-  tailf:annotate "/nsr:exec-scale-out" {
-     tailf:actionpoint rw_actionpoint;
-  }
-  tailf:annotate "/nsr:exec-scale-in" {
-     tailf:actionpoint rw_actionpoint;
-  }
   tailf:annotate "/nsr:get-ns-service-primitive-values" {
      tailf:actionpoint rw_actionpoint;
   }

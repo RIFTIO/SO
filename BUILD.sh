@@ -114,10 +114,10 @@ fi
 
 if [[ $PLATFORM == ub16 ]]; then
     PLATFORM_REPOSITORY=${1:-OSM}
-    PLATFORM_VERSION=${2:-4.3.1.0.50309}
+    PLATFORM_VERSION=${2:-4.4.2.0.60195}
 elif [[ $PLATFORM == fc20 ]]; then
     PLATFORM_REPOSITORY=${1:-OSM}  # change to OSM when published
-    PLATFORM_VERSION=${2:-4.3.1.0.50310}
+    PLATFORM_VERSION=${2:-4.4.2.0.60195}
 else
     echo "Internal error: unknown platform $PLATFORM"
     exit 1
@@ -125,6 +125,17 @@ fi
 
 ###############################################################################
 # Main block
+
+# Disable apt-daily.service and apt-daily.timer
+
+DAILY_TIMER='apt-daily.timer'
+DAILY_SERVICE='apt-daily.service'
+if [ $(systemctl is-active $DAILY_TIMER) = "active" ]
+then
+    systemctl stop $DAILY_TIMER
+    systemctl disable $DAILY_TIMER
+    systemctl disable $DAILY_SERVICE
+fi
 
 # must be run from the top of a workspace
 cd $(dirname $0)
@@ -136,12 +147,16 @@ test -h /usr/rift && sudo rm -f /usr/rift
 if [[ $PLATFORM == ub16 ]]; then
     # enable the right repos
     curl http://repos.riftio.com/public/xenial-riftware-public-key | sudo apt-key add -
-    sudo curl -o /etc/apt/sources.list.d/${PLATFORM_REPOSITORY}.list http://buildtracker.riftio.com/repo_file/ub16/${PLATFORM_REPOSITORY}/ 
+    # the old mkcontainer always enabled release which can be bad
+    # so remove it
+    sudo rm -f /etc/apt/sources.list.d/release.list /etc/apt/sources.list.d/rbac.list /etc/apt/sources.list.d/OSM.list
+    # always use the same file name so that updates will overwrite rather than enable a second repo
+    sudo curl -o /etc/apt/sources.list.d/RIFT.list http://buildtracker.riftio.com/repo_file/ub16/${PLATFORM_REPOSITORY}/ 
     sudo apt-get update
         
     # and install the tools
     sudo apt remove -y rw.toolchain-rwbase tcpdump
-    sudo apt-get install -y rw.tools-container-tools rw.tools-scripts python 
+    sudo apt-get install -y --allow-downgrades rw.tools-container-tools=${PLATFORM_VERSION} rw.tools-scripts=${PLATFORM_VERSION} python 
 elif [[ $PLATFORM == fc20 ]]; then
     # get the container tools from the correct repository
     sudo rm -f /etc/yum.repos.d/private.repo
@@ -158,39 +173,82 @@ fi
 # and install of the packages required to build and run
 # this module
 if $runMkcontainer; then
+    if [[ $PLATFORM == ub16 ]]; then
+        sudo apt-get install -y libxml2-dev libxslt-dev python3-crypto
+    elif [[ $PLATFORM == fc20 ]]; then
+        sudo yum-install --assumeyes libxml2-devel libxslt-devel python3-crypto
+    fi
     sudo /usr/rift/container_tools/mkcontainer --modes build --modes ext --repo ${PLATFORM_REPOSITORY}
+    sudo pip3 install lxml==3.4.0
 fi
 
 
 if [[ $PLATFORM == ub16 ]]; then
     # install the RIFT platform code:
-    sudo apt-get install -y rw.toolchain-rwbase=${PLATFORM_VERSION} \
-	 rw.toolchain-rwtoolchain=${PLATFORM_VERSION} \
-	 rw.core.mgmt-mgmt=${PLATFORM_VERSION} \
-	 rw.core.util-util=${PLATFORM_VERSION} \
-	 rw.core.rwvx-rwvx=${PLATFORM_VERSION} \
-	 rw.core.rwvx-rwdts=${PLATFORM_VERSION} \
-	 rw.automation.core-RWAUTO=${PLATFORM_VERSION} \
-         rw.core.rwvx-rwha-1.0=${PLATFORM_VERSION}
+    # remove these packages since some files moved from one to the other, and one was obsoleted
+    # ignore failures
+
+    PACKAGES="rw.toolchain-rwbase rw.toolchain-rwtoolchain rw.core.mgmt-mgmt rw.core.util-util \
+	            rw.core.rwvx-rwvx rw.core.rwvx-rwdts rw.automation.core-RWAUTO"
+    # this package is obsolete.
+    OLD_PACKAGES="rw.core.rwvx-rwha-1.0"
+    for package in $PACKAGES $OLD_PACKAGES; do
+        sudo apt remove -y $package || true
+    done
+
+    packages=""
+    for package in $PACKAGES; do
+        packages="$packages $package=${PLATFORM_VERSION}"
+    done
+    sudo apt-get install -y --allow-downgrades $packages
+
+    sudo apt-get install python-cinderclient
     
     sudo chmod 777 /usr/rift /usr/rift/usr/share
     
     if $installSO; then
 	sudo apt-get install -y \
-	     rw.core.mc-\*=${PLATFORM_VERSION}
+	     rw.core.mano-rwcal_yang_ylib-1.0 \
+	     rw.core.mano-rwconfig_agent_yang_ylib-1.0 \
+	     rw.core.mano-rwlaunchpad_yang_ylib-1.0 \
+	     rw.core.mano-mano_yang_ylib-1.0 \
+	     rw.core.mano-common-1.0 \
+	     rw.core.mano-rwsdn_yang_ylib-1.0 \
+	     rw.core.mano-rwsdnal_yang_ylib-1.0 \
+	     rw.core.mano-rwsdn-1.0 \
+	     rw.core.mano-mano-types_yang_ylib-1.0 \
+	     rw.core.mano-rwcal-cloudsim-1.0 \
+	     rw.core.mano-rwcal-1.0 \
+	     rw.core.mano-rw_conman_yang_ylib-1.0 \
+	     rw.core.mano-rwcalproxytasklet-1.0 \
+	     rw.core.mano-rwlaunchpad-1.0 \
+	     rw.core.mano-rwcal-openmano-vimconnector-1.0 \
+	     rw.core.mano-rwcal-propcloud1-1.0 \
+	     rw.core.mano-lpmocklet_yang_ylib-1.0 \
+	     rw.core.mano-rwmon-1.0 \
+	     rw.core.mano-rwcloud_yang_ylib-1.0 \
+	     rw.core.mano-rwcal-openstack-1.0 \
+	     rw.core.mano-rw.core.mano_foss \
+	     rw.core.mano-rwmon_yang_ylib-1.0 \
+	     rw.core.mano-rwcm-1.0 \
+	     rw.core.mano-rwcal-mock-1.0 \
+	     rw.core.mano-rwmano_examples-1.0 \
+	     rw.core.mano-rwcal-cloudsimproxy-1.0 \
+	     rw.core.mano-models-1.0 \
+	     rw.core.mano-rwcal-aws-1.0
     fi
     
     if $installUI; then
 	sudo apt-get install -y \
-	     rw.ui-about=${PLATFORM_VERSION} \
-	     rw.ui-logging=${PLATFORM_VERSION} \
-	     rw.ui-skyquake=${PLATFORM_VERSION} \
-	     rw.ui-accounts=${PLATFORM_VERSION} \
-	     rw.ui-composer=${PLATFORM_VERSION} \
-	     rw.ui-launchpad=${PLATFORM_VERSION} \
-	     rw.ui-debug=${PLATFORM_VERSION} \
-	     rw.ui-config=${PLATFORM_VERSION} \
-	     rw.ui-dummy_component=${PLATFORM_VERSION}
+	     rw.ui-about \
+	     rw.ui-logging \
+	     rw.ui-skyquake \
+	     rw.ui-accounts \
+	     rw.ui-composer \
+	     rw.ui-launchpad \
+	     rw.ui-debug \
+	     rw.ui-config \
+	     rw.ui-dummy_component
     fi
 elif [[ $PLATFORM == fc20 ]]; then
     
@@ -251,12 +309,6 @@ else
     exit 1
 fi
 
-# install some base files used to create VNFs
-test -d /usr/rift/images || mkdir /usr/rift/images
-for file in Fedora-x86_64-20-20131211.1-sda-ping.qcow2 Fedora-x86_64-20-20131211.1-sda-pong.qcow2 Fedora-x86_64-20-20131211.1-sda.qcow2; do
-    test -f /usr/rift/images/$file || curl -o /usr/rift/images/$file http://repo.riftio.com/releases/open.riftio.com/4.3.1/$file 
-done
-
 # If you are re-building SO, you just need to run
 # these two steps
 if ! $installSO; then
@@ -269,8 +321,6 @@ if [[ $UIPathToBuild ]]; then
     sudo make -C $UIPathToBuild install
 fi
 
-echo "To run SO with UI please run:"
-echo 'sudo -H /usr/rift/rift-shell -r -i /usr/rift -a /usr/rift/.artifacts -- ./demos/launchpad.py --use-xml-mode'
-echo
-echo "To run SO without UI please run:"
-echo 'sudo -H /usr/rift/rift-shell -r -i /usr/rift -a /usr/rift/.artifacts -- ./demos/launchpad.py --use-xml-mode --no-ui'
+echo "Creating Service ...."
+sudo $(dirname $0)/create_launchpad_service
+

@@ -121,7 +121,7 @@ class UploadPackageExtractor(object):
                                                                       upload_hdl))
 
             else:
-                # See if the pacakage can be converted
+                # See if the package can be converted
                 files = ConvertPackage(self._log,
                                        uploaded_file,
                                        extracted_pkgfile).convert(delete=True)
@@ -139,9 +139,10 @@ class UploadPackageExtractor(object):
                     self._log.debug("Upload converted file: {}".format(f))
                     upload_hdl = open(f, "r+b")
                     package = create_package_from_tar_file(upload_hdl)
-                    tmp_pkgs.append(rift.package.package.TemporaryPackage(self._log,
-                                                                          package,
-                                                                          upload_hdl))
+                    if package.descriptor_id:
+                        tmp_pkgs.append(rift.package.package.TemporaryPackage(self._log,
+                                                                            package,
+                                                                            upload_hdl))
 
         except Exception as e:
             # Cleanup any TemporaryPackage instances created

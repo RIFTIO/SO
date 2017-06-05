@@ -18,6 +18,7 @@
 from rift.mano.tosca_translator.common.utils import _
 from rift.mano.tosca_translator.common.utils import convert_keys_to_python
 from rift.mano.tosca_translator.rwmano.syntax.mano_resource import ManoResource
+from toscaparser.functions import GetInput
 
 from toscaparser.common.exception import ValidationError
 
@@ -29,18 +30,16 @@ TARGET_CLASS_NAME = 'ToscaInitialConfig'
 class ToscaInitialConfig(ManoResource):
     '''Translate TOSCA node type tosca.policies.InitialConfigPrimitive.'''
 
-    toscatype = 'tosca.policies.riftio.InitialConfigPrimitive'
+    toscatype = 'tosca.policies.nfv.riftio.initial_config_primitive'
 
     IGNORE_PROPS = []
 
-    def __init__(self, log, primitive, metadata=None):
+    def __init__(self, log, policy, metadata=None):
         # TODO(Philip):Not inheriting for ManoResource, as there is no
         # instance from parser
         self.log = log
-        for name, details in primitive.items():
-            self.name = name
-            self.details = details
-            break
+        self.name = policy.name
+        self.policy = policy
         self.type_ = 'initial-cfg'
         self.metadata = metadata
         self.properties = {}
@@ -50,12 +49,11 @@ class ToscaInitialConfig(ManoResource):
         return "%s(%s)" % (self.name, self.type)
 
     def handle_properties(self, nodes, groups):
-        tosca_props = self.details
+        tosca_props = self.get_policy_props()
         self.log.debug(_("{0} with tosca properties: {1}").
                        format(self, tosca_props))
         self.properties['name'] = tosca_props['name']
-        self.properties['seq'] = \
-                                tosca_props['seq']
+        self.properties['seq'] = int(tosca_props['seq'])
         self.properties['user-defined-script'] = \
                                 tosca_props['user_defined_script']
         self.scripts.append('../scripts/{}'. \
@@ -63,14 +61,21 @@ class ToscaInitialConfig(ManoResource):
 
         if 'parameter' in tosca_props:
             self.properties['parameter'] = []
-            for name, value in tosca_props['parameter'].items():
+            for parameter in tosca_props['parameter']:
                 self.properties['parameter'].append({
-                    'name': name,
-                    'value': value,
+                    'name': parameter['name'],
+                    'value': str(parameter['value']),
                 })
-
         self.log.debug(_("{0} properties: {1}").format(self, self.properties))
 
+    def get_policy_props(self):
+            tosca_props = {}
+            for prop in self.policy.get_properties_objects():
+                if isinstance(prop.value, GetInput):
+                    tosca_props[prop.name] = {'get_param': prop.value.input_name}
+                else:
+                    tosca_props[prop.name] = prop.value
+            return tosca_props
     def get_yang_model_gi(self, nsd, vnfds):
         props = convert_keys_to_python(self.properties)
         try:

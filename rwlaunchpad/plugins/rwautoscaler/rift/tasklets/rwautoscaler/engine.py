@@ -292,6 +292,7 @@ class ScalingPolicy(ScalingCriteria.Delegate):
         self._last_triggered_time = None
         self.scale_in_status = {cri.name: False for cri in self.scaling_criteria}
         self.scale_out_status = {cri.name: False for cri in self.scaling_criteria}
+        self.scale_out_count = 0
 
     def get_nsd_monp_cfg(self, nsr_monp):
         """Get the NSD's mon-param config.
@@ -418,6 +419,10 @@ class ScalingPolicy(ScalingCriteria.Delegate):
         if not self.can_trigger_action():
             return
 
+        if self.scale_out_count < 1:
+            self.log.debug('There is no scaled-out VNFs at this point. Hence ignoring the scale-in')
+            return
+
         self.scale_in_status[criteria_name] = True
         self.log.info("Applying {} operation to check if all criteria {} for"
                       " scale-in-threshold are met".format(
@@ -433,14 +438,16 @@ class ScalingPolicy(ScalingCriteria.Delegate):
 
             @asyncio.coroutine
             def check_and_scale_in():
-                data = yield from self.nsr_scale_sub.data()
-                if len(data) <= 1:
-                    return
+                # data = yield from self.nsr_scale_sub.data()
+                # if len(data) <= 1:
+                #     return
 
-                # Get an instance ID
-                instance_id = data[-1].instance_id
+                # # Get an instance ID
+                # instance_id = data[-1].instance_id
 
+                instance_id = 0     #assigning a value to follow existing scale_in signature
                 self._last_triggered_time = time.time()
+                self.scale_out_count -= 1
                 # Reset all statuses
                 self.scale_in_status = {cri.name: False for cri in self.scaling_criteria}
                 self.delegate.scale_in(self.scaling_group_name, self.nsr_id, instance_id)
@@ -473,6 +480,7 @@ class ScalingPolicy(ScalingCriteria.Delegate):
             self.log.info("Triggering a scale-out action for policy {} as "
                            "all criteria have been met".format(self.name))
             self._last_triggered_time = time.time()
+            self.scale_out_count += 1
             # Reset all statuses
             self.scale_out_status = {cri.name: False for cri in self.scaling_criteria}
             self.delegate.scale_out(self.scaling_group_name, self.nsr_id)

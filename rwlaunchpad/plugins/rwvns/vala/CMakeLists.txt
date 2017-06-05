@@ -33,7 +33,7 @@ rift_add_vala(
   VALA_FILES ${VALA_FILES}
   VALA_PACKAGES
     rw_types-1.0 rw_yang-1.0 rw_keyspec-1.0 rw_yang_pb-1.0 rw_schema_proto-1.0
-    rw_log_yang-1.0 rw_base_yang-1.0 rwcal_yang-1.0 rwsdn_yang-1.0 rw_manifest_yang-1.0 protobuf_c-1.0 ietf_netconf_yang-1.0
+    rw_log_yang-1.0 rw_base_yang-1.0 rwcal_yang-1.0 rwsdnal_yang-1.0 rw_manifest_yang-1.0 protobuf_c-1.0 ietf_netconf_yang-1.0
     ietf_network_yang-1.0 ietf_network_topology_yang-1.0
     ietf_l2_topology_yang-1.0 rw_topology_yang-1.0
     rw_log-1.0
@@ -50,7 +50,7 @@ rift_add_vala(
   GENERATE_VAPI_FILE ${VALA_LONG_NAME}.vapi
   GENERATE_GIR_FILE ${VALA_TYPELIB_PREFIX}.gir
   GENERATE_TYPELIB_FILE ${VALA_TYPELIB_PREFIX}.typelib
-  DEPENDS rwcal_yang rwsdn_yang mano_yang rwlog_gi rwschema_yang
+  DEPENDS rwcal_yang rwsdnal_yang mano_yang rwlog_gi rwschema_yang
   )
 
 rift_install_vala_artifacts(
@@ -68,6 +68,7 @@ set(subdirs
   rwsdn_mock
   rwsdn_sim
   rwsdn_odl 
+  rwsdn_openstack
   rwsdn-python
   )
 rift_add_subdirs(SUBDIR_LIST ${subdirs})

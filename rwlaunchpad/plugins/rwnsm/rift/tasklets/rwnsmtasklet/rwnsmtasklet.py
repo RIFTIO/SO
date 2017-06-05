@@ -27,7 +27,7 @@ import uuid
 import yaml
 import requests
 import json
-
+from urllib.parse import urlparse
 
 from collections import deque
 from collections import defaultdict
@@ -42,6 +42,7 @@ gi.require_version('RwNsrYang', '1.0')
 gi.require_version('RwTypes', '1.0')
 gi.require_version('RwVlrYang', '1.0')
 gi.require_version('RwVnfrYang', '1.0')
+gi.require_version('VnfdYang', '1.0')
 from gi.repository import (
     RwYang,
     RwNsrYang,
@@ -51,20 +52,23 @@ from gi.repository import (
     VnfrYang,
     RwVnfrYang,
     RwNsmYang,
-    RwsdnYang,
+    RwsdnalYang,
     RwDts as rwdts,
     RwTypes,
+    VnfdYang,
     ProtobufC,
 )
 
-import rift.tasklets
+from rift.mano.utils.ssh_keys import ManoSshKey
 import rift.mano.ncclient
 import rift.mano.config_data.config
 import rift.mano.dts as mano_dts
+import rift.tasklets
 
 from . import rwnsm_conman as conman
 from . import cloud
 from . import publisher
+from . import subscriber
 from . import xpath
 from . import config_value_pool
 from . import rwvnffgmgr
@@ -160,6 +164,10 @@ class NsrNsdUpdateError(Exception):
 class NsrVlUpdateError(NsrNsdUpdateError):
     pass
 
+class VirtualLinkRecordError(Exception):
+    """ Virtual Links Record Error """
+    pass
+
 
 class VlRecordState(Enum):
     """ VL Record State """
@@ -185,7 +193,7 @@ class VnffgRecord(object):
     """ Vnffg Records class"""
     SFF_DP_PORT = 4790
     SFF_MGMT_PORT = 5000
-    def __init__(self, dts, log, loop, vnffgmgr, nsr, nsr_name, vnffgd_msg, sdn_account_name):
+    def __init__(self, dts, log, loop, vnffgmgr, nsr, nsr_name, vnffgd_msg, sdn_account_name,cloud_account_name):
 
         self._dts = dts
         self._log = log
@@ -194,6 +202,7 @@ class VnffgRecord(object):
         self._nsr = nsr
         self._nsr_name = nsr_name
         self._vnffgd_msg = vnffgd_msg
+        self._cloud_account_name = cloud_account_name
         if sdn_account_name is None:
             self._sdn_account_name = ''
         else:
@@ -220,7 +229,6 @@ class VnffgRecord(object):
 
         if self._vnffgr_state == VnffgRecordState.INIT:
             vnffgr_dict = {"id": self._vnffgr_id,
-                           "nsd_id": self._nsr.nsd_id,
                            "vnffgd_id_ref": self._vnffgd_msg.id,
                            "vnffgd_name_ref": self._vnffgd_msg.name,
                            "sdn_account": self._sdn_account_name,
@@ -229,7 +237,6 @@ class VnffgRecord(object):
             vnffgr = NsrYang.YangData_Nsr_NsInstanceOpdata_Nsr_Vnffgr.from_dict(vnffgr_dict)
         elif self._vnffgr_state == VnffgRecordState.TERMINATED:
             vnffgr_dict = {"id": self._vnffgr_id,
-                           "nsd_id": self._nsr.nsd_id,
                            "vnffgd_id_ref": self._vnffgd_msg.id,
                            "vnffgd_name_ref": self._vnffgd_msg.name,
                            "sdn_account": self._sdn_account_name,
@@ -243,7 +250,6 @@ class VnffgRecord(object):
                 self._log.exception("Fetching VNFFGR for VNFFG with id %s failed", self._vnffgr_id)
                 self._vnffgr_state = VnffgRecordState.FAILED
                 vnffgr_dict = {"id": self._vnffgr_id,
-                               "nsd_id": self._nsr.nsd_id,
                                "vnffgd_id_ref": self._vnffgd_msg.id,
                                "vnffgd_name_ref": self._vnffgd_msg.name,
                                "sdn_account": self._sdn_account_name,
@@ -257,10 +263,10 @@ class VnffgRecord(object):
     def vnffgr_create_msg(self):
         """ Virtual Link Record message for Creating VLR in VNS """
         vnffgr_dict = {"id": self._vnffgr_id,
-                       "nsd_id": self._nsr.nsd_id,
                        "vnffgd_id_ref": self._vnffgd_msg.id,
                        "vnffgd_name_ref": self._vnffgd_msg.name,
                        "sdn_account": self._sdn_account_name,
+                       "cloud_account": self._cloud_account_name,
                     }
         vnffgr = NsrYang.YangData_Nsr_NsInstanceOpdata_Nsr_Vnffgr.from_dict(vnffgr_dict)
         for rsp in self._vnffgd_msg.rsp:
@@ -387,7 +393,7 @@ class VnffgRecord(object):
                     vnfr = yield from self._nsr.fetch_vnfr(nsr_vnfr.xpath)
                     self._log.debug("Received VNFR is %s", vnfr)
 
-                sff =  RwsdnYang.VNFFGSff()
+                sff =  RwsdnalYang.VNFFGSff()
                 sff_list[nsr_vnfr.vnfd.id] = sff
                 sff.name = nsr_vnfr.name
                 sff.function_type = nsr_vnfr.vnfd.service_function_chain
@@ -460,6 +466,7 @@ class VnffgRecord(object):
 
 class VirtualLinkRecord(object):
     """ Virtual Link Records class"""
+    XPATH = "D,/vlr:vlr-catalog/vlr:vlr"
     @staticmethod
     @asyncio.coroutine
     def create_record(dts, log, loop, nsr_name, vld_msg, cloud_account_name, om_datacenter, ip_profile, nsr_id, restart_mode=False):
@@ -515,6 +522,7 @@ class VirtualLinkRecord(object):
         self._vlr_id = str(uuid.uuid4())
         self._state = VlRecordState.INIT
         self._prev_state = None
+        self._create_time = int(time.time())
 
     @property
     def xpath(self):
@@ -608,6 +616,7 @@ class VirtualLinkRecord(object):
                     "nsr_id_ref": self._nsr_id,
                     "vld_ref": self.vld_msg.id,
                     "name": self.name,
+                    "create_time": self._create_time,
                     "cloud_account": self.cloud_account_name,
                     "om_datacenter": self.om_datacenter_name,
                     }
@@ -617,6 +626,11 @@ class VirtualLinkRecord(object):
 
         vlr_dict.update(vld_copy_dict)
         vlr = RwVlrYang.YangData_Vlr_VlrCatalog_Vlr.from_dict(vlr_dict)
+
+        if self.vld_msg.has_field('virtual_connection_points'):
+            for cp in self.vld_msg.virtual_connection_points:
+                vcp = vlr.virtual_connection_points.add()
+                vcp.from_dict(cp.as_dict())
         return vlr
 
     def reset_id(self, vlr_id):
@@ -645,7 +659,6 @@ class VirtualLinkRecord(object):
     @asyncio.coroutine
     def instantiate(self):
         """ Instantiate this VL """
-
         self._log.debug("Instaniating VLR key %s, vld %s",
                         self.xpath, self._vld_msg)
         vlr = None
@@ -674,7 +687,6 @@ class VirtualLinkRecord(object):
 
         self._log.info("Instantiated VL with xpath %s and vlr:%s",
                        self.xpath, vlr)
-        self._state = VlRecordState.ACTIVE
         self._assigned_subnet = vlr.assigned_subnet
 
     def vlr_in_vns(self):
@@ -706,6 +718,18 @@ class VirtualLinkRecord(object):
         self._state = VlRecordState.TERMINATED
         self._log.debug("Terminated VL id:%s", self.id)
 
+    def set_state_from_op_status(self, operational_status):
+        """ Set the state of this VL based on operational_status"""
+
+        self._log.debug("set_state_from_op_status called for vlr id %s with value %s", self.id, operational_status)
+        if operational_status == 'running':
+            self._state = VlRecordState.ACTIVE
+        elif operational_status == 'failed':
+            self._state = VlRecordState.FAILED
+        elif operational_status == 'vl_alloc_pending':
+            self._state = VlRecordState.INSTANTIATION_PENDING
+        else:
+            raise VirtualLinkRecordError("Unknown operational_status %s" % (operational_status))
 
 class VnfRecordState(Enum):
     """ Vnf Record State """
@@ -797,6 +821,7 @@ class VirtualNetworkFunctionRecord(object):
         self._placement_groups = placement_groups
         self._cloud_config = cloud_config
         self._config_status = NsrYang.ConfigStates.INIT
+        self._create_time = int(time.time())
 
         self._prev_state = VnfRecordState.INIT
         self._state = VnfRecordState.INIT
@@ -834,7 +859,10 @@ class VirtualNetworkFunctionRecord(object):
     @property
     def const_vnfr_msg(self):
         """ VNFR message """
-        return RwNsrYang.YangData_Nsr_NsInstanceOpdata_Nsr_ConstituentVnfrRef(vnfr_id=self.id,cloud_account=self.cloud_account_name,om_datacenter=self._om_datacenter_name)
+        return RwNsrYang.YangData_Nsr_NsInstanceOpdata_Nsr_ConstituentVnfrRef(
+            vnfr_id=self.id,
+            cloud_account=self.cloud_account_name,
+            om_datacenter=self._om_datacenter_name)
 
     @property
     def vnfd(self):
@@ -953,7 +981,6 @@ class VirtualNetworkFunctionRecord(object):
         vnfr_dict = {
                 "id": self.id,
                 "nsr_id_ref": self._nsr_id,
-                "vnfd_ref": self.vnfd.id,
                 "name": self.name,
                 "cloud_account": self._cloud_account_name,
                 "om_datacenter": self._om_datacenter_name,
@@ -962,6 +989,10 @@ class VirtualNetworkFunctionRecord(object):
         vnfr_dict.update(vnfd_copy_dict)
 
         vnfr = RwVnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr.from_dict(vnfr_dict)
+
+        vnfr.vnfd = RwVnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr_Vnfd.from_dict(
+            self.vnfd.as_dict())
+
         vnfr.member_vnf_index_ref = self.member_vnf_index
         vnfr.vnf_configuration.from_dict(self._vnfd.vnf_configuration.as_dict())
 
@@ -988,7 +1019,7 @@ class VirtualNetworkFunctionRecord(object):
                         format(self.name, self.vnfr_msg))
         yield from self._dts.query_update(
                 self.xpath,
-                rwdts.XactFlag.TRACE,
+                rwdts.XactFlag.REPLACE,
                 self.vnfr_msg
                 )
 
@@ -1050,6 +1081,49 @@ class VirtualNetworkFunctionRecord(object):
         return False
 
     @asyncio.coroutine
+    def update_config_primitives(self, vnf_config, nsr):
+        # Update only after we are configured
+        if self._config_status == NsrYang.ConfigStates.INIT:
+            return
+
+        if not vnf_config.as_dict():
+            return
+
+        self._log.debug("Update VNFR {} config: {}".
+                        format(self.name, vnf_config.as_dict()))
+
+        # Update config primitive
+        updated = False
+        for prim in self._vnfd.vnf_configuration.config_primitive:
+            for p in vnf_config.config_primitive:
+                if prim.name == p.name:
+                    for param in prim.parameter:
+                        for pa in p.parameter:
+                            if pa.name == param.name:
+                                if pa.default_value and \
+                                   (pa.default_value != param.default_value):
+                                    param.default_value = pa.default_value
+                                    param.read_only = pa.read_only
+                                    updated = True
+                                break
+                    self._log.debug("Prim: {}".format(prim.as_dict()))
+                    break
+
+        if updated:
+            self._log.debug("Updated VNFD {} config: {}".
+                            format(self._vnfd.name,
+                                   self._vnfd.vnf_configuration))
+            self._vnfr_msg = self.create_vnfr_msg()
+
+            try:
+                yield from nsr.nsm_plugin.update_vnfr(self)
+            except Exception as e:
+                self._log.error("Exception updating VNFM with new config "
+                                "primitive for VNFR {}: {}".
+                                format(self.name, e))
+                self._log.exception(e)
+
+    @asyncio.coroutine
     def instantiate(self, nsr):
         """ Instantiate this VNFR"""
 
@@ -1063,7 +1137,7 @@ class VirtualNetworkFunctionRecord(object):
 
         def find_vlr_for_cp(conn):
             """ Find VLR for the given connection point """
-            for vlr in nsr.vlrs:
+            for vlr_id, vlr in nsr.vlrs.items():
                 for vnfd_cp in vlr.vld_msg.vnfd_connection_point_ref:
                     if (vnfd_cp.vnfd_id_ref == self._vnfd.id and
                             vnfd_cp.vnfd_connection_point_ref == conn.name and
@@ -1079,6 +1153,9 @@ class VirtualNetworkFunctionRecord(object):
             cpr = VnfrYang.YangData_Vnfr_VnfrCatalog_Vnfr_ConnectionPoint()
             cpr.name = conn_p.name
             cpr.type_yang = conn_p.type_yang
+            if conn_p.has_field('port_security_enabled'):
+              cpr.port_security_enabled = conn_p.port_security_enabled
+
             vlr_ref = find_vlr_for_cp(conn_p)
             if vlr_ref is None:
                 msg = "Failed to find VLR for cp = %s" % conn_p.name
@@ -1087,9 +1164,16 @@ class VirtualNetworkFunctionRecord(object):
                 continue
 
             cpr.vlr_ref = vlr_ref.id
+
+            try:
+                if conn_p.static_ip_address:
+                    cpr.static_ip_address = conn_p.static_ip_address
+            except AttributeError as e:
+                pass
+
             self.vnfr_msg.connection_point.append(cpr)
             self._log.debug("Connection point [%s] added, vnf id=%s vnfd id=%s",
-                            cpr, self.vnfr_msg.id, self.vnfr_msg.vnfd_ref)
+                            cpr, self.vnfr_msg.id, self.vnfr_msg.vnfd.id)
 
         if not self.restart_mode:
             yield from self._dts.query_create(self.xpath,
@@ -1238,7 +1322,8 @@ class NetworkServiceRecord(object):
     """ Network service record """
     XPATH = "D,/nsr:ns-instance-opdata/nsr:nsr"
 
-    def __init__(self, dts, log, loop, nsm, nsm_plugin, nsr_cfg_msg, sdn_account_name, key_pairs, restart_mode=False):
+    def __init__(self, dts, log, loop, nsm, nsm_plugin, nsr_cfg_msg, sdn_account_name, key_pairs, restart_mode=False,
+                 vlr_handler=None):
         self._dts = dts
         self._log = log
         self._loop = loop
@@ -1246,12 +1331,15 @@ class NetworkServiceRecord(object):
         self._nsr_cfg_msg = nsr_cfg_msg
         self._nsm_plugin = nsm_plugin
         self._sdn_account_name = sdn_account_name
+        self._vlr_handler = vlr_handler
 
         self._nsd = None
         self._nsr_msg = None
         self._nsr_regh = None
         self._key_pairs = key_pairs
-        self._vlrs = []
+        self._ssh_key_file = None
+        self._ssh_pub_key = None
+        self._vlrs = {}
         self._vnfrs = {}
         self._vnfds = {}
         self._vnffgrs = {}
@@ -1270,7 +1358,7 @@ class NetworkServiceRecord(object):
         self._vnf_phase_completed = False
 
         # A flag to indicate if the NS has failed, currently it is recorded in
-        # operational status, but at the time of termination this field is 
+        # operational status, but at the time of termination this field is
         # over-written making it difficult to identify the failure.
         self._is_failed = False
 
@@ -1284,6 +1372,9 @@ class NetworkServiceRecord(object):
         self.set_state(NetworkServiceRecordState.INIT)
 
         self.substitute_input_parameters = InputParameterSubstitution(self._log)
+
+        # Create an asyncio loop to know when the virtual links are ready
+        self._vls_ready = asyncio.Event(loop=self._loop)
 
     @property
     def nsm_plugin(self):
@@ -1302,6 +1393,7 @@ class NetworkServiceRecord(object):
             self._vnf_phase_completed = True
 
         self._op_status.set_state(state)
+        self._nsm_plugin.set_state(self.id, state)
 
     @property
     def id(self):
@@ -1399,6 +1491,14 @@ class NetworkServiceRecord(object):
     def is_failed(self):
       return self._is_failed
 
+    @property
+    def public_key(self):
+        return self._ssh_pub_key
+
+    @property
+    def private_key(self):
+        return self._ssh_key_file
+
     def resolve_placement_group_cloud_construct(self, input_group):
         """
         Returns the cloud specific construct for placement group
@@ -1464,15 +1564,56 @@ class NetworkServiceRecord(object):
             return "Unknown trigger"
 
     @asyncio.coroutine
+    def generate_ssh_key_pair(self, config_xact):
+        '''Generate a ssh key pair if required'''
+        if self._ssh_key_file:
+            self._log.debug("Key pair already generated")
+            return
+
+        gen_key = False
+        for cv in self.nsd_msg.constituent_vnfd:
+            vnfd = self._get_vnfd(cv.vnfd_id_ref, config_xact)
+            if vnfd and vnfd.mgmt_interface.ssh_key:
+                gen_key = True
+                break
+
+        if not gen_key:
+            return
+
+        try:
+            key = ManoSshKey(self._log)
+            path = tempfile.mkdtemp()
+            key.write_to_disk(name=self.id, directory=path)
+            self._ssh_key_file = "file://{}".format(key.private_key_file)
+            self._ssh_pub_key = key.public_key
+        except Exception as e:
+            self._log.exception("Error generating ssh key for {}: {}".
+                                format(self.nsr_cfg_msg.name, e))
+
+    @asyncio.coroutine
     def instantiate_vls(self):
         """
         This function instantiates VLs for every VL in this Network Service
         """
         self._log.debug("Instantiating %d VLs in NSD id %s", len(self._vlrs),
                         self.id)
-        for vlr in self._vlrs:
+        for vlr_id, vlr in self._vlrs.items():
             yield from self.nsm_plugin.instantiate_vl(self, vlr)
-            vlr.state = VlRecordState.ACTIVE
+
+        # Wait for the VLs to be ready before yielding control out
+        self._log.debug("Waitng for %d  VLs in NSR id %s to be active",
+                        len(self._vlrs), self.id)
+        if self._vlrs:
+            self._log.debug("NSR id:%s, name:%s - Waiting for %d VLs to be ready",
+                            self.id, self.name, len(self._vlrs))
+            yield from self._vls_ready.wait()
+        else:
+            self._log.debug("NSR id:%s, name:%s, No virtual links found",
+                            self.id, self.name)
+            self._vls_ready.set()
+
+        self._log.info("All  %d  VLs in NSR id %s are active, start the VNFs",
+                        len(self._vlrs), self.id)
 
     @asyncio.coroutine
     def create(self, config_xact):
@@ -1518,7 +1659,7 @@ class NetworkServiceRecord(object):
                             vdur_data = dict()
                             vdur_data['vm_name'] = vdur.name
                             vdur_data['vm_mgmt_ip'] = vdur.vm_management_ip
-                            vnfr_data['vdur_data'].append(vdur_data) 
+                            vnfr_data['vdur_data'].append(vdur_data)
                     except Exception as e:
                         self._log.error("Unable to get management IP for vnfr {}:{}".
                                         format(vnfr.name, e))
@@ -1707,7 +1848,6 @@ class NetworkServiceRecord(object):
                     vnfr = yield from self.create_vnf_record(vnfd_msg, const_vnfd_msg, cloud_account_name, om_datacenter_name, group_name, index)
                     scale_instance.add_vnfr(vnfr)
                     vnfrs.append(vnfr)
-
             return vnfrs
 
         @asyncio.coroutine
@@ -1728,7 +1868,8 @@ class NetworkServiceRecord(object):
                                     format(group.name, index))
                     scale_instance.operational_status = "failed"
                 else:
-                    yield from self.instantiate_vnfs(vnfrs)
+                    yield from self.instantiate_vnfs(vnfrs, scaleout=True)
+
 
             except Exception as e:
                 self._log.exception("Failed to begin instantiatiation of vnfs for scale group {}: {}".
@@ -1830,7 +1971,8 @@ class NetworkServiceRecord(object):
                                  self,
                                  self.name,
                                  vnffgd,
-                                 self._sdn_account_name
+                                 self._sdn_account_name,
+                                 self.cloud_account_name
                                  )
             self._vnffgrs[vnffgr.id] = vnffgr
 
@@ -1917,19 +2059,20 @@ class NetworkServiceRecord(object):
         """ This function creates VLs for every VLD in the NSD
         associated with this NSR"""
         for vld in self.nsd_msg.vld:
+
             self._log.debug("Found vld %s in nsr id %s", vld, self.id)
             cloud_account_list = self._extract_cloud_accounts_for_vl(vld)
             for cloud_account, om_datacenter in cloud_account_list:
                 vlr = yield from self._create_vls(vld, cloud_account, om_datacenter)
-                self._vlrs.append(vlr)
-
+                self._vlrs[vlr.id] = vlr
+                self._nsm.add_vlr_id_nsr_map(vlr.id, self)
 
     @asyncio.coroutine
     def create_vl_instance(self, vld):
         self._log.debug("Create VL for {}: {}".format(self.id, vld.as_dict()))
         # Check if the VL is already present
         vlr = None
-        for vl in self._vlrs:
+        for vl_id, vl in self._vlrs.items():
             if vl.vld_msg.id == vld.id:
                 self._log.debug("The VLD %s already in NSR %s as VLR %s with status %s",
                                 vld.id, self.id, vl.id, vl.state)
@@ -1945,14 +2088,14 @@ class NetworkServiceRecord(object):
             cloud_account_list = self._extract_cloud_accounts_for_vl(vld)
             for account,om_datacenter in cloud_account_list:
                 vlr = yield from self._create_vls(vld, account,om_datacenter)
-                self._vlrs.append(vlr)
+                self._vlrs[vlr.id] = vlr
+                self._nsm.add_vlr_id_nsr_map(vlr.id, self)
 
         vlr.state = VlRecordState.INSTANTIATION_PENDING
         yield from self.update_state()
 
         try:
             yield from self.nsm_plugin.instantiate_vl(self, vlr)
-            vlr.state = VlRecordState.ACTIVE
 
         except Exception as e:
             err_msg = "Error instantiating VL for NSR {} and VLD {}: {}". \
@@ -1965,7 +2108,7 @@ class NetworkServiceRecord(object):
 
     @asyncio.coroutine
     def delete_vl_instance(self, vld):
-        for vlr in self._vlrs:
+        for vlr_id, vlr in self._vlrs.items():
             if vlr.vld_msg.id == vld.id:
                 self._log.debug("Found VLR %s for VLD %s in NSR %s",
                                 vlr.id, vld.id, self.id)
@@ -1975,7 +2118,8 @@ class NetworkServiceRecord(object):
                 try:
                     yield from self.nsm_plugin.terminate_vl(vlr)
                     vlr.state = VlRecordState.TERMINATED
-                    self._vlrs.remove(vlr)
+                    del self._vlrs[vlr]
+                    self.remove_vlr_id_nsr_map(vlr.id)
 
                 except Exception as e:
                     err_msg = "Error terminating VL for NSR {} and VLD {}: {}". \
@@ -2017,7 +2161,7 @@ class NetworkServiceRecord(object):
                    (member_vnfd.member_vnf_index_ref == const_vnfd.member_vnf_index):
                     group_info = self.resolve_placement_group_cloud_construct(group)
                     if group_info is None:
-                        self._log.error("Could not resolve cloud-construct for placement group: %s", group.name)
+                        self._log.info("Could not resolve cloud-construct for placement group: %s", group.name)
                         ### raise PlacementGroupError("Could not resolve cloud-construct for placement group: {}".format(group.name))
                     else:
                         self._log.info("Successfully resolved cloud construct for placement group: %s for VNF: %s (Member Index: %s)",
@@ -2029,7 +2173,7 @@ class NetworkServiceRecord(object):
 
     def get_cloud_config(self):
         cloud_config = VnfrYang.VnfrCloudConfig()
-        self._log.debug("Received key pair is {}".format(self._key_pairs)) 
+        self._log.debug("Received key pair is {}".format(self._key_pairs))
 
         for authorized_key in self.nsr_cfg_msg.ssh_authorized_key:
             if authorized_key.key_pair_ref in  self._key_pairs:
@@ -2039,9 +2183,9 @@ class NetworkServiceRecord(object):
             key_pair = cloud_config.key_pair.add()
             key_pair.from_dict(key_pair.as_dict())
         for nsr_cfg_user in self.nsr_cfg_msg.user:
-            user = cloud_config.user.add() 
+            user = cloud_config.user.add()
             user.name = nsr_cfg_user.name
-            user.user_info = nsr_cfg_user.user_info 
+            user.user_info = nsr_cfg_user.user_info
             for ssh_key in nsr_cfg_user.ssh_authorized_key:
                if ssh_key.key_pair_ref in self._key_pairs:
                    key_pair = user.key_pair.add()
@@ -2050,7 +2194,7 @@ class NetworkServiceRecord(object):
             user = cloud_config.user.add()
             user.from_dict(nsd_user.as_dict())
 
-        self._log.debug("Formed cloud-config msg is {}".format(cloud_config)) 
+        self._log.debug("Formed cloud-config msg is {}".format(cloud_config))
         return cloud_config
 
     @asyncio.coroutine
@@ -2128,14 +2272,14 @@ class NetworkServiceRecord(object):
         return vnfr
 
     @asyncio.coroutine
-    def instantiate_vnfs(self, vnfrs):
+    def instantiate_vnfs(self, vnfrs, scaleout=False):
         """
         This function instantiates VNFs for every VNF in this Network Service
         """
         self._log.debug("Instantiating %u VNFs in NS %s", len(vnfrs), self.id)
         for vnf in vnfrs:
             self._log.debug("Instantiating VNF: %s in NS %s", vnf, self.id)
-            yield from self.nsm_plugin.instantiate_vnf(self, vnf)
+            yield from self.nsm_plugin.instantiate_vnf(self, vnf,scaleout)
 
     @asyncio.coroutine
     def instantiate_vnffgs(self):
@@ -2272,7 +2416,7 @@ class NetworkServiceRecord(object):
         # Move the state to INIITALIZING
         self.set_state(NetworkServiceRecordState.INIT)
 
-        event_descr = "Instantiation Request Received NSR Id:%s" % self.id
+        event_descr = "Instantiation Request Received NSR Id: %s, NS Name: %s" % (self.id, self.name)
         self.record_event("instantiating", event_descr)
 
         # Find the NSD
@@ -2290,7 +2434,7 @@ class NetworkServiceRecord(object):
         self.config_store.merge_nsd_config(self.nsd_msg)
         self._log.debug("Merged NSD: {}".format(self.nsd_msg.as_dict()))
 
-        event_descr = "Fetched NSD with descriptor id %s" % self.nsd_id
+        event_descr = "Fetched NSD with descriptor id %s, NS Name: %s" % (self.nsd_id, self.name)
         self.record_event("nsd-fetched", event_descr)
 
         if self._nsd is None:
@@ -2318,19 +2462,22 @@ class NetworkServiceRecord(object):
                             self.id, self.nsd_id)
 
             # instantiate the VLs
-            event_descr = ("Instantiating %s external VLs for NSR id %s" %
-                           (len(self.nsd_msg.vld), self.id))
+            event_descr = ("Instantiating %s external VLs for NSR id: %s, NS Name: %s " %
+                           (len(self.nsd_msg.vld), self.id, self.name))
             self.record_event("begin-external-vls-instantiation", event_descr)
 
             self.set_state(NetworkServiceRecordState.VL_INIT_PHASE)
+
+            # Publish the NSR to DTS
+            yield from self.publish()
 
             yield from self.instantiate_vls()
 
             # Publish the NSR to DTS
             yield from self.publish()
 
-            event_descr = ("Finished instantiating %s external VLs for NSR id %s" %
-                           (len(self.nsd_msg.vld), self.id))
+            event_descr = ("Finished instantiating %s external VLs for NSR id: %s, NS Name: %s " %
+                           (len(self.nsd_msg.vld), self.id, self.name))
             self.record_event("end-external-vls-instantiation", event_descr)
 
             self.set_state(NetworkServiceRecordState.VNF_INIT_PHASE)
@@ -2339,36 +2486,39 @@ class NetworkServiceRecord(object):
                             self.id, self.nsd_id)
 
             # instantiate the VNFs
-            event_descr = ("Instantiating %s VNFS for NSR id %s" %
-                           (len(self.nsd_msg.constituent_vnfd), self.id))
+            event_descr = ("Instantiating %s VNFS for NSR id: %s, NS Name: %s " %
+                           (len(self.nsd_msg.constituent_vnfd), self.id, self.name))
 
             self.record_event("begin-vnf-instantiation", event_descr)
 
             yield from self.instantiate_vnfs(self._vnfrs.values())
 
-            self._log.debug(" Finished instantiating %d VNFs for NSR id %s",
-                            len(self.nsd_msg.constituent_vnfd), self.id)
+            self._log.debug(" Finished instantiating %d VNFs for NSR id: %s, NS Name: %s",
+                            len(self.nsd_msg.constituent_vnfd), self.id, self.name)
 
-            event_descr = ("Finished instantiating %s VNFs for NSR id %s" %
-                           (len(self.nsd_msg.constituent_vnfd), self.id))
+            event_descr = ("Finished instantiating %s VNFs for NSR id: %s, NS Name: %s" %
+                           (len(self.nsd_msg.constituent_vnfd), self.id, self.name))
             self.record_event("end-vnf-instantiation", event_descr)
+
+            # Publish the NSR to DTS
+            yield from self.publish()
 
             if len(self.vnffgrs) > 0:
                 #self.set_state(NetworkServiceRecordState.VNFFG_INIT_PHASE)
-                event_descr = ("Instantiating %s VNFFGS for NSR id %s" %
-                               (len(self.nsd_msg.vnffgd), self.id))
+                event_descr = ("Instantiating %s VNFFGS for NSR id: %s, NS Name: %s" %
+                               (len(self.nsd_msg.vnffgd), self.id, self.name))
 
                 self.record_event("begin-vnffg-instantiation", event_descr)
 
                 yield from self.instantiate_vnffgs()
 
-                event_descr = ("Finished instantiating %s VNFFGDs for NSR id %s" %
-                               (len(self.nsd_msg.vnffgd), self.id))
+                event_descr = ("Finished instantiating %s VNFFGDs for NSR id: %s, NS Name: %s" %
+                               (len(self.nsd_msg.vnffgd), self.id, self.name))
                 self.record_event("end-vnffg-instantiation", event_descr)
 
             if self.has_scaling_instances():
-                event_descr = ("Instantiating %s Scaling Groups for NSR id %s" %
-                               (len(self._scaling_groups), self.id))
+                event_descr = ("Instantiating %s Scaling Groups for NSR id: %s, NS Name: %s" %
+                               (len(self._scaling_groups), self.id, self.name))
 
                 self.record_event("begin-scaling-group-instantiation", event_descr)
                 yield from self.instantiate_scaling_instances(config_xact)
@@ -2376,22 +2526,24 @@ class NetworkServiceRecord(object):
 
             # Give the plugin a chance to deploy the network service now that all
             # virtual links and vnfs are instantiated
-            yield from self.nsm_plugin.deploy(self._nsr_msg)
 
-            self._log.debug("Publishing  NSR...... nsr[%s], nsd[%s]",
-                            self.id, self.nsd_id)
+            self._log.debug("Publishing  NSR...... nsr[%s], nsd[%s], for NS[%s]",
+                            self.id, self.nsd_id, self.name)
 
             # Publish the NSR to DTS
             yield from self.publish()
 
-            self._log.debug("Published  NSR...... nsr[%s], nsd[%s]",
-                            self.id, self.nsd_id)
+            self._log.debug("Published  NSR...... nsr[%s], nsd[%s], for NS[%s]",
+                            self.id, self.nsd_id, self.name)
 
         def on_instantiate_done(fut):
             # If the do_instantiate fails, then publish NSR with failed result
-            if fut.exception() is not None:
-                self._log.error("NSR instantiation failed for NSR id %s: %s", self.id, str(fut.exception()))
-                self._loop.create_task(self.instantiation_failed(failed_reason=str(fut.exception())))
+            e = fut.exception()
+            if e is not None:
+                import traceback, sys
+                print(traceback.format_exception(None,e, e.__traceback__), file=sys.stderr, flush=True)
+                self._log.error("NSR instantiation failed for NSR id %s: %s", self.id, str(e))
+                self._loop.create_task(self.instantiation_failed(failed_reason=str(e)))
 
         instantiate_task = self._loop.create_task(do_instantiate())
         instantiate_task.add_done_callback(on_instantiate_done)
@@ -2424,7 +2576,7 @@ class NetworkServiceRecord(object):
         self._log.debug("Network service %s is active ", self.id)
         self._is_active = True
 
-        event_descr = "NSR in running state for NSR id %s" % self.id
+        event_descr = "NSR in running state for NSR id: %s, NS Name: %s" % (self.id, self.name)
         self.record_event("ns-running", event_descr)
 
         yield from self.publish()
@@ -2437,7 +2589,7 @@ class NetworkServiceRecord(object):
         self.set_state(NetworkServiceRecordState.FAILED)
         self._is_failed = True
 
-        event_descr = "Instantiation of NS %s failed" % self.id
+        event_descr = "Instantiation of NS %s - %s failed" % (self.id, self.name)
         self.record_event("ns-failed", event_descr, evt_details=failed_reason)
 
         # Publish the NSR to DTS
@@ -2446,18 +2598,23 @@ class NetworkServiceRecord(object):
     @asyncio.coroutine
     def terminate_vnfrs(self, vnfrs):
         """ Terminate VNFRS in this network service """
-        self._log.debug("Terminating VNFs in network service %s", self.id)
-        for vnfr in vnfrs:
+        self._log.debug("Terminating VNFs in network service %s - %s", (self.id, self.name))
+        vnfr_ids = []
+        for vnfr in list(vnfrs):
+            vnfr_ids.append(vnfr.id)
             yield from self.nsm_plugin.terminate_vnf(vnfr)
+
+        for vnfr_id in vnfr_ids:
+            self._vnfrs.pop(vnfr_id, None)
 
     @asyncio.coroutine
     def terminate(self):
         """Start terminate of a NetworkServiceRecord."""
         # Move the state to TERMINATE
         self.set_state(NetworkServiceRecordState.TERMINATE)
-        event_descr = "Terminate being processed for NS Id:%s" % self.id
+        event_descr = "Terminate being processed for NS Id: %s, NS Name: %s" % (self.id, self.name)
         self.record_event("terminate", event_descr)
-        self._log.debug("Terminating network service id %s", self.id)
+        self._log.debug("Terminating network service id: %s, NS Name: %s", (self.id, self.name))
         yield from self.publish()
 
         if self._is_failed:
@@ -2472,41 +2629,50 @@ class NetworkServiceRecord(object):
         """Config script related to terminate finished, continue termination"""
         def terminate_vnffgrs():
             """ Terminate VNFFGRS in this network service """
-            self._log.debug("Terminating VNFFGRs in network service %s", self.id)
+            self._log.debug("Terminating VNFFGRs in network service %s - %s", (self.id, self.name))
             for vnffgr in self.vnffgrs.values():
                 yield from vnffgr.terminate()
 
         def terminate_vlrs():
             """ Terminate VLRs in this netork service """
-            self._log.debug("Terminating VLs in network service %s", self.id)
-            for vlr in self.vlrs:
+            self._log.debug("Terminating VLs in network service %s - %s", (self.id, self.name))
+            for vlr_id, vlr in self.vlrs.items():
                 yield from self.nsm_plugin.terminate_vl(vlr)
                 vlr.state = VlRecordState.TERMINATED
 
         # Move the state to VNF_TERMINATE_PHASE
-        self._log.debug("Terminating VNFFGs in NS ID: %s", self.id)
+        self._log.debug("Terminating VNFFGs in NS ID: %s, NS Name: %s", (self.id, self.name))
         self.set_state(NetworkServiceRecordState.VNFFG_TERMINATE_PHASE)
-        event_descr = "Terminating VNFFGS in NS Id:%s" % self.id
+        event_descr = "Terminating VNFFGS in NS Id: %s, NS Name: %s" % (self.id, self.name)
         self.record_event("terminating-vnffgss", event_descr)
         yield from terminate_vnffgrs()
 
         # Move the state to VNF_TERMINATE_PHASE
         self.set_state(NetworkServiceRecordState.VNF_TERMINATE_PHASE)
-        event_descr = "Terminating VNFS in NS Id:%s" % self.id
+        event_descr = "Terminating VNFS in NS Id: %s, NS Name: %s" % (self.id, self.name)
         self.record_event("terminating-vnfs", event_descr)
         yield from self.terminate_vnfrs(self.vnfrs.values())
 
         # Move the state to VL_TERMINATE_PHASE
         self.set_state(NetworkServiceRecordState.VL_TERMINATE_PHASE)
-        event_descr = "Terminating VLs in NS Id:%s" % self.id
+        event_descr = "Terminating VLs in NS Id: %s, NS Name: %s" % (self.id, self.name)
         self.record_event("terminating-vls", event_descr)
         yield from terminate_vlrs()
 
         yield from self.nsm_plugin.terminate_ns(self)
 
+        # Remove the generated SSH key
+        if self._ssh_key_file:
+            p = urlparse(self._ssh_key_file)
+            if p[0] == 'file':
+                path = os.path.dirname(p[2])
+                self._log.debug("NSR {}: Removing keys in {}".format(self.name,
+                                                                     path))
+                shutil.rmtree(path, ignore_errors=True)
+
         # Move the state to TERMINATED
         self.set_state(NetworkServiceRecordState.TERMINATED)
-        event_descr = "Terminated NS Id:%s" % self.id
+        event_descr = "Terminated NS Id: %s, NS Name: %s" % (self.id, self.name)
         self.record_event("terminated", event_descr)
 
 
@@ -2514,11 +2680,11 @@ class NetworkServiceRecord(object):
         yield from self.nsm.nsd_unref_by_nsr_id(self.id)
 
         # Unpublish the NSR record
-        self._log.debug("Unpublishing the network service %s", self.id)
+        self._log.debug("Unpublishing the network service %s - %s", (self.id, self.name))
         yield from self.unpublish()
 
         # Finaly delete the NS instance from this NS Manager
-        self._log.debug("Deleting the network service %s", self.id)
+        self._log.debug("Deleting the network service %s - %s", (self.id. self.name))
         self.nsm.delete_nsr(self.id)
 
     def enable(self):
@@ -2560,6 +2726,12 @@ class NetworkServiceRecord(object):
         nsr.config_status = self.map_config_status()
         nsr.config_status_details = self._config_status_details
         nsr.create_time = self._create_time
+        nsr.uptime = int(time.time()) - self._create_time
+
+        # Generated SSH key
+        if self._ssh_pub_key:
+            nsr.ssh_key_generated.private_key_file = self._ssh_key_file
+            nsr.ssh_key_generated.public_key = self._ssh_pub_key
 
         for cfg_prim in self.nsd_msg.service_primitive:
             cfg_prim = NsrYang.YangData_Nsr_NsInstanceOpdata_Nsr_ServicePrimitive.from_dict(
@@ -2577,7 +2749,7 @@ class NetworkServiceRecord(object):
             nsr.terminate_config_primitive.append(prim)
 
         if self.vl_phase_completed():
-            for vlr in self.vlrs:
+            for vlr_id, vlr in self.vlrs.items():
                 nsr.vlr.append(vlr.create_nsr_vlr_msg(self.vnfrs.values()))
 
         if self.vnf_phase_completed():
@@ -2603,7 +2775,7 @@ class NetworkServiceRecord(object):
         curr_state = self._op_status.state
 
         if curr_state == NetworkServiceRecordState.TERMINATED:
-            self._log.debug("NS (%s) in terminated state, not updating state", self.id)
+            self._log.debug("NS (%s - %s) in terminated state, not updating state", (self.id, self.name))
             return
 
         new_state = NetworkServiceRecordState.RUNNING
@@ -2616,7 +2788,7 @@ class NetworkServiceRecord(object):
                 pass
             elif vnfr.state == VnfRecordState.FAILED:
                 if vnfr._prev_state != vnfr.state:
-                    event_descr = "Instantiation of VNF %s failed" % vnfr.id
+                    event_descr = "Instantiation of VNF %s for NS: %s failed" % (vnfr.id, self.name)
                     event_error_details = vnfr.state_failed_reason
                     self.record_event("vnf-failed", event_descr, evt_details=event_error_details)
                     vnfr.set_state(VnfRecordState.FAILED)
@@ -2626,13 +2798,13 @@ class NetworkServiceRecord(object):
                 new_state = NetworkServiceRecordState.FAILED
                 break
             else:
-                self._log.info("VNF %s in NSR %s is still not active; current state is: %s",
-                               vnfr.id, self.id, vnfr.state)
+                self._log.info("VNF %s in NSR %s - %s is still not active; current state is: %s",
+                               (vnfr.id, self.id, self.name, vnfr.state))
                 new_state = curr_state
 
         # If new state is RUNNING; check all VLs
         if new_state == NetworkServiceRecordState.RUNNING:
-            for vl in self.vlrs:
+            for vlr_id, vl in self.vlrs.items():
 
                 if vl.state in [VlRecordState.ACTIVE, VlRecordState.TERMINATED]:
                     pass
@@ -2666,8 +2838,8 @@ class NetworkServiceRecord(object):
                     new_state = NetworkServiceRecordState.FAILED
                     break
                 else:
-                    self._log.info("VNFFGR %s in NSR %s is still not active; current state is: %s",
-                                    vnffgr.id, self.id, vnffgr.state)
+                    self._log.info("VNFFGR %s in NSR %s - %s is still not active; current state is: %s",
+                                    (vnffgr.id, self.id, self.name, vnffgr.state))
                     new_state = curr_state
 
         # Update all the scaling group instance operational status to
@@ -2683,8 +2855,8 @@ class NetworkServiceRecord(object):
                 break
 
         if new_state != curr_state:
-            self._log.debug("Changing state of Network service %s from %s to %s",
-                            self.id, curr_state, new_state)
+            self._log.debug("Changing state of Network service %s - %s from %s to %s",
+                            (self.id, self.name, curr_state, new_state))
             if new_state == NetworkServiceRecordState.RUNNING:
                 yield from self.is_active()
             elif new_state == NetworkServiceRecordState.FAILED:
@@ -2701,6 +2873,57 @@ class NetworkServiceRecord(object):
 
             yield from self.publish()
 
+    def vl_instantiation_state(self):
+        """ Check if all VLs in this NS are active """
+        for vl_id, vlr in self.vlrs.items():
+            if vlr.state == VlRecordState.ACTIVE:
+                continue
+            elif vlr.state == VlRecordState.FAILED:
+                return VlRecordState.FAILED
+            elif vlr.state == VlRecordState.TERMINATED:
+                return VlRecordState.TERMINATED
+            elif vlr.state == VlRecordState.INSTANTIATION_PENDING:
+                return VlRecordState.INSTANTIATION_PENDING
+            else:
+                self._log.debug("vlr %s still in state %s", vlr, vlr.state)
+                raise VlRecordError("Invalid state %s", vlr.state)
+        return VlRecordState.ACTIVE
+
+    def vl_instantiation_successful(self):
+        """ Mark that all VLs in this NS are active """
+        if self._vls_ready.is_set():
+            self._log.debug("NSR id %s, vls_ready is already set", self.id)
+
+        if self.vl_instantiation_state() == VlRecordState.ACTIVE:
+            self._log.debug("NSR id %s, All %d vlrs are in active state %s",
+                            self.id, len(self.vlrs), self.vl_instantiation_state)
+            self._vls_ready.set()
+
+    def vlr_event(self, vlr, action):
+
+        self._log.debug("Received VLR %s with action:%s", vlr, action)
+
+        if vlr.id not in self.vlrs:
+            self._log.error("VLR %s:%s  received  for unknown id, state:%s",
+            vlr.id, vlr.name, vlr.operational_status)
+            return
+
+        vlr_local = self.vlrs[vlr.id]
+
+        if action == rwdts.QueryAction.CREATE or action == rwdts.QueryAction.UPDATE:
+            if vlr.operational_status == 'running':
+                vlr_local.set_state_from_op_status(vlr.operational_status)
+                self._log.info("VLR %s:%s moving to active state",
+                               vlr.id,vlr.name)
+            elif vlr.operational_status == 'failed':
+                vlr_local.set_state_from_op_status(vlr.operational_status)
+                self._log.info("VLR %s:%s moving to failed state",
+                               vlr.id,vlr.name)
+            else:
+                self._log.warning("VLR %s:%s  received  state:%s",
+                                  vlr.id, vlr.name, vlr.operational_status)
+
+        self.vl_instantiation_successful()
 
 class InputParameterSubstitution(object):
     """
@@ -3305,6 +3528,7 @@ class NsrDtsHandler(object):
             self._log.debug("Got nsr apply (xact: %s) (action: %s)(scr: %s)",
                             xact, action, scratch)
 
+            @asyncio.coroutine
             def handle_create_nsr(msg, key_pairs=None, restart_mode=False):
                 # Handle create nsr requests """
                 # Do some validations
@@ -3315,7 +3539,10 @@ class NsrDtsHandler(object):
 
                 self._log.debug("Creating NetworkServiceRecord %s  from nsr config  %s",
                                msg.id, msg.as_dict())
-                nsr = self.nsm.create_nsr(msg, key_pairs=key_pairs, restart_mode=restart_mode)
+                nsr = self.nsm.create_nsr(msg,
+                                          xact,
+                                          key_pairs=key_pairs,
+                                          restart_mode=restart_mode)
                 return nsr
 
             def handle_delete_nsr(msg):
@@ -3331,7 +3558,7 @@ class NsrDtsHandler(object):
                 nsr = self._nsm.get_ns_by_nsr_id(msg.id)
 
                 nsr.set_state(NetworkServiceRecordState.TERMINATE_RCVD)
-                event_descr = "Terminate rcvd for NS Id:%s" % msg.id
+                event_descr = "Terminate rcvd for NS Id: %s, NS Name: %s" % (msg.id, msg.name)
                 nsr.record_event("terminate-rcvd", event_descr)
 
                 self._loop.create_task(delete_instantiation(msg.id))
@@ -3340,7 +3567,17 @@ class NsrDtsHandler(object):
             def begin_instantiation(nsr):
                 # Begin instantiation
                 self._log.info("Beginning NS instantiation: %s", nsr.id)
-                yield from self._nsm.instantiate_ns(nsr.id, xact)
+                try:
+                    yield from self._nsm.instantiate_ns(nsr.id, xact)
+                except Exception as e:
+                    self._log.exception(e)
+                    raise e
+
+            @asyncio.coroutine
+            def instantiate_ns(msg, key_pairs, restart_mode=False):
+                nsr = yield from handle_create_nsr(msg, key_pairs,
+                                                   restart_mode=restart_mode)
+                yield from begin_instantiation(nsr)
 
             self._log.debug("Got nsr apply (xact: %s) (action: %s)(scr: %s)",
                             xact, action, scratch)
@@ -3350,9 +3587,8 @@ class NsrDtsHandler(object):
                 for element in self._key_pair_regh.elements:
                     key_pairs.append(element)
                 for element in self._nsr_regh.elements:
-                    nsr = handle_create_nsr(element, key_pairs, restart_mode=True)
-                    self._loop.create_task(begin_instantiation(nsr))
-
+                    self._loop.create_task(instantiate_ns(element, key_pairs,
+                                                          restart_mode=True))
 
             (added_msgs, deleted_msgs, updated_msgs) = get_add_delete_update_cfgs(self._nsr_regh,
                                                                                   xact,
@@ -3365,8 +3601,7 @@ class NsrDtsHandler(object):
                 if msg.id not in self._nsm.nsrs:
                     self._log.info("Create NSR received in on_apply to instantiate NS:%s", msg.id)
                     key_pairs = get_nsr_key_pairs(self._key_pair_regh, xact)
-                    nsr = handle_create_nsr(msg,key_pairs)
-                    self._loop.create_task(begin_instantiation(nsr))
+                    self._loop.create_task(instantiate_ns(msg, key_pairs))
 
             for msg in deleted_msgs:
                 self._log.info("Delete NSR received in on_apply to terminate NS:%s", msg.id)
@@ -3419,7 +3654,7 @@ class NsrDtsHandler(object):
                 nsr = self._nsm.get_ns_by_nsr_id(msg.id)
 
                 nsr.set_state(NetworkServiceRecordState.TERMINATE_RCVD)
-                event_descr = "Terminate rcvd for NS Id:%s" % msg.id
+                event_descr = "Terminate rcvd for NS Id: %s, NS Name: %s" % (msg.id, msg.name)
                 nsr.record_event("terminate-rcvd", event_descr)
 
                 self._loop.create_task(delete_instantiation(msg.id))
@@ -3448,6 +3683,8 @@ class NsrDtsHandler(object):
                             raise NsrVlUpdateError("NS config NSD should have atleast 1 VLD defined")
 
                     if msg.has_field("scaling_group"):
+                        self._log.debug("ScaleMsg %s", msg)
+                        self._log.debug("NSSCALINGSTATE %s", nsr.state)
                         if nsr.state != NetworkServiceRecordState.RUNNING:
                             raise ScalingOperationError("Unable to perform scaling action when NS is not in running state")
 
@@ -3685,17 +3922,23 @@ class NsManager(object):
         self._cloud_account_handler = cloud_account_handler
 
         self._ro_plugin_selector = ro_plugin_selector
-        self._ncclient = rift.mano.ncclient.NcClient(
-              host="127.0.0.1",
-              port=2022,
-              username="admin",
-              password="admin",
-              loop=self._loop)
 
+        # Intialize the set of variables for implementing Scaling RPC using REST.
+        self._headers = {"content-type":"application/json", "accept":"application/json"}
+        #This will break when we have rbac in the rift code and admin user password is changed or admin it self is removed.
+        self._user = 'admin'
+        self._password = 'admin'
+        self._ip = 'localhost'
+        self._rport = 8008
+        self._conf_url = "https://{ip}:{port}/api/config". \
+                       format(ip=self._ip,
+                              port=self._rport)
+        
         self._nsrs = {}
         self._nsds = {}
         self._vnfds = {}
         self._vnfrs = {}
+        self._nsr_for_vlr = {}
 
         self.cfgmgr_obj = conman.ROConfigManager(log, loop, dts, self)
 
@@ -3823,66 +4066,82 @@ class NsManager(object):
             msg : RPC input
             action : Scaling Action
         """
-        ScalingGroupInstance = NsrYang.YangData_Nsr_NsInstanceConfig_Nsr_ScalingGroup_Instance
-        ScalingGroup = NsrYang.YangData_Nsr_NsInstanceConfig_Nsr_ScalingGroup
+        def get_scaling_group_information():
+            scaling_group_url = "{url}/ns-instance-config/nsr/{nsr_id}".format(url=self._conf_url, nsr_id=msg.nsr_id_ref)
+            output = requests.get(scaling_group_url, headers=self._headers, auth=(self._user, self._password), verify=False)
+            if output.text == None or len(output.text) == 0:
+                self.log.error("nsr id %s information not present", self._nsr_id)
+                return None
+            scaling_group_info = json.loads(output.text)
+            return scaling_group_info
+        
+        def config_scaling_group_information(scaling_group_info):
+            data_str = json.dumps(scaling_group_info)
+            self.log.debug("scaling group Info %s", data_str)
 
-        xpath = ('C,/nsr:ns-instance-config/nsr:nsr[nsr:id="{}"]').format(
-                          msg.nsr_id_ref)
-        instance = ScalingGroupInstance.from_dict({"id": msg.instance_id})
-
-        @asyncio.coroutine
-        def get_nsr_scaling_group():
-            results = yield from self._dts.query_read(xpath, rwdts.XactFlag.MERGE)
-
-            for result in results:
-                res = yield from result
-                nsr_config = res.result
-
-            for scaling_group in nsr_config.scaling_group:
-                if scaling_group.scaling_group_name_ref == msg.scaling_group_name_ref:
-                    break
-            else:
-                scaling_group = nsr_config.scaling_group.add()
-                scaling_group.scaling_group_name_ref = msg.scaling_group_name_ref
-
-            return (nsr_config, scaling_group)
-
-        @asyncio.coroutine
-        def update_config(nsr_config):
-            xml = self._ncclient.convert_to_xml(RwNsrYang, nsr_config)
-            xml = '<config xmlns:xc="urn:ietf:params:xml:ns:netconf:base:1.0">{}</config>'.format(xml)
-            yield from self._ncclient.connect()
-            yield from self._ncclient.manager.edit_config(target="running", config=xml, default_operation="replace")
-
-        @asyncio.coroutine
+            scale_out_url = "{url}/ns-instance-config/nsr/{nsr_id}".format(url=self._conf_url, nsr_id=msg.nsr_id_ref)
+            response = requests.put(scale_out_url, data=data_str, verify=False, auth=(self._user, self._password), headers=self._headers)
+            response.raise_for_status()
+            
         def scale_out():
-            nsr_config, scaling_group = yield from get_nsr_scaling_group()
-            scaling_group.instance.append(instance)
-            yield from update_config(nsr_config)
+            scaling_group_info = get_scaling_group_information()
+            if scaling_group_info is None:
+                return
+                    
+            scaling_group_present = False
+            if "scaling-group" in scaling_group_info["nsr:nsr"]:
+                scaling_group_array = scaling_group_info["nsr:nsr"]["scaling-group"]
+                for scaling_group in scaling_group_array:
+                    if scaling_group["scaling-group-name-ref"] == msg.scaling_group_name_ref:
+                        scaling_group_present = True
+                        if 'instance' not in scaling_group:
+                            scaling_group['instance'] = []
+                        for instance in scaling_group['instance']:
+                            if instance["id"] == int(msg.instance_id):
+                                self.log.error("scaling group with instance id %s exists for scale out", msg.instance_id)
+                                return 
+                        scaling_group["instance"].append({"id": int(msg.instance_id)})       
+            
+            if not scaling_group_present:
+                scaling_group_info["nsr:nsr"]["scaling-group"] = [{"scaling-group-name-ref": msg.scaling_group_name_ref, "instance": [{"id": msg.instance_id}]}]
+                
+            config_scaling_group_information(scaling_group_info)
+            return
 
-        @asyncio.coroutine
         def scale_in():
-            nsr_config, scaling_group = yield from get_nsr_scaling_group()
-            scaling_group.instance.remove(instance)
-            yield from update_config(nsr_config)
+            scaling_group_info = get_scaling_group_information()
+            if scaling_group_info is None:
+                return
+            
+            scaling_group_array = scaling_group_info["nsr:nsr"]["scaling-group"]
+            scaling_group_present = False
+            instance_id_present = False
+            for scaling_group in scaling_group_array:
+                if scaling_group["scaling-group-name-ref"] == msg.scaling_group_name_ref:
+                    scaling_group_present = True
+                    if 'instance' in scaling_group:
+                        instance_array = scaling_group["instance"];
+                        for index in range(len(instance_array)):       
+                            if instance_array[index]["id"] == int(msg.instance_id):
+                                instance_array.pop(index)
+                                instance_id_present = True
+                                break
+    
+            if not scaling_group_present:
+                self.log.error("Scaling group %s doesnot exists for scale in", msg.scaling_group_name_ref)
+                return
+            
+            if not instance_id_present:
+                self.log.error("Instance id %s doesnot exists for scale in", msg.instance_id)
+                return
+            
+            config_scaling_group_information(scaling_group_info)
+            return
 
         if action == ScalingRpcHandler.ACTION.SCALE_OUT:
-            self._loop.create_task(scale_out())
+            self._loop.run_in_executor(None, scale_out)
         else:
-            self._loop.create_task(scale_in())
-
-        # Opdata based calls, disabled for now!
-        # if action == ScalingRpcHandler.ACTION.SCALE_OUT:
-        #     self.scale_nsr_out(
-        #           msg.nsr_id_ref,
-        #           msg.scaling_group_name_ref,
-        #           msg.instance_id,
-        #           xact)
-        # else:
-        #     self.scale_nsr_in(
-        #           msg.nsr_id_ref,
-        #           msg.scaling_group_name_ref,
-        #           msg.instance_id)
+            self._loop.run_in_executor(None, scale_in)
 
     def nsr_update_cfg(self, nsr_id, msg):
         nsr = self._nsrs[nsr_id]
@@ -3906,8 +4165,9 @@ class NsManager(object):
         # Not calling in a separate task as this is called from a separate task
         yield from nsr.delete_vl_instance(vld)
 
-    def create_nsr(self, nsr_msg, key_pairs=None,restart_mode=False):
+    def create_nsr(self, nsr_msg, config_xact, key_pairs=None,restart_mode=False):
         """ Create an NSR instance """
+        self._log.debug("NSRMSG %s", nsr_msg)
         if nsr_msg.id in self._nsrs:
             msg = "NSR id %s already exists" % nsr_msg.id
             self._log.error(msg)
@@ -3928,10 +4188,25 @@ class NsManager(object):
                                    nsr_msg,
                                    sdn_account_name,
                                    key_pairs,
-                                   restart_mode=restart_mode
+                                   restart_mode=restart_mode,
+                                   vlr_handler=self._ro_plugin_selector._records_publisher._vlr_pub_hdlr
                                    )
         self._nsrs[nsr_msg.id] = nsr
-        nsm_plugin.create_nsr(nsr_msg, nsr_msg.nsd, key_pairs)
+
+        try:
+            # Generate ssh key pair if required
+            yield from nsr.generate_ssh_key_pair(config_xact)
+        except Exception as e:
+            self._log.exception("SSH key: {}".format(e))
+
+        self._log.debug("NSR {}: SSh key generated: {}".format(nsr_msg.name,
+                                                               nsr.public_key))
+
+        ssh_key = {'private_key': nsr.private_key,
+                   'public_key': nsr.public_key
+        }
+
+        nsm_plugin.create_nsr(nsr_msg, nsr_msg.nsd, key_pairs, ssh_key=ssh_key)
 
         return nsr
 
@@ -3951,7 +4226,11 @@ class NsManager(object):
             raise NetworkServiceRecordError(err)
 
         nsr = self._nsrs[nsr_id]
-        yield from nsr.nsm_plugin.instantiate_ns(nsr, config_xact)
+        try:
+            yield from nsr.nsm_plugin.instantiate_ns(nsr, config_xact)
+        except Exception as e:
+            self._log.exception("NS instantiate: {}".format(e))
+            raise e
 
     @asyncio.coroutine
     def update_vnfr(self, vnfr):
@@ -3962,7 +4241,8 @@ class NsManager(object):
 
         yield from self._vnfrs[vnfr.id].update_state(vnfr)
         nsr = self.find_nsr_for_vnfr(vnfr.id)
-        yield from nsr.update_state()
+        if nsr is not None:
+            yield from nsr.update_state()
 
     def find_nsr_for_vnfr(self, vnfr_id):
         """ Find the NSR which )has the passed vnfr id"""
@@ -4193,7 +4473,37 @@ class NsManager(object):
 
         # Terminate the instances/networks assocaited with this nw service
         self._log.debug("Terminating the network service %s", nsr_id)
-        yield from self._nsrs[nsr_id].terminate()
+        try :
+            yield from self._nsrs[nsr_id].terminate()
+        except Exception as e:
+            self.log.exception("Failed to terminate NSR[id=%s]", nsr_id)
+
+    def vlr_event(self, vlr, action):
+        self._log.debug("Received VLR %s with action:%s", vlr, action)
+
+        # Find the NS and see if we can proceed
+        nsr = self.find_nsr_for_vlr_id(vlr.id)
+        if nsr is None:
+            self._log.error("VLR %s:%s  received  for NSR, state:%s",
+            vlr.id, vlr.name, vlr.operational_status)
+            return
+        nsr.vlr_event(vlr, action)
+
+    def add_vlr_id_nsr_map(self, vlr_id, nsr):
+        """ Add a mapping for vlr_id into NSR """
+        self._nsr_for_vlr[vlr_id] = nsr
+
+    def remove_vlr_id_nsr_map(self, vlr_id):
+        """ Remove a mapping for vlr_id into NSR """
+        if vlr_id in self._nsr_for_vlr:
+            del self._nsr_for_vlr[vlr_id]
+
+    def find_nsr_for_vlr_id(self, vlr_id):
+        """ Find NSR for VLR id """
+        nsr = None
+        if vlr_id in self._nsr_for_vlr:
+            nsr = self._nsr_for_vlr[vlr_id]
+        return nsr
 
 
 class NsmRecordsPublisherProxy(object):
@@ -4268,9 +4578,6 @@ class ScalingRpcHandler(mano_dts.DtsHandler):
             assert action == rwdts.QueryAction.RPC
 
             try:
-                if self.callback:
-                    self.callback(xact_info.xact, msg, self.ACTION.SCALE_IN)
-
                 rpc_op = NsrYang.YangOutput_Nsr_ExecScaleIn.from_dict({
                       "instance_id": msg.instance_id})
 
@@ -4279,6 +4586,8 @@ class ScalingRpcHandler(mano_dts.DtsHandler):
                     self.__class__.SCALE_IN_OUTPUT_XPATH,
                     rpc_op)
 
+                if self.callback:
+                    self.callback(xact_info.xact, msg, self.ACTION.SCALE_IN)
             except Exception as e:
                 self.log.exception(e)
                 xact_info.respond_xpath(
@@ -4296,9 +4605,6 @@ class ScalingRpcHandler(mano_dts.DtsHandler):
                     msg.instance_id  = last_instance_id + 1
                     self.last_instance_id[scale_group] += 1
 
-                if self.callback:
-                    self.callback(xact_info.xact, msg, self.ACTION.SCALE_OUT)
-
                 rpc_op = NsrYang.YangOutput_Nsr_ExecScaleOut.from_dict({
                       "instance_id": msg.instance_id})
 
@@ -4307,6 +4613,8 @@ class ScalingRpcHandler(mano_dts.DtsHandler):
                     self.__class__.SCALE_OUT_OUTPUT_XPATH,
                     rpc_op)
 
+                if self.callback:
+                    self.callback(xact_info.xact, msg, self.ACTION.SCALE_OUT)
             except Exception as e:
                 self.log.exception(e)
                 xact_info.respond_xpath(
@@ -4376,6 +4684,11 @@ class NsmTasklet(rift.tasklets.Tasklet):
         """ Task instance started callback """
         self.log.debug("Got instance started callback")
 
+    def vlr_event(self, vlr, action):
+        """ VLR Event callback """
+        self.log.debug("VLR Event received for VLR %s with action %s", vlr, action)
+        self._nsm.vlr_event(vlr, action)
+
     @asyncio.coroutine
     def init(self):
         """ Task init callback """
@@ -4391,6 +4704,13 @@ class NsmTasklet(rift.tasklets.Tasklet):
 
         self._vlr_pub_handler = publisher.VlrPublisherDtsHandler(self._dts, self.log, self.loop)
         yield from self._vlr_pub_handler.register()
+
+        self._vlr_sub_handler = subscriber.VlrSubscriberDtsHandler(self.log,
+                                                                   self._dts,
+                                                                   self.loop,
+                                                                   self.vlr_event,
+        )
+        yield from self._vlr_sub_handler.register()
 
         manifest = self.tasklet_info.get_pb_manifest()
         use_ssl = manifest.bootstrap_phase.rwsecurity.use_ssl
@@ -4425,7 +4745,7 @@ class NsmTasklet(rift.tasklets.Tasklet):
 
         yield from self._cloud_account_handler.register()
 
-        self._vnffgmgr = rwvnffgmgr.VnffgMgr(self._dts, self.log, self.log_hdl, self.loop)
+        self._vnffgmgr = rwvnffgmgr.VnffgMgr(self._dts, self.log, self.log_hdl, self.loop,self._cloud_account_handler)
         yield from self._vnffgmgr.register()
 
         self._nsm = NsManager(

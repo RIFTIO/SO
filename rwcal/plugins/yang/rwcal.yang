@@ -43,6 +43,10 @@ module rwcal
     prefix "manotypes";
   }
 
+  import ietf-inet-types {
+    prefix "inet";
+  }
+
   revision 2014-12-30 {
     description
         "Initial revision.";
@@ -100,62 +104,6 @@ module rwcal
   }
 
   uses connection-status;
-
-  typedef sdn-account-type {
-    description "SDN account type";
-    type enumeration {
-      enum odl;
-      enum mock;
-      enum sdnsim;
-    }
-  }
-
-  grouping sdn-provider-auth {
-    leaf account-type {
-      type sdn-account-type;
-    }
-
-    choice provider-specific-info {
-      container odl {
-        leaf username {
-          type string {
-            length "1..255";
-          }
-        }
-
-        leaf password {
-          type string {
-            length "1..32";
-          }
-        }
-
-        leaf url {
-          type string {
-            length "1..255";
-          }
-        }
-      }
-      container mock {
-        leaf username {
-          type string;
-        }
-        leaf plugin-name {
-          type string;
-          default "rwsdn_mock";
-        }
-      }
-
-      container sdnsim {
-        leaf username {
-          type string;
-        }
-        leaf plugin-name {
-          type string;
-          default "rwsdn_sim";
-        }
-      }
-    }
-  }
 
   grouping provider-auth {
     leaf account-type {
@@ -232,11 +180,27 @@ module rwcal
           mandatory true;
         }
 
+        leaf user-domain {
+          type string;
+          default "Default";
+          description "Domain of the OpenStack user";
+        }
+        leaf project-domain {
+          type string;
+          default "Default";
+          description "Domain of the OpenStack project";
+        }
+
         leaf tenant {
           type string;
           mandatory true;
         }
 
+        leaf region {
+          type string;
+          default "RegionOne";
+        }
+        
         leaf admin {
           type boolean;
           default false;
@@ -614,13 +578,13 @@ module rwcal
 
     leaf disk_format {
       description "Format of the Disk";
-      type disk-format;
+      type string;
       default "qcow2";
     }
 
     leaf container_format {
       description "Format of the container";
-      type container-format;
+      type string;
       default "bare";
     }
 
@@ -880,7 +844,30 @@ module rwcal
       uses manotypes:placement-group-input;
     }
   }
+  
+  grouping virtual-cp-info-params {
+    
+    leaf connection-point-id {
+      description "Connection point id";
+      type string;
+    }
 
+    leaf name {
+      description "Name of virtual connection point";
+      type string;
+    }
+
+    leaf ip-address {
+      description "IP address of the virtual connection point";
+      type inet:ip-address;
+    }
+
+    leaf mac-address {
+        description "MAC address of the virtual connection point";
+        type string;
+    }
+  }
+  
   grouping virtual-link-create-params {
     leaf name {
       description "Name of the Virtual-Link";
@@ -905,6 +892,30 @@ module rwcal
       type string;
     }
 
+    list virtual-cps {
+      key "name";
+
+      leaf name {
+        description "Name of virtual connection point";
+        type string;
+      }
+      
+      leaf security-group {
+        description "Name of the security group";
+        type string;
+      }
+      
+      leaf port-security-enabled {
+        description "Enables the port security";
+        type boolean;
+      }
+
+      leaf static-ip-address {
+        description "Static IP address for the connection point";
+        type inet:ip-address;
+      }
+    }
+    
     uses manotypes:provider-network;
     uses manotypes:ip-profile-info;
   }
@@ -1027,8 +1038,30 @@ module rwcal
         description "Name of the security group";
         type string;
       }
+      
+      leaf port-security-enabled {
+        description "Enables the port security";
+        type boolean;
+      }
 
+      leaf static-ip-address {
+        description "Static IP address for the connection point";
+        type inet:ip-address;
+      }
+
+      list virtual_cps {
+        key "name";
+        uses virtual-cp-info-params;
+      }
+      
       uses connection-point-type;
+    }
+
+    leaf mgmt-network {
+      description 
+          "Explicit mgmt-network name, otherwise the mgmt-network from
+           Cloud account is used";
+      type string;
     }
 
     leaf allocate-public-address {
@@ -1047,6 +1080,8 @@ module rwcal
         type string;
       }
     }
+ 
+    uses manotypes:supplemental-boot-data;
 
     list volumes {
       key "name";
@@ -1096,6 +1131,15 @@ module rwcal
       leaf associate-public-ip {
         type boolean;
         default false;
+      }
+      leaf port-security-enabled {
+        description "Enables the port security";
+        type boolean;
+      }
+
+      leaf static-ip-address {
+        description "Static IP address for the connection point";
+        type inet:ip-address;
       }
 
       uses connection-point-type;
@@ -1150,13 +1194,31 @@ module rwcal
     leaf ip-address {
       rwpb:field-inline "true";
       rwpb:field-string-max 64;
-      type string;
+      type inet:ip-address;
     }
 
     leaf public-ip {
       rwpb:field-inline "true";
       rwpb:field-string-max 64;
       type string;
+    }
+
+    leaf mac-addr {
+      rwpb:field-inline "true";
+      rwpb:field-string-max 48;
+      type string;
+    }
+
+    list virtual-cp-info {
+      key "ip-address";
+      
+      leaf ip-address {
+        type inet:ip-address;
+      }
+
+      leaf mac-address {
+        type string;
+      }
     }
   }
 
@@ -1191,6 +1253,11 @@ module rwcal
       uses connection-point-info-params;
     }
 
+    list virtual-connection-points {
+      key connection-point-id;
+      uses virtual-cp-info-params;
+    }
+    
     leaf subnet {
       rwpb:field-inline "true";
       rwpb:field-string-max 64;
@@ -1274,6 +1341,8 @@ module rwcal
       description "Console URL from the VIM, if available";
     }
 
+    uses manotypes:supplemental-boot-data;
+
     list volumes {
       key "name";
 
@@ -1288,7 +1357,7 @@ module rwcal
         rwpb:field-string-max 64;
         type string;
       }
-
+      uses manotypes:custom-meta-data;
     } 
   }
 

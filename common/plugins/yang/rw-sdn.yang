@@ -25,28 +25,29 @@ module rw-sdn
 
 
   import rw-pb-ext {
-    prefix "rw-pb-ext";
+    prefix "rwpb";
   }
 
-  import rwsdn {
-    prefix "rwsdn";
+  import rwsdnal {
+    prefix "rwsdnal";
   }
 
   revision 2015-09-14 {
     description
       "Initial revision.";
   }
-  container sdn {
-    list account {
-    rw-pb-ext:msg-new SDNAccountConfig;
 
+  container sdn {
+    rwpb:msg-new SDNAccountConfig;
+    list account {
+      rwpb:msg-new SDNAccount;
       key "name";
       leaf name {
         type string;
       }
 
-      uses rwsdn:sdn-provider-auth;
-      uses rwsdn:connection-status;
+      uses rwsdnal:sdn-provider-auth;
+      uses rwsdnal:connection-status;
     }
   }
 
@@ -59,6 +60,19 @@ module rw-sdn
           "The sdn account name to update connection status for";
         type string;
       }
+    }
+  }
+
+  notification sdn-notif {
+    description "Notification for SDN account credentials";
+    leaf name {
+      description "SDN account name";
+      type string;
+    }
+
+    leaf message {
+      description "Notification message";
+      type string;
     }
   }
 }

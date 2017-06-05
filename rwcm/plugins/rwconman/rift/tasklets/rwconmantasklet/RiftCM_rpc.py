@@ -1,5 +1,5 @@
 
-# 
+#
 #   Copyright 2016 RIFT.IO Inc
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -105,7 +105,7 @@ class RiftCMRPCHandler(object):
         if vnf:
             self._log.debug("nsr/vnf {}/{}, vnf_configuration: %s",
                             vnf.vnf_configuration)
-            for primitive in vnf.vnf_configuration.service_primitive:
+            for primitive in vnf.vnf_configuration.config_primitive:
                 if primitive.name == primitive_name:
                     return primitive
 
@@ -158,18 +158,23 @@ class RiftCMRPCHandler(object):
                 vnfr_data_dict['connection_point'] = []
                 if 'connection_point' in vnfr.vnfr:
                     for cp in vnfr.vnfr['connection_point']:
-                        cp_dict = dict()
-                        cp_dict['name'] = cp['name']
-                        cp_dict['ip_address'] = cp['ip_address']
+                        cp_dict = dict(name = cp['name'],
+                                       ip_address = cp['ip_address'],
+                                       connection_point_id = cp['connection_point_id'])
+                        if 'virtual_cps' in cp:
+                            cp_info['virtual_cps'] = [ {k:v for k,v in vcp.items()
+                                                        if k in ['ip_address', 'mac_address']}
+                                                       for vcp in cp['virtual_cps'] ]
+
                         vnfr_data_dict['connection_point'].append(cp_dict)
 
                 try:
                     vnfr_data_dict['vdur'] = []
-                    vdu_data = [(vdu['name'], vdu['management_ip'], vdu['vm_management_ip'], vdu['id'])
+                    vdu_data = [(vdu['name'], vdu['management_ip'], vdu['vm_management_ip'], vdu['id'], vdu['vdu_id_ref'])
                                 for vdu in vnfr.vnfr['vdur']]
 
                     for data in vdu_data:
-                        data = dict(zip(['name', 'management_ip', 'vm_management_ip', 'id'] , data))
+                        data = dict(zip(['name', 'management_ip', 'vm_management_ip', 'id', 'vdu_id_ref'] , data))
                         vnfr_data_dict['vdur'].append(data)
 
                     vnfr_data_map[vnfr.member_vnf_index] = vnfr_data_dict

@@ -1,5 +1,19 @@
 # Creation Date: 2016/1/12
-# RIFT_IO_STANDARD_CMAKE_COPYRIGHT_HEADER(END)
+# 
+#   Copyright 2016 RIFT.IO Inc
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
 
 cmake_minimum_required(VERSION 2.8)
 
@@ -24,6 +38,16 @@ rift_python_install_tree(
 
 rift_python_install_tree(
   FILES
+    rift/mano/sdn/__init__.py
+    rift/mano/sdn/accounts.py
+    rift/mano/sdn/config.py
+    rift/mano/sdn/operdata.py
+  COMPONENT ${PKG_LONG_NAME}
+  PYTHON3_ONLY
+  )
+
+rift_python_install_tree(
+  FILES
     rift/mano/config_agent/operdata.py
     rift/mano/config_agent/__init__.py
     rift/mano/config_agent/config.py
@@ -32,6 +56,7 @@ rift_python_install_tree(
   )
 
 
+# Subscribers
 rift_python_install_tree(
   FILES
     rift/mano/dts/__init__.py
@@ -46,23 +71,29 @@ rift_python_install_tree(
   PYTHON3_ONLY
   )
 
+# RPCs
 rift_python_install_tree(
   FILES
-    rift/mano/config_data/__init__.py
-    rift/mano/config_data/config.py
+    rift/mano/dts/rpc/__init__.py
+    rift/mano/dts/rpc/core.py
+  COMPONENT ${PKG_LONG_NAME}
+  PYTHON3_ONLY
+  )
+
+# Downloaders
+rift_python_install_tree(
+  FILES
+    rift/downloader/__init__.py
+    rift/downloader/base.py
+    rift/downloader/url.py
   COMPONENT ${PKG_LONG_NAME}
   PYTHON3_ONLY
   )
 
 rift_python_install_tree(
   FILES
-    rift/mano/dts/__init__.py
-    rift/mano/dts/core.py
-    rift/mano/dts/subscriber/__init__.py
-    rift/mano/dts/subscriber/core.py
-    rift/mano/dts/subscriber/store.py
-    rift/mano/dts/subscriber/ns_subscriber.py
-    rift/mano/dts/subscriber/vnf_subscriber.py
+    rift/mano/config_data/__init__.py
+    rift/mano/config_data/config.py
   COMPONENT ${PKG_LONG_NAME}
   PYTHON3_ONLY
   )
@@ -91,6 +122,11 @@ rift_python_install_tree(
     rift/mano/tosca_translator/rwmano/tosca/tosca_compute.py
     rift/mano/tosca_translator/rwmano/tosca/tosca_scaling_group.py
     rift/mano/tosca_translator/rwmano/tosca/tosca_initial_config.py
+    rift/mano/tosca_translator/rwmano/tosca/tosca_placement_group.py
+    rift/mano/tosca_translator/rwmano/tosca/tosca_vnf_configuration.py
+    rift/mano/tosca_translator/rwmano/tosca/tosca_vnf_ns_service_primitive.py
+    rift/mano/tosca_translator/rwmano/tosca/tosca_forwarding_graph.py
+    rift/mano/tosca_translator/rwmano/tosca/tosca_forwarding_path.py
     rift/mano/tosca_translator/common/__init__.py
     rift/mano/tosca_translator/common/utils.py
     rift/mano/tosca_translator/common/exception.py
@@ -108,6 +144,8 @@ rift_python_install_tree(
     rift/mano/utils/__init.py__
     rift/mano/utils/compare_desc.py
     rift/mano/utils/juju_api.py
+    rift/mano/utils/ssh_keys.py
+    rift/mano/utils/short_name.py
   COMPONENT ${PKG_LONG_NAME}
   PYTHON3_ONLY
   )
@@ -144,6 +182,20 @@ rift_python_install_tree(
 set(TRANSLATOR_SCRIPTS
   ${CMAKE_CURRENT_SOURCE_DIR}/rift/mano/tosca_translator/tosca-translator
   ${CMAKE_CURRENT_SOURCE_DIR}/rift/mano/yang_translator/yang-translator)
+
+install(
+  FILES rift/mano/yang_translator/riftiotypes.yaml
+    DESTINATION
+      usr/rift/mano/common
+    COMPONENT ${PKG_LONG_NAME}
+    )
+
+install(
+  FILES rift/mano/tosca_translator/dummy_vnf_node.yaml
+    DESTINATION
+      usr/rift/mano/common
+    COMPONENT ${PKG_LONG_NAME}
+    )
 
 install(
   FILES ${TRANSLATOR_SCRIPTS}

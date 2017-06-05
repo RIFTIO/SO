@@ -82,3 +82,27 @@ class PackageScriptExtractor(object):
                 pkg.extract_file(script_file, dest_path)
             except package.ExtractError as e:
                 raise ScriptExtractionError("Failed to extract script %s" % script_name) from e
+ 
+    def read_script(self, pkg, filename):
+        script_files = PackageScriptExtractor.package_script_files(pkg)
+
+        for script_name, script_file in script_files.items():
+            if script_name == filename:
+                self._log.debug("Found %s script file in package at %s", filename, script_file)
+
+                try:
+                    with pkg.open(script_file) as f:
+                        userdata = f.read()
+                        self._log.info("Custom script read from file %s", userdata)
+                        # File contents are read in binary string, decode to regular string and return
+                        return userdata.decode()
+                except package.ExtractError as e:
+                    raise ScriptExtractionError("Failed to extract script %s" % script_name) from e
+
+        # If we've reached this point but not found a matching script, 
+        # raise an Exception, since we got here only because there was supposed 
+        # to be a script in the VDU
+        errmsg = "No script file found in the descriptor package"
+        self._log.error(errmsg)
+        raise ScriptExtractionError(errmsg) 
+  

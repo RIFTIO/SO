@@ -63,7 +63,7 @@ module pnfd
       }
 
       leaf short-name {
-        description "PNFD short name.";
+        description "Short name to appear as label in the UI";
         type string;
       }
 

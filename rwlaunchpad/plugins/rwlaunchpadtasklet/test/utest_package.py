@@ -382,12 +382,14 @@ class TestPackageValidator(PackageTestCase):
 
         # For now, a missing checksum file will be supported.
         # No files will be validated.
-        validated_files = self._validator.validate(package)
+        self._validator.validate(package)
+        validated_files = self._validator.checksums
         self.assertEquals(validated_files, {})
 
     def test_package_with_checksum(self):
         package = self.create_nsd_package_with_checksum()
-        validated_files = self._validator.validate(package)
+        self._validator.validate(package)
+        validated_files = self._validator.checksums
         self.assertEquals(list(validated_files.keys()), [nsd_filename])
 
 

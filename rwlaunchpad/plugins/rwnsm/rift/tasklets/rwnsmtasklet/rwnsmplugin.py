@@ -1,4 +1,4 @@
-# 
+#
 #   Copyright 2016 RIFT.IO Inc
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -48,7 +48,12 @@ class NsmPluginBase(object):
     def nsm(self):
         return self._nsm
 
-    def create_nsr(self, nsr):
+    @abc.abstractmethod
+    def set_state(self, nsr_id, state):
+        pass
+
+    @abc.abstractmethod
+    def create_nsr(self, nsr, nsd, key_pairs=None, ssh_key=None):
         """ Create an NSR """
         pass
 
@@ -65,7 +70,7 @@ class NsmPluginBase(object):
 
     @abc.abstractmethod
     @asyncio.coroutine
-    def instantiate_vnf(self, nsr, vnfr):
+    def instantiate_vnf(self, nsr, vnfr, scaleout=False):
         """ Instantiate the virtual network function """
         pass
 
@@ -73,6 +78,12 @@ class NsmPluginBase(object):
     @asyncio.coroutine
     def instantiate_vl(self, nsr, vl):
         """ Instantiate the virtual link"""
+        pass
+
+    @abc.abstractmethod
+    @asyncio.coroutine
+    def update_vnfr(self, vnfr):
+        """ Update the virtual network function record """
         pass
 
     @abc.abstractmethod

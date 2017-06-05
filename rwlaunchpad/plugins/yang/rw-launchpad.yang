@@ -1,6 +1,6 @@
 
 /*
- * 
+ *
  *   Copyright 2016 RIFT.IO Inc
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
@@ -91,6 +91,15 @@ module rw-launchpad
 
   import rw-image-mgmt {
     prefix "rw-image-mgmt";
+  }
+  
+  import rw-pkg-mgmt {
+    prefix "rw-pkg-mgmt";
+  }
+  
+
+  import mano-types {
+    prefix "manotypes";
   }
 
   revision 2015-09-14 {

@@ -282,6 +282,32 @@ class AutoscalerTasklet(rift.vcs.core.Tasklet):
     plugin_directory = ClassProperty('./usr/lib/rift/plugins/rwautoscaler')
     plugin_name = ClassProperty('rwautoscaler')
 
+class StagingManagerTasklet(rift.vcs.core.Tasklet):
+    """
+    A class that provide a simple staging area for all tasklets
+    """
+
+    def __init__(self, name='StagingManager', uid=None,
+                 config_ready=True,
+                 recovery_action=core.RecoveryType.FAILCRITICAL.value,
+                 data_storetype=core.DataStore.NOSTORE.value,
+                 ):
+        """
+        Creates a StagingMangerTasklet object.
+
+        Arguments:
+            name  - the name of the tasklet
+            uid   - a unique identifier
+
+        """
+        super(StagingManagerTasklet, self).__init__(name=name, uid=uid,
+                                             config_ready=config_ready,
+                                             recovery_action=recovery_action,
+                                             data_storetype=data_storetype,
+                                            )
+
+    plugin_directory = ClassProperty('./usr/lib/rift/plugins/rwstagingmgr')
+    plugin_name = ClassProperty('rwstagingmgr')
 
 def get_ui_ssl_args():
     """Returns the SSL parameter string for launchpad UI processes"""
@@ -343,6 +369,32 @@ class ConfigManagerTasklet(rift.vcs.core.Tasklet):
     plugin_directory = ClassProperty('./usr/lib/rift/plugins/rwconmantasklet')
     plugin_name = ClassProperty('rwconmantasklet')
 
+class PackageManagerTasklet(rift.vcs.core.Tasklet):
+    """
+    This class represents a Resource Manager tasklet.
+    """
+
+    def __init__(self, name='Package-Manager', uid=None,
+                 config_ready=True,
+                 recovery_action=core.RecoveryType.FAILCRITICAL.value,
+                 data_storetype=core.DataStore.NOSTORE.value,
+                 ):
+        """
+        Creates a PackageManager object.
+
+        Arguments:
+            name  - the name of the tasklet
+            uid   - a unique identifier
+        """
+        super(PackageManagerTasklet, self).__init__(name=name, uid=uid,
+                                                   config_ready=config_ready,
+                                                   recovery_action=recovery_action,
+                                                   data_storetype=data_storetype,
+                                                  )
+
+    plugin_directory = ClassProperty('./usr/lib/rift/plugins/rwpkgmgr')
+    plugin_name = ClassProperty('rwpkgmgr')
+
 class GlanceServer(rift.vcs.NativeProcess):
     def __init__(self, name="glance-image-catalog",
                  config_ready=True,
@@ -393,12 +445,14 @@ class Demo(rift.vcs.demo.Demo):
         restart_procs = [
               VnfmTasklet(recovery_action=core.RecoveryType.RESTART.value, data_storetype=datastore),
               VnsTasklet(recovery_action=core.RecoveryType.RESTART.value, data_storetype=datastore),
-              MonitorTasklet(recovery_action=core.RecoveryType.RESTART.value, data_storetype=datastore),
+              # MonitorTasklet(recovery_action=core.RecoveryType.RESTART.value, data_storetype=datastore),
               MonitoringParameterTasklet(recovery_action=core.RecoveryType.RESTART.value, data_storetype=datastore),
               NsmTasklet(recovery_action=core.RecoveryType.RESTART.value, data_storetype=datastore),
               ResMgrTasklet(recovery_action=core.RecoveryType.RESTART.value, data_storetype=datastore),
               ImageMgrTasklet(recovery_action=core.RecoveryType.RESTART.value, data_storetype=datastore),
               AutoscalerTasklet(recovery_action=core.RecoveryType.RESTART.value, data_storetype=datastore),
+              PackageManagerTasklet(recovery_action=core.RecoveryType.RESTART.value, data_storetype=datastore),
+              StagingManagerTasklet(recovery_action=core.RecoveryType.RESTART.value, data_storetype=datastore),
             ]
 
         if not mgmt_ip_list or len(mgmt_ip_list) == 0:
@@ -481,8 +535,9 @@ def main(argv=sys.argv[1:]):
     os.environ["NO_KERNEL_MODS"] = "1"
 
     cleanup_dir_name = None
-    if os.environ["INSTALLDIR"] in ["/", "/home/rift", "/home/rift/.install",
-        "/usr/rift/build/fc20_debug/install/usr/rift", "/usr/rift"]:
+    if os.environ["INSTALLDIR"] in ["/usr/rift",
+        "/usr/rift/build/ub16_debug/install/usr/rift",
+        "/usr/rift/build/fc20_debug/install/usr/rift"]:
         cleanup_dir_name = os.environ["INSTALLDIR"] + "/var/rift/"
     
     if args.test_name and not cleanup_dir_name:
@@ -528,9 +583,17 @@ def main(argv=sys.argv[1:]):
               northbound_listing="cli_launchpad_schema_listing.txt",
               netconf_trace_override=True)
 
-    confd_ip = socket.gethostbyname(socket.gethostname())
+    # Search for externally accessible IP address with netifaces
+    gateways = netifaces.gateways()
+    # Check for default route facing interface and then get its ip address
+    if 'default' in gateways:
+        interface = gateways['default'][netifaces.AF_INET][1]
+        confd_ip = netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['addr']
+    else:
+        # no default gateway.  Revert to 127.0.0.1
+        confd_ip = "127.0.0.1"
     # TODO: This need to be changed when launchpad starts running on multiple VMs
-    rift.vcs.logger.configure_sink(config_file=None, confd_ip="127.0.0.1")
+    rift.vcs.logger.configure_sink(config_file=None, confd_ip=confd_ip)
 
     # Start the prepared system
     system.start()

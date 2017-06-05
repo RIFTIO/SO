@@ -113,7 +113,7 @@ class ResourceManager(object):
 
     @asyncio.coroutine
     def reallocate_virtual_network(self, event_id, cloud_account_name, request, resource):
-        self._log.info("Received network resource allocation request with event-id: %s", event_id)
+        self._log.info("Received network resource reallocation request with event-id: %s", event_id)
         resource = yield from self.core.reallocate_virtual_resource(event_id, cloud_account_name, request, 'network', resource)
         return resource
 
@@ -140,7 +140,7 @@ class ResourceManager(object):
 
     @asyncio.coroutine
     def reallocate_virtual_compute(self, event_id, cloud_account_name, request, resource):
-        self._log.info("Received compute resource allocation request "
+        self._log.info("Received compute resource reallocation request "
                        "(cloud account: %s) with event-id: %s",
                        cloud_account_name, event_id)
         resource = yield from self.core.reallocate_virtual_resource(

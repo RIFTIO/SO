@@ -48,8 +48,8 @@ module rw-vns
     prefix "rwcal";
   }
 
-  import rwsdn {
-    prefix "rwsdn";
+  import rwsdnal {
+    prefix "rwsdnal";
   }
 
 

@@ -22,10 +22,10 @@ import unittest
 import rw_peas
 import rwlogger
 
-from gi.repository import RwsdnYang
+from gi.repository import RwsdnalYang
 import gi
 gi.require_version('RwTypes', '1.0')
-gi.require_version('RwSdn', '1.0')
+gi.require_version('RwSdnal', '1.0')
 from gi.repository import RwcalYang
 from gi.repository import IetfNetworkYang
 from gi.repository.RwTypes import RwStatus
@@ -35,9 +35,9 @@ logger = logging.getLogger('mock')
 
 def get_sdn_account():
     """
-    Creates an object for class RwsdnYang.SdnAccount()
+    Creates an object for class RwsdnalYang.SdnAccount()
     """
-    account                 = RwsdnYang.SDNAccount()
+    account                 = RwsdnalYang.SDNAccount()
     account.account_type    = "mock"
     account.mock.username   = "rift"
     account.mock.plugin_name = "rwsdn_mock"

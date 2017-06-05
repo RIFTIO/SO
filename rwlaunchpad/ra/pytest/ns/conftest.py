@@ -22,6 +22,7 @@ import os
 import tempfile
 import shutil
 import subprocess
+from random import randint
 
 import gi
 import rift.auto.session
@@ -35,6 +36,26 @@ class PackageError(Exception):
 def cloud_account_name(request):
     '''fixture which returns the name used to identify the cloud account'''
     return 'cloud-0'
+
+@pytest.fixture(scope='session', autouse=True)
+def multidisk_testdata(request, descriptor_images, path_ping_image, path_pong_image):
+    """fixture which returns test data related to multidisk test"""
+
+    if not request.config.option.multidisk:
+        return None
+
+    iso_img, qcow2_img = [os.path.basename(image) for image in descriptor_images]
+    
+    ping_ = {'vda': ['disk', 'virtio', 5, os.path.basename(path_ping_image), 0],
+             'sda': ['cdrom', 'scsi', 5, iso_img, 1],
+             'vdb': ['disk', 'ide', 5, None, None],
+             }
+
+    pong_ = {'vda': ['disk', 'virtio', 5, os.path.basename(path_pong_image), 0],
+             'vdb': ['cdrom', 'ide', 5, iso_img, 1],
+             'vdc': ['disk', 'ide', 5, qcow2_img, 2],
+             }
+    return ping_, pong_
 
 @pytest.fixture(scope='session')
 def ping_pong_install_dir():
@@ -116,6 +137,11 @@ def image_dirs():
     return image_dirs
 
 @pytest.fixture(scope='session')
+def random_image_name(image_dirs):
+    """Fixture which returns a random image name"""
+    return 'image_systemtest_{}.qcow2'.format(randint(100, 9999))
+
+@pytest.fixture(scope='session')
 def image_paths(image_dirs):
     ''' Fixture containing a mapping of image names to their path images
 
@@ -148,11 +174,20 @@ def path_pong_image(image_paths):
     return image_paths["Fedora-x86_64-20-20131211.1-sda-pong.qcow2"]
 
 class PingPongFactory:
-    def __init__(self, path_ping_image, path_pong_image, rsyslog_host, rsyslog_port):
+    def __init__(self, path_ping_image, path_pong_image, rsyslog_host, rsyslog_port, static_ip, vnf_dependencies,
+                 port_security, metadata_vdud, multidisk, ipv6):
         self.path_ping_image = path_ping_image
         self.path_pong_image = path_pong_image
         self.rsyslog_host = rsyslog_host
         self.rsyslog_port = rsyslog_port
+        self.static_ip = static_ip
+        self.use_vca_conf = vnf_dependencies
+        self.port_security = port_security
+        self.metadata_vdud = metadata_vdud
+        self.multidisk = multidisk
+        self.ipv6 = ipv6
+        if not port_security:
+            self.port_security = None   # Not to disable port security if its not specific to --port-security feature.
 
     def generate_descriptors(self):
         '''Return a new set of ping and pong descriptors
@@ -184,15 +219,22 @@ rsyslog:
                 pong_md5sum=pong_md5sum,
                 ex_ping_userdata=ex_userdata,
                 ex_pong_userdata=ex_userdata,
+                use_static_ip=self.static_ip,
+                port_security=self.port_security,
+                metadata_vdud=self.metadata_vdud,
+                use_vca_conf=self.use_vca_conf,
+                multidisk=self.multidisk,
+                use_ipv6=self.ipv6,
         )
 
         return descriptors
 
 @pytest.fixture(scope='session')
-def ping_pong_factory(path_ping_image, path_pong_image, rsyslog_host, rsyslog_port):
+def ping_pong_factory(path_ping_image, path_pong_image, rsyslog_host, rsyslog_port, static_ip, vnf_dependencies, port_security, metadata_vdud, multidisk_testdata, ipv6):
     '''Fixture returns a factory capable of generating ping and pong descriptors
     '''
-    return PingPongFactory(path_ping_image, path_pong_image, rsyslog_host, rsyslog_port)
+    return PingPongFactory(path_ping_image, path_pong_image, rsyslog_host, rsyslog_port, static_ip, vnf_dependencies,
+                           port_security, metadata_vdud, multidisk_testdata, ipv6)
 
 @pytest.fixture(scope='session')
 def ping_pong_records(ping_pong_factory):
@@ -202,7 +244,7 @@ def ping_pong_records(ping_pong_factory):
 
 
 @pytest.fixture(scope='session')
-def descriptors(request, ping_pong_records):
+def descriptors(request, ping_pong_records, random_image_name):
     def pingpong_descriptors(with_images=True):
         """Generated the VNFDs & NSD files for pingpong NS.
 
@@ -233,7 +275,6 @@ def descriptors(request, ping_pong_records):
 
         for descriptor in [ping_vnfd, pong_vnfd, ping_pong_nsd]:
             descriptor.write_to_file(output_format='xml', outdir=tmpdir)
-
         ping_img_path = os.path.join(tmpdir, "{}/images/".format(ping_vnfd.name))
         pong_img_path = os.path.join(tmpdir, "{}/images/".format(pong_vnfd.name))
 
@@ -243,9 +284,13 @@ def descriptors(request, ping_pong_records):
             shutil.copy(ping_img, ping_img_path)
             shutil.copy(pong_img, pong_img_path)
 
+        if request.config.option.upload_images_multiple_accounts:
+            with open(os.path.join(ping_img_path, random_image_name), 'wb') as image_bin_file:
+                image_bin_file.seek(1024*1024*512)  # image file of size 512 MB
+                image_bin_file.write(b'0')
+
         for dir_name in [ping_vnfd.name, pong_vnfd.name, ping_pong_nsd.name]:
             subprocess.call([
-                    "sh",
                     "{rift_install}/usr/rift/toolchain/cmake/bin/generate_descriptor_pkg.sh".format(rift_install=os.environ['RIFT_INSTALL']),
                     tmpdir,
                     dir_name])
@@ -266,6 +311,39 @@ def descriptors(request, ping_pong_records):
 
         return files
 
+    def l2portchain_descriptors():
+        """L2  port chaining packages"""
+        files = [
+            os.path.join(os.getenv('RIFT_BUILD'), "modules/ext/vnfs/src/ext_vnfs-build/vnffg_demo_nsd/vnffg_l2portchain_dpi_vnfd.tar.gz"),
+            os.path.join(os.getenv('RIFT_BUILD'), "modules/ext/vnfs/src/ext_vnfs-build/vnffg_demo_nsd/vnffg_l2portchain_firewall_vnfd.tar.gz"),
+            os.path.join(os.getenv('RIFT_BUILD'), "modules/ext/vnfs/src/ext_vnfs-build/vnffg_demo_nsd/vnffg_l2portchain_nat_vnfd.tar.gz"),
+            os.path.join(os.getenv('RIFT_BUILD'), "modules/ext/vnfs/src/ext_vnfs-build/vnffg_demo_nsd/vnffg_l2portchain_pgw_vnfd.tar.gz"),
+            os.path.join(os.getenv('RIFT_BUILD'), "modules/ext/vnfs/src/ext_vnfs-build/vnffg_demo_nsd/vnffg_l2portchain_router_vnfd.tar.gz"),
+            os.path.join(os.getenv('RIFT_BUILD'), "modules/ext/vnfs/src/ext_vnfs-build/vnffg_demo_nsd/vnffg_l2portchain_sff_vnfd.tar.gz"),
+            os.path.join(os.getenv('RIFT_BUILD'), "modules/ext/vnfs/src/ext_vnfs-build/vnffg_demo_nsd/vnffg_l2portchain_demo_nsd.tar.gz")
+            ]
+
+        return files
+
+    def metadata_vdud_cfgfile_descriptors():
+        """Metadata-vdud feature related packages"""
+        files = [
+            os.path.join(os.getenv('RIFT_BUILD'), "modules/ext/vnfs/src/ext_vnfs-build/cfgfile/cirros_cfgfile_vnfd.tar.gz"),
+            os.path.join(os.getenv('RIFT_BUILD'), "modules/ext/vnfs/src/ext_vnfs-build/cfgfile/fedora_cfgfile_vnfd.tar.gz"),
+            os.path.join(os.getenv('RIFT_BUILD'), "modules/ext/vnfs/src/ext_vnfs-build/cfgfile/ubuntu_cfgfile_vnfd.tar.gz"),
+            os.path.join(os.getenv('RIFT_BUILD'), "modules/ext/vnfs/src/ext_vnfs-build/cfgfile/cfgfile_nsd.tar.gz")
+            ]
+
+        return files
+        
+    if request.config.option.vnf_onboard_delete:
+        return haproxy_descriptors() + l2portchain_descriptors() + list(pingpong_descriptors())
+    if request.config.option.multiple_ns_instantiate:
+        return haproxy_descriptors() + metadata_vdud_cfgfile_descriptors() + list(pingpong_descriptors())
+    if request.config.option.l2_port_chaining:
+        return l2portchain_descriptors()
+    if request.config.option.metadata_vdud_cfgfile:
+        return metadata_vdud_cfgfile_descriptors()
     if request.config.option.network_service == "pingpong":
         return pingpong_descriptors()
     elif request.config.option.network_service == "pingpong_noimg":
@@ -286,7 +364,37 @@ def descriptor_images(request):
 
         return images
 
+    def l2portchain_images():
+        """HAProxy images."""
+        images = [os.path.join(os.getenv('RIFT_ROOT'), "images/ubuntu_trusty_1404.qcow2")]
+        return images
+
+    def multidisk_images():
+        images = [
+            os.path.join(os.getenv('RIFT_ROOT'), 'images/ubuntu-16.04-mini-64.iso'),
+            os.path.join(os.getenv('RIFT_ROOT'), "images/ubuntu_trusty_1404.qcow2"),
+            ]
+        return images
+
+    def metadata_vdud_cfgfile_images():
+        """Metadata-vdud feature related images."""
+        images = [
+            os.path.join(os.getenv('RIFT_ROOT'), "images/cirros-0.3.4-x86_64-disk.img"),
+            os.path.join(os.getenv('RIFT_ROOT'), "images/Fedora-x86_64-20-20131211.1-sda.qcow2"),
+            os.path.join(os.getenv('RIFT_ROOT'), "images/UbuntuXenial")
+            ]
+
+        return images
+
+    if request.config.option.l2_port_chaining:
+        return l2portchain_images()
+    if request.config.option.multidisk:
+        return multidisk_images()
+    if request.config.option.metadata_vdud_cfgfile:
+        return metadata_vdud_cfgfile_images()
     if request.config.option.network_service == "haproxy":
         return haproxy_images()
+    if request.config.option.multiple_ns_instantiate:
+        return haproxy_images() + metadata_vdud_cfgfile_images()
 
     return []

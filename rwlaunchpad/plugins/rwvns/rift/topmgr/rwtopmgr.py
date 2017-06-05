@@ -28,168 +28,23 @@ from gi.repository import (
     IetfNetworkTopologyYang,
     IetfL2TopologyYang,
     RwTopologyYang,
-    RwsdnYang,
+    RwsdnalYang,
     RwTypes
 )
 
 from gi.repository.RwTypes import RwStatus
-import rw_peas
 import rift.tasklets
-
-class SdnGetPluginError(Exception):
-    """ Error while fetching SDN plugin """
-    pass
-  
-  
-class SdnGetInterfaceError(Exception):
-    """ Error while fetching SDN interface"""
-    pass
-
-
-class SdnAccountMgr(object):
-    """ Implements the interface to backend plugins to fetch topology """
-    def __init__(self, log, log_hdl, loop):
-        self._account = {}
-        self._log = log
-        self._log_hdl = log_hdl
-        self._loop = loop
-        self._sdn = {}
-
-        self._regh = None
-
-        self._status = RwsdnYang.SDNAccount_ConnectionStatus(
-                status='unknown',
-                details="Connection status lookup not started"
-                )
-
-        self._validate_task = None
-
-    def set_sdn_account(self,account):
-        if (account.name in self._account):
-            self._log.error("SDN Account is already set")
-        else:
-            sdn_account           = RwsdnYang.SDNAccount()
-            sdn_account.from_dict(account.as_dict())
-            sdn_account.name = account.name
-            self._account[account.name] = sdn_account
-            self._log.debug("Account set is %s , %s",type(self._account), self._account)
-            self.start_validate_credentials(self._loop, account.name)
-
-    def del_sdn_account(self, name):
-        self._log.debug("Account deleted is %s , %s", type(self._account), name)
-        del self._account[name]
-
-    def update_sdn_account(self,account):
-        self._log.debug("Account updated is %s , %s", type(self._account), account)
-        if account.name in self._account:
-            sdn_account = self._account[account.name]
-
-            sdn_account.from_dict(
-                account.as_dict(),
-                ignore_missing_keys=True,
-                )
-            self._account[account.name] = sdn_account
-            self.start_validate_credentials(self._loop, account.name)
-
-    def get_sdn_account(self, name):
-        """
-        Creates an object for class RwsdnYang.SdnAccount()
-        """
-        if (name in self._account):
-            return self._account[name]
-        else:
-            self._log.error("ERROR : SDN account is not configured") 
-
-    def get_saved_sdn_accounts(self, name):
-        ''' Get SDN Account corresponding to passed name, or all saved accounts if name is None'''
-        saved_sdn_accounts = []
-
-        if name is None or name == "":
-            sdn_accounts = list(self._account.values())
-            saved_sdn_accounts.extend(sdn_accounts)
-        elif name in self._account:
-            account = self._account[name]
-            saved_sdn_accounts.append(account)
-        else:
-            errstr = "SDN account {} does not exist".format(name)
-            raise KeyError(errstr)
-
-        return saved_sdn_accounts
-
-    def get_sdn_plugin(self,name):
-        """
-        Loads rw.sdn plugin via libpeas
-        """
-        if (name in self._sdn):
-            return self._sdn[name]
-        account = self.get_sdn_account(name)
-        plugin_name = getattr(account, account.account_type).plugin_name
-        self._log.info("SDN plugin being created")
-        plugin = rw_peas.PeasPlugin(plugin_name, 'RwSdn-1.0')
-        engine, info, extension = plugin()
-
-        self._sdn[name] = plugin.get_interface("Topology")
-        try:
-            rc = self._sdn[name].init(self._log_hdl)
-            assert rc == RwStatus.SUCCESS
-        except:
-            self._log.error("ERROR:SDN plugin instantiation failed ")
-        else:
-            self._log.info("SDN plugin successfully instantiated")
-        return self._sdn[name]
-
-    @asyncio.coroutine
-    def validate_sdn_account_credentials(self, loop, name):
-        self._log.debug("Validating SDN Account credentials %s", name)
-        self._status = RwsdnYang.SDNAccount_ConnectionStatus(
-                status="validating",
-                details="SDN account connection validation in progress"
-                )
-
-        _sdnacct = self.get_sdn_account(name)
-        if (_sdnacct is None):
-            raise SdnGetPluginError
-        _sdnplugin = self.get_sdn_plugin(name)
-        if (_sdnplugin is None):
-            raise SdnGetInterfaceError
-
-        rwstatus, status = yield from loop.run_in_executor(
-                None,
-                _sdnplugin.validate_sdn_creds,
-                _sdnacct,
-                )
-
-        if rwstatus == RwTypes.RwStatus.SUCCESS:
-            self._status = RwsdnYang.SDNAccount_ConnectionStatus.from_dict(status.as_dict())
-        else:
-            self._status = RwsdnYang.SDNAccount_ConnectionStatus(
-                    status="failure",
-                    details="Error when calling CAL validate sdn creds"
-                    )
-
-        self._log.info("Got sdn account validation response: %s", self._status)
-        _sdnacct.connection_status = self._status
-
-    def start_validate_credentials(self, loop, name):
-        if self._validate_task is not None:
-            self._validate_task.cancel()
-            self._validate_task = None
-
-        self._validate_task = asyncio.ensure_future(
-                self.validate_sdn_account_credentials(loop, name),
-                loop=loop
-                )
 
 
 class NwtopDiscoveryDtsHandler(object):
     """ Handles DTS interactions for the Discovered Topology registration """
     DISC_XPATH = "D,/nd:network"
 
-    def __init__(self, dts, log, loop, acctmgr, nwdatastore):
+    def __init__(self, dts, log, loop, acctstore, nwdatastore):
         self._dts = dts
         self._log = log
         self._loop = loop
-        self._acctmgr = acctmgr
+        self._acctstore = acctstore
         self._nwdatastore = nwdatastore
 
         self._regh = None
@@ -219,16 +74,12 @@ class NwtopDiscoveryDtsHandler(object):
 
             if action == rwdts.QueryAction.READ:
                 
-                for name in self._acctmgr._account:
-                    _sdnacct = self._acctmgr.get_sdn_account(name)
-                    if (_sdnacct is None):
-                        raise SdnGetPluginError
+                for name, sdnacct in self._acctstore.items():
+                    if sdnacct.account_type != "odl":
+                        continue
+                    sdnintf = sdnacct.sdn
 
-                    _sdnplugin = self._acctmgr.get_sdn_plugin(name)
-                    if (_sdnplugin is None):
-                        raise SdnGetInterfaceError
-
-                    rc, nwtop = _sdnplugin.get_network_list(_sdnacct)
+                    rc, nwtop = sdnintf.get_network_list(sdnacct.sdnal_account_msg)
                     #assert rc == RwStatus.SUCCESS
                     if rc != RwStatus.SUCCESS:
                         self._log.error("Fetching get network list for SDN Account %s failed", name)
@@ -268,11 +119,11 @@ class NwtopStaticDtsHandler(object):
     """ Handles DTS interactions for the Static Topology registration """
     STATIC_XPATH = "C,/nd:network"
 
-    def __init__(self, dts, log, loop, acctmgr, nwdatastore):
+    def __init__(self, dts, log, loop, acctstore, nwdatastore):
         self._dts = dts
         self._log = log
         self._loop = loop
-        self._acctmgr = acctmgr
+        self._acctstore = acctstore
 
         self._regh = None
         self.pending = {}

@@ -1,5 +1,5 @@
 
-# 
+#
 #   Copyright 2016 RIFT.IO Inc
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -138,6 +138,15 @@ class Logger(object):
         """
         return getattr(self._rift_logger, name)
 
+
+class DownloadError(ErrorMessage):
+    def __init__(self, msg):
+        super().__init__("Download-error", msg)
+
+
+class DownloadSuccess(StatusMessage):
+    def __init__(self, msg):
+        super().__init__("Download-Successful.", msg)
 
 
 class OnboardError(ErrorMessage):

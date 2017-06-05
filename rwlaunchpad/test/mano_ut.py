@@ -642,7 +642,7 @@ class PingPongDescriptorPublisher(object):
                         internal_vlr_count=num_internal_vlrs,
                         num_vnf_vms=2,
                         mano_ut=True,
-                        use_scale_group=True,
+                        use_scale_group=False,
                         use_mon_params=False,
                         )
 

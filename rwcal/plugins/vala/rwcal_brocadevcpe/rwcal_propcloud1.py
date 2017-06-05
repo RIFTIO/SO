@@ -12,6 +12,7 @@ import paramiko
 import ipaddress
 import uuid
 import subprocess
+import re
 from gi import require_version
 require_version('RwcalYang', '1.0')
 
@@ -798,10 +799,10 @@ class RwcalBrocadeVcpe(GObject.Object, RwCal.Cloud):
                 for volume in vdu_init.volumes:
                     if "image" in volume:
                         disk = dict()
-                        disk['type'] = volume.guest_params.device_type
+                        disk['type'] = volume.device_type
                         new_image = drv.copy_tmp_image(volume.image)
                         disk['image'] = new_image
-                        disk['boot-order'] = volume.boot_params.boot_priority
+                        disk['boot-order'] = volume.boot_priority
                         disk_list.append(disk)
                     else:
                         self.log.info("Volume source not supported")
@@ -812,7 +813,9 @@ class RwcalBrocadeVcpe(GObject.Object, RwCal.Cloud):
                 disk0['boot-order'] = 1
                 disk_list.append(disk0)
 
-            vm_id, portstate_list = drv.create_vm(vdu_init.name, vdu_init.vm_flavor.vcpu_count, vdu_init.vm_flavor.memory_mb, disk_list, port_list=port_list)
+            # Change name to remove allow only alpha-numerics
+            restricted_name = re.sub('[^a-zA-Z0-9]', '', vdu_init.name)
+            vm_id, portstate_list = drv.create_vm(restricted_name, vdu_init.vm_flavor.vcpu_count, vdu_init.vm_flavor.memory_mb, disk_list, port_list=port_list)
 
             if dhcp_server is not None:
                drv.merge_dhcp_server_config(dhcp_server)

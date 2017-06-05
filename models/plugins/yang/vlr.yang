@@ -43,6 +43,10 @@ module vlr
     prefix "vld";
   }
 
+  import vnfd {
+    prefix "vnfd";
+  }
+
   revision 2015-09-10 {
     description
       "Initial revision. This YANG file defines
@@ -88,7 +92,7 @@ module vlr
       }
 
       leaf short-name {
-        description "Short name for VLR for UI";
+        description "Short name to appear as label in the UI";
         type string;
       }
 
@@ -132,6 +136,14 @@ module vlr
         type uint32;
       }
 
+      leaf uptime {
+        description
+          "Active period of this Virtual Link.
+          Uptime is expressed in seconds";
+
+        type uint32;
+      }
+
       leaf network-id {
         description 
             "Identifier for the allocated network resource.";
@@ -149,6 +161,30 @@ module vlr
 
       uses manotypes:provider-network;
       uses manotypes:ip-profile-info;
+
+      list virtual-connection-points {
+        key name;
+        uses vnfd:common-connection-point;
+
+        leaf-list associated-cps {
+          type string;
+        }
+
+        leaf connection-point-id {
+          description "VIM identifier for connection point";
+          type string;
+        }
+        
+        leaf ip-address {
+          description "IP Address of virtual connection point";
+          type inet:ip-address;
+        }
+        leaf mac-address {
+          description "MAC Address of the virtual connection point";
+          type string;
+        }
+      }
+      
       
       leaf status {
         description

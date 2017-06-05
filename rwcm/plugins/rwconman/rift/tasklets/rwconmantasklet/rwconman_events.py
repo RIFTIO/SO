@@ -55,9 +55,12 @@ def log_this_vnf(vnf_cfg):
             else:
                 log_vnf += "{}/".format(vnf_cfg[item])
     return log_vnf
-        
+
+
 class ConfigManagerROifConnectionError(Exception):
     pass
+
+
 class ScriptError(Exception):
     pass
 
@@ -78,23 +81,23 @@ class ConfigManagerEvents(object):
     def update_vnf_state(self, vnf_cfg, state):
         nsr_obj = vnf_cfg['nsr_obj']
         yield from nsr_obj.update_vnf_cm_state(vnf_cfg['vnfr'], state)
-        
+
     @asyncio.coroutine
     def apply_vnf_config(self, vnf_cfg):
         self._log.debug("apply_vnf_config VNF:{}"
                         .format(log_this_vnf(vnf_cfg)))
-        
+
         if vnf_cfg['config_delay']:
             yield from self.update_vnf_state(vnf_cfg, conmanY.RecordState.CFG_DELAY)
             yield from asyncio.sleep(vnf_cfg['config_delay'], loop=self._loop)
-            
+
         # See if we are still alive!
         if vnf_cfg['nsr_obj'].being_deleted:
             # Don't do anything, just return
             self._log.info("VNF : %s is being deleted, skipping configuration!",
                            log_this_vnf(vnf_cfg))
             return True
-            
+
         yield from self.update_vnf_state(vnf_cfg, conmanY.RecordState.CFG_SEND)
         try:
             if vnf_cfg['config_method'] == 'netconf':
@@ -124,21 +127,20 @@ class ConfigManagerEvents(object):
                 yield from self.update_vnf_state(vnf_cfg, conmanY.RecordState.CFG_FAILED)
                 return True
 
-            #Update VNF state
-            yield from self.update_vnf_state(vnf_cfg, conmanY.RecordState.READY)
-            self._log.info("Successfully applied configuration to VNF: %s",
+            self._log.info("Successfully applied config template to VNF: %s",
                                log_this_vnf(vnf_cfg))
+
         except Exception as e:
             self._log.error("Applying configuration(%s) file(%s) to VNF: %s failed as: %s",
                             vnf_cfg['config_method'],
                             vnf_cfg['cfg_file'],
                             log_this_vnf(vnf_cfg),
                             str(e))
-            #raise
+            self._log.exception(e)
             return False
 
         return True
-        
+
 class ConfigManagerVNFscriptconf(object):
 
     def __init__(self, log, loop, parent, vnf_cfg):
@@ -151,7 +153,12 @@ class ConfigManagerVNFscriptconf(object):
     #@asyncio.coroutine
     def apply_edit_cfg(self):
         vnf_cfg = self._vnf_cfg
-        self._log.debug("Attempting to apply scriptconf to VNF: %s", log_this_vnf(vnf_cfg))
+        self._log.debug("Attempting to apply scriptconf to VNF %s: %s", log_this_vnf(vnf_cfg), vnf_cfg)
+
+        if vnf_cfg['cfg_file'] is None or (vnf_cfg['cfg_file'] == 'None'):
+            self._log.debug("Config file for script not provided")
+            return
+
         try:
             st = os.stat(vnf_cfg['cfg_file'])
             os.chmod(vnf_cfg['cfg_file'], st.st_mode | stat.S_IEXEC)
@@ -296,6 +303,10 @@ class ConfigManagerVNFnetconf(object):
     def apply_edit_cfg(self):
         vnf_cfg = self._vnf_cfg
         self._log.debug("Attempting to apply netconf to VNF: %s", log_this_vnf(vnf_cfg))
+
+        if vnf_cfg['cfg_file'] is None or (vnf_cfg['cfg_file'] == 'None'):
+            self._log.debug("Config file for Netconf not provided")
+            return
 
         if self._manager is None:
             self._log.error("Netconf is not connected to VNF: %s, aborting!", log_this_vnf(vnf_cfg))

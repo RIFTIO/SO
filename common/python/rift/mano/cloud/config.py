@@ -155,7 +155,9 @@ class CloudAccountConfigSubscriber(object):
                     for cfg in curr_cfg:
                         self._log.debug("Cloud account being re-added after restart.")
                         if not cfg.has_field('account_type'):
-                            raise CloudAccountError("New cloud account must contain account_type field.")
+                            self._log.error("New cloud account must contain account_type field.")
+                            xact_info.respond_xpath(rwdts.XactRspCode.NACK)
+                            return
                         self.add_account(cfg)
                 else:
                     # When RIFT first comes up, an INSTALL is called with the current config
@@ -202,7 +204,9 @@ class CloudAccountConfigSubscriber(object):
                 else:
                     self._log.debug("Cloud account does not already exist. Invoking on_prepare add request")
                     if not msg.has_field('account_type'):
-                        raise CloudAccountError("New cloud account must contain account_type field.")
+                        self._log.error("New cloud account must contain account_type field.")
+                        xact_info.respond_xpath(rwdts.XactRspCode.NACK)
+                        return
 
                     account = accounts.CloudAccount(self._log, self._rwlog_hdl, msg)
                     yield from self._cloud_callbacks.on_add_prepare(account)

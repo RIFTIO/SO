@@ -71,4 +71,5 @@ class ImageUploader(object):
         try:
             upload_job.wait_until_complete_threadsafe()
         except client.UploadJobError as e:
-            raise ImageUploadError("Failed to upload image (image_name) to cloud accounts") from e
+            raise ImageUploadError("Failed to upload image " + image_name + " to cloud accounts") from e
+

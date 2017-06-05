@@ -114,5 +114,14 @@ module rw-vnfd
     }
 
   }
+
+  augment /vnfd:vnfd-catalog/vnfd:vnfd/vnfd:mgmt-interface {
+    leaf ssh-key {
+      description
+        "Whether SSH keys need to be generated and passed
+             to the RO and VCA during instantiation.";
+      type boolean;
+    }
+  }
 }
 // vim: sw=2

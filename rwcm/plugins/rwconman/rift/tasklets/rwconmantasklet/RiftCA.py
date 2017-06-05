@@ -1,4 +1,4 @@
-# 
+#
 #   Copyright 2016 RIFT.IO Inc
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +16,11 @@
 
 import asyncio
 import concurrent.futures
+import os
 import re
+import shlex
 import tempfile
 import yaml
-import os
 
 from gi.repository import (
     RwDts as rwdts,
@@ -94,7 +95,7 @@ class RiftCAConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
 
     def riftca_log(self, name, level, log_str, *args):
         getattr(self._log, level)('RiftCA:({}) {}'.format(name, log_str), *args)
-        
+
     @asyncio.coroutine
     def notify_create_vnfr(self, agent_nsr, agent_vnfr):
         """
@@ -140,12 +141,134 @@ class RiftCAConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
         pass
 
     @asyncio.coroutine
-    def vnf_config_primitive(self, agent_nsr, agent_vnfr, primitive, output):
+    def _vnf_config_primitive(self, nsr_id, vnfr_id, primitive,
+                             vnf_config=None):
+        '''
+        Pass vnf_config to avoid querying DTS each time
+        '''
+        self._log.debug("VNF config primitive {} for nsr {}, vnfr {}".
+                        format(primitive.name, nsr_id, vnfr_id))
+
+        if vnf_config is None:
+            vnfr = yield from self.get_vnfr(vnfr_id)
+            if vnfr is None:
+                self._log.error("Unable to get VNFR {} through DTS".
+                                format(vnfr_id))
+                return 1, "Unable to get VNFR {} through DTS".format(vnfr_id)
+
+            vnf_config = vnfr.vnf_configuration
+        self._log.debug("VNF config= %s", vnf_config.as_dict())
+
+        data = {}
+        script = None
+        found = False
+
+        configs = vnf_config.config_primitive
+        for config in configs:
+            if config.name == primitive.name:
+                found = True
+                self._log.debug("RiftCA: Found the config primitive %s",
+                                config.name)
+
+                spt = config.user_defined_script
+                if spt is None:
+                    self._log.error("RiftCA: VNFR {}, Did not find "
+                                    "script defined in config {}".
+                                    format(vnfr['name'], config.as_dict()))
+                    return 1, "Did not find user defined script for " \
+                        "config primitive {}".format(primitive.name)
+
+                spt = shlex.quote(spt.strip())
+                if spt[0] == '/':
+                    script = spt
+                else:
+                    script = os.path.join(self._rift_artif_dir,
+                                          'launchpad/libs',
+                                          nsr_id,
+                                          'scripts',
+                                          spt)
+                    self._log.debug("Rift config agent: Checking for script "
+                                    "in %s", script)
+                    if not os.path.exists(script):
+                        self._log.debug("Rift config agent: Did not find "
+                                        "script %s", script)
+                        script = os.path.join(self._rift_install_dir,
+                                              'usr/bin', spt)
+                        if not os.path.exists(script):
+                            self._log.debug("Rift config agent: Did not find "
+                                            "script %s", script)
+                            return 1, "Did not find user defined " \
+                                "script {}".format(spt)
+
+                params = {}
+                for param in config.parameter:
+                    val = None
+                    for p in primitive.parameter:
+                        if p.name == param.name:
+                            val = p.value
+                            break
+
+                    if val is None:
+                        val = param.default_value
+
+                    if val is None:
+                        # Check if mandatory parameter
+                        if param.mandatory:
+                            msg = "VNFR {}: Primitive {} called " \
+                                  "without mandatory parameter {}". \
+                                  format(vnfr.name, config.name,
+                                         param.name)
+                            self._log.error(msg)
+                            return 1, msg
+
+                    if val:
+                        val = self.convert_value(val, param.data_type)
+                        params.update({param.name: val})
+
+                data['parameters'] = params
+                break
+
+        if not found:
+            msg = "Did not find the primitive {} in VNFR {}". \
+                  format(primitive.name, vnfr.name)
+            self._log.error(msg)
+            return 1, msg
+
+        rc, script_err = yield from self.exec_script(script, data)
+        return rc, script_err
+
+    @asyncio.coroutine
+    def vnf_config_primitive(self, nsr_id, vnfr_id, primitive, output):
         '''
         primitives support by RiftCA
+
+        Pass vnf_config to avoid querying DTS each time
         '''
-        pass
-        
+        output.execution_status = "failed"
+        output.execution_id = ''
+        output.execution_error_details = ''
+
+        try:
+            vnfr = self._rift_vnfs[vnfr_id].vnfr
+        except KeyError:
+            msg = "Did not find VNFR %s in RiftCA plugin" % vnfr_id
+            self._log.error(msg)
+            output.execution_error_details = msg
+            return
+
+        rc, err = yield from self._vnf_config_primitive(nsr_id,
+                                                        vnfr_id,
+                                                        primitive)
+        self._log.debug("VNFR {} primitive {} exec status: {}".
+                        format(vnfr['name'], primitive.name, rc))
+
+        if rc == 0:
+            output.execution_status = "completed"
+        else:
+            if isinstance(err, bytes):
+                err = err.decode()
+            output.execution_error_details = err
+
     @asyncio.coroutine
     def apply_config(self, config, nsr, vnfr, rpc_ip):
         """ Notification on configuration of an NSR """
@@ -197,14 +320,18 @@ class RiftCAConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
                         cp_dict['name'] = cp['name']
                         cp_dict['ip_address'] = cp['ip_address']
                         cp_dict['connection_point_id'] = cp['connection_point_id']
+                        if 'virtual_cps' in cp:
+                            cp_dict['virtual_cps'] = [ {k:v for k,v in vcp.items()
+                                                        if k in ['ip_address', 'mac_address']}
+                                                       for vcp in cp['virtual_cps'] ]
                         vnfr_data_dict['connection_point'].append(cp_dict)
 
                 vnfr_data_dict['vdur'] = []
-                vdu_data = [(vdu['name'], vdu['management_ip'], vdu['vm_management_ip'], vdu['id'])
+                vdu_data = [(vdu['name'], vdu['management_ip'], vdu['vm_management_ip'], vdu['id'], vdu['vdu_id_ref'])
                         for vdu in vnfr.vnfr['vdur']]
 
                 for data in vdu_data:
-                    data = dict(zip(['name', 'management_ip', 'vm_management_ip', 'id'] , data))
+                    data = dict(zip(['name', 'management_ip', 'vm_management_ip', 'id', 'vdu_id_ref'] , data))
                     vnfr_data_dict['vdur'].append(data)
 
                 vnfr_data_map[vnfr.member_vnf_index] = vnfr_data_dict
@@ -269,6 +396,68 @@ class RiftCAConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
         return task, err
 
     @asyncio.coroutine
+    def apply_initial_config_new(self, agent_nsr, agent_vnfr):
+        self._log.debug("RiftCA: VNF initial config primitive for nsr {}, vnfr {}".
+                        format(agent_nsr.name, agent_vnfr.name))
+
+        try:
+            vnfr = self._rift_vnfs[agent_vnfr.id].vnfr
+        except KeyError:
+            self._log.error("RiftCA: Did not find VNFR %s in RiftCA plugin",
+                            agent_vnfr.name)
+            return False
+
+        class Primitive:
+            def __init__(self, name):
+                self.name = name
+                self.value = None
+                self.parameter = []
+
+        vnfr = yield from self.get_vnfr(agent_vnfr.id)
+        if vnfr is None:
+            msg = "Unable to get VNFR {} ({}) through DTS". \
+                  format(agent_vnfr.id, agent_vnfr.name)
+            self._log.error(msg)
+            raise RuntimeError(msg)
+
+        vnf_config = vnfr.vnf_configuration
+        self._log.debug("VNFR %s config: %s", vnfr.name,
+                        vnf_config.as_dict())
+
+        # Sort the primitive based on the sequence number
+        primitives = sorted(vnf_config.initial_config_primitive,
+                            key=lambda k: k.seq)
+        if not primitives:
+            self._log.debug("VNFR {}: No initial-config-primitive specified".
+                            format(vnfr.name))
+            return True
+
+        for primitive in primitives:
+            if primitive.config_primitive_ref:
+                # Reference to a primitive in config primitive
+                prim = Primitive(primitive.config_primitive_ref)
+                rc, err = yield from self._vnf_config_primitive(agent_nsr.id,
+                                                                agent_vnfr.id,
+                                                                prim,
+                                                                vnf_config)
+                if rc != 0:
+                    msg = "Error executing initial config primitive" \
+                          " {} in VNFR {}: rc={}, stderr={}". \
+                          format(prim.name, vnfr.name, rc, err)
+                    self._log.error(msg)
+                    return False
+
+            elif primitive.name:
+                if not primitive.user_defined_script:
+                    msg = "Primitive {} definition in initial config " \
+                          "primitive for VNFR {} not supported yet". \
+                          format(primitive.name, vnfr.name)
+                    self._log.error(msg)
+                    raise NotImplementedError(msg)
+
+        return True
+
+    @asyncio.coroutine
     def apply_initial_config(self, agent_nsr, agent_vnfr):
         """
         Apply the initial configuration
@@ -283,16 +472,23 @@ class RiftCAConfigPlugin(riftcm_config_plugin.RiftCMConfigPluginBase):
                 agent_vnfr.set_to_configurable()
                 if agent_vnfr.is_configurable:
                     # apply initial config for the vnfr
+                    # Keep the config-template based initial-config
                     rc = yield from self._events.apply_vnf_config(agent_vnfr.vnf_cfg)
+
+                    # Check if the new method of initial-config-primitive is present
+                    if rc:
+                         rc = yield from self.apply_initial_config_new(agent_nsr, agent_vnfr)
+
                 else:
                     self._log.info("Rift config agent: VNF:%s/%s is not configurable yet!",
                                    agent_nsr.name, agent_vnfr.name)
+
         except Exception as e:
             self._log.error("Rift config agent: Error on initial configuration to VNF:{}/{}, e {}"
                             .format(agent_nsr.name, agent_vnfr.name, str(e)))
-            
+
             self._log.exception(e)
-            return rc
+            return False
 
         return rc
 

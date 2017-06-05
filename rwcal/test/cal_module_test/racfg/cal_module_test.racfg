@@ -4,7 +4,7 @@
   "target_vm":"VM",
   "test_description":"System test targeting module tests for CAL accounts",
   "run_as_root": true,
-  "status":"working",
+  "status":"broken",
   "keywords":["nightly","smoke","MANO","openstack"],
   "timelimit": 2400,
   "networks":[],

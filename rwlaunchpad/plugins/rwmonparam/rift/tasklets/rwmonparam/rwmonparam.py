@@ -30,11 +30,12 @@ gi.require_version('RwLaunchpadYang', '1.0')
 from gi.repository import (
         RwDts as rwdts,
         RwLaunchpadYang,
+        NsrYang,
         ProtobufC)
 import rift.mano.cloud
 import rift.mano.dts as subscriber
 import rift.tasklets
-
+import concurrent.futures
 from . import vnfr_core
 from . import nsr_core
 
@@ -55,7 +56,8 @@ class MonitoringParameterTasklet(rift.tasklets.Tasklet):
 
         self.vnfr_monitors = {}
         self.nsr_monitors = {}
-
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        
         # Needs to be moved to store once the DTS bug is resolved
         # Gather all VNFRs
         self.vnfrs = {}
@@ -68,7 +70,7 @@ class MonitoringParameterTasklet(rift.tasklets.Tasklet):
 
         self.dts = rift.tasklets.DTS(
                 self.tasklet_info,
-                RwLaunchpadYang.get_schema(),
+                NsrYang.get_schema(),
                 self.loop,
                 self.on_dts_state_change
                 )
@@ -151,7 +153,7 @@ class MonitoringParameterTasklet(rift.tasklets.Tasklet):
                 vnf_mon = vnfr_core.VnfMonitorDtsHandler.from_vnf_data(
                         self,
                         vnfr,
-                        self.store.get_vnfd(vnfr.vnfd_ref))
+                        self.store.get_vnfd(vnfr.vnfd.id))
 
                 self.vnfr_monitors[vnfr.id] = vnf_mon
                 self.vnfrs[vnfr.id] = vnfr
@@ -159,8 +161,10 @@ class MonitoringParameterTasklet(rift.tasklets.Tasklet):
                 @asyncio.coroutine
                 def task():
                     yield from vnf_mon.register()
+                    if vnfr.nsr_id_ref in self.nsr_monitors:
+                        vnf_mon.update_nsr_mon(self.nsr_monitors[vnfr.nsr_id_ref])
                     vnf_mon.start()
-                    self.update_nsrs(vnfr, action)
+                    #self.update_nsrs(vnfr, action)
 
                 self.loop.create_task(task())
 
@@ -171,7 +175,7 @@ class MonitoringParameterTasklet(rift.tasklets.Tasklet):
                 vnf_mon = self.vnfr_monitors.pop(vnfr.id)
                 vnf_mon.stop()
                 self.vnfrs.pop(vnfr.id)
-                self.update_nsrs(vnfr, action)
+                #self.update_nsrs(vnfr, action)
 
         if action in [rwdts.QueryAction.CREATE, rwdts.QueryAction.UPDATE]:
             vnfr_create()
@@ -224,6 +228,7 @@ class MonitoringParameterTasklet(rift.tasklets.Tasklet):
                 return
 
             constituent_vnfrs = []
+            
             for vnfr_id in nsr.constituent_vnfr_ref:
                 if (vnfr_id.vnfr_id in self.vnfrs):
                     vnfr_obj = self.vnfrs[vnfr_id.vnfr_id]
@@ -239,8 +244,12 @@ class MonitoringParameterTasklet(rift.tasklets.Tasklet):
                 constituent_vnfrs,
                 self.store
             )
+            for vnfr_id in nsr.constituent_vnfr_ref:
+                if vnfr_id.vnfr_id in self.vnfr_monitors:
+                     self.vnfr_monitors[vnfr_id.vnfr_id].update_nsr_mon(nsr_mon)
             
             self.nsr_monitors[nsr.ns_instance_config_ref] = nsr_mon
+            
 
             @asyncio.coroutine
             def task():

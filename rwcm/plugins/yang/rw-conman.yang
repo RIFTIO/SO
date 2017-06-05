@@ -259,6 +259,70 @@ module rw-conman
             type string;
           }
         }
+        // Publish the resolved capabilites and dependecies here
+        container config-parameter {
+          description
+            "The resolved config parameter for a VNF";
+          list config-parameter-source {
+            description "List of resolved sources";
+            key "name";
+
+            leaf name {
+              type string {
+                length 128;
+              }
+              description
+                "Name of the source as defined in VNFD";
+            }
+            leaf value {
+              type string;
+              description
+                "Resovled value for the source";
+            }
+            list parameter {
+              key "config-primitive-ref";
+              leaf config-primitive-ref {
+                type string;
+              }
+              leaf parameter-ref {
+                type string;
+              }
+            }
+          }
+
+          list config-parameter-request {
+            description
+              "List of resolved requests for the the VNF";
+            key "name";
+
+            leaf name {
+              type string {
+                length 128;
+              }
+              description
+                "Name of the request as defined in VNFD";
+            }
+            leaf value {
+              type string;
+              description
+                "Resovled value for the request";
+            }
+            list parameter {
+              key "config-primitive-ref";
+              leaf config-primitive-ref {
+                type string;
+              }
+              leaf parameter-ref {
+                type string;
+              }
+            }
+          }
+        }
+
+        // Resolve the VNF config-primitives and publish it
+        // here. VNFR will use this and update config-primitives
+        // from here.
+        uses manotypes:vnf-configuration;
       } // list VNFR
     } // list NSR
   } // cm-state

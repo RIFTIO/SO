@@ -149,7 +149,9 @@ class TranslatorShell(object):
         if typ.startswith('text/plain'):
             # Assume to be yaml
             return self.YAML
-        elif typ.startswith('application/x-gzip'):
+        # On Fedora 20, it return x-gzip, while on Ubuntu 16 it is gzip
+        elif typ.startswith('application/x-gzip') or \
+             typ.startswith('application/gzip') :
             return self.TAR
         else:
             msg = _("The file {0} is not a supported type: {1}"). \

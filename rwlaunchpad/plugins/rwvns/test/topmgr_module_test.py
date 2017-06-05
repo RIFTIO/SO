@@ -43,7 +43,7 @@ import gi.repository.RwManifestYang as rwmanifest
 import gi.repository.IetfL2TopologyYang as l2Tl
 import gi.repository.RwTopologyYang as RwTl
 import gi.repository.RwLaunchpadYang as launchpadyang
-from gi.repository import RwsdnYang
+from gi.repository import RwsdnalYang
 from gi.repository.RwTypes import RwStatus
 
 from create_stackedl2topology import MyL2Topology

@@ -21,10 +21,10 @@
 
 include(rift_yang)
 
-set(source_yang_files rwsdn.yang)
+set(source_yang_files rwsdnal.yang)
 
 rift_add_yang_target(
-  TARGET rwsdn_yang
+  TARGET rwsdnal_yang
   YANG_FILES ${source_yang_files}
   COMPONENT ${PKG_LONG_NAME}
   LIBRARIES

@@ -296,24 +296,20 @@ module nsr
     list vnfd-placement-group-maps {
       description
           "Mapping from mano-placement groups construct from VNFD to cloud
-           platform placement group construct";
+          platform placement group construct";
 
-      key "placement-group-ref vnfd-id-ref";
+    key "placement-group-ref vnfd-id-ref";
 
-      leaf vnfd-id-ref {
-        description 
-            "A reference to a vnfd. This is a 
-                  leafref to path:
-                      ../../../../nsd:constituent-vnfd
-                      + [nsr:id = current()/../nsd:id-ref]
-                      + /nsd:vnfd-id-ref
-             NOTE: An issue with confd is preventing the
-             use of xpath. Seems to be an issue with leafref
-             to leafref, whose target is in a different module.
-             Once that is resovled this will switched to use
-             leafref";
-        type yang:uuid;
-      }
+    leaf vnfd-id-ref {
+      description
+          "A reference to a vnfd. This is a
+          leafref to path:
+          ../../../../nsd:constituent-vnfd
+          + [nsr:id = current()/../nsd:id-ref]
+          + /nsd:vnfd-id-ref
+          NOTE: confd limitations prevent the use of xpath";
+      type yang:uuid;
+    }
 
       leaf placement-group-ref {
         description
@@ -323,7 +319,7 @@ module nsr
               "../nsr:vnfd-id-ref]/vnfd:placement-groups/vnfd:name";
         }
       }
-      
+
       uses manotypes:placement-group-input;
     }
 
@@ -368,6 +364,11 @@ module nsr
         }
       }
 
+      leaf cloud-account {
+        description "Cloud Account in which NSR is instantiated";
+        type string;
+      }
+
       leaf operational-status {
         description
           "The operational status of the VNFFGR instance
@@ -401,6 +402,12 @@ module nsr
           description
               "Name for the RSP";
           type string;
+        }
+
+        leaf rsp-id {
+          description
+              "Returned Identifier for the RSP.";
+          type yang:uuid;
         }
 
         leaf vnffgd-rsp-id-ref {
@@ -450,7 +457,7 @@ module nsr
             description
                 "Type of Service Function.
                 NOTE: This needs to map with Service Function Type in ODL to
-                support VNFFG. Service Function Type is manadatory param in ODL
+                support VNFFG. Service Function Type is mandatory param in ODL
                 SFC. This is temporarily set to string for ease of use";
             type string;
           }
@@ -548,6 +555,11 @@ module nsr
             description
                 "Name of the classifier.";
             type string;
+          }
+          leaf-list classifier-id {
+            description
+                "Returned Identifier for the classifier rule.";
+            type yang:uuid;
           }
           leaf rsp-id-ref {
             description
@@ -648,6 +660,26 @@ module nsr
           since unix epoch - 1970-01-01T00:00:00Z";
 
         type uint32;
+      }
+
+      leaf uptime {
+        description
+          "Active period of this Network Service.
+          Uptime is expressed in seconds";
+
+        type uint32;
+      }
+
+      container ssh-key-generated {
+        description "SSH key pair generated for this NS";
+        leaf public-key {
+          description "Public key generated";
+          type string;
+        }
+        leaf private-key-file {
+          description "Path to the private key file";
+          type string;
+        }
       }
 
       list connection-point {
@@ -858,7 +890,78 @@ module nsr
         type config-states;
       }
 
-      uses manotypes:ns-service-primitive;
+      list service-primitive {
+         description
+              "Network service level service primitives.";
+
+         key "name";
+
+         leaf name {
+            description
+                "Name of the service primitive.";
+            type string;
+         }
+
+         list parameter {
+            description
+                "List of parameters for the service primitive.";
+
+            key "name";
+            uses manotypes:primitive-parameter;
+         }
+
+         uses manotypes:ui-primitive-group;
+
+         list vnf-primitive-group {
+            description
+                "List of service primitives grouped by VNF.";
+
+            key "member-vnf-index-ref";
+            leaf member-vnf-index-ref {
+              description
+                 "Reference to member-vnf within constituent-vnfds";
+              type uint64;
+            }
+
+            leaf vnfd-id-ref {
+               description
+                 "A reference to a vnfd. This is a 
+                  leafref to path:
+                      ../../../../nsd:constituent-vnfd
+                      + [nsd:id = current()/../nsd:id-ref]
+                      + /nsd:vnfd-id-ref
+                  NOTE: confd limitations prevent the use of xpath";
+
+               type string;
+            }
+
+            leaf vnfd-name {
+               description
+                 "Name of the VNFD";
+               type string;
+            }
+
+            list primitive {
+               key "index";
+
+               leaf index {
+                 description "Index of this primitive";
+                 type uint32;
+               }
+
+               leaf name {
+                 description "Name of the primitive in the VNF primitive ";
+                 type string;
+               }
+            }
+         }
+
+         leaf user-defined-script {
+           description
+               "A user defined script.";
+           type string;
+         }
+      }
 
       list initial-config-primitive {
         rwpb:msg-new NsrInitialConfigPrimitive;
@@ -1112,11 +1215,7 @@ module nsr
                    ../../../../nsd:constituent-vnfd
                    + [nsd:id = current()/../nsd:id-ref]
                    + /nsd:vnfd-id-ref
-               NOTE: An issue with confd is preventing the
-               use of xpath. Seems to be an issue with leafref
-               to leafref, whose target is in a different module.
-               Once that is resovled this will switched to use
-               leafref";
+               NOTE: confd limitations prevent the use of xpath";
 
           type string;
         }

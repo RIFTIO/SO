@@ -20,6 +20,8 @@ rw-dtsperf
 rw-dtsperfmgr
 rw-launchpad
 rw-image-mgmt
+rw-pkg-mgmt
+rw-staging-mgmt
 rw-log
 rwlog-mgmt
 rw-manifest
@@ -36,7 +38,7 @@ rw-nsr
 rw-pb-ext
 rw-resource-mgr
 rw-restportforward
-rwsdn
+rwsdnal
 rw-sdn
 rwshell-mgmt
 rw-sorch

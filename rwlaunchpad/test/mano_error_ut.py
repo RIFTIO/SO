@@ -279,16 +279,14 @@ class ResourceMgrMock(object):
             return
 
         @asyncio.coroutine
-        def monitor_vdu_state(response_xpath, pathentry):
+        def monitor_vdu_state(response_xpath, event_id):
             self._log.info("Initiating VDU state monitoring for xpath: %s ", response_xpath)
             loop_cnt = 120
             while loop_cnt > 0:
                 self._log.debug("VDU state monitoring: Sleeping for 1 second ")
                 yield from asyncio.sleep(1, loop = self._loop)
                 try:
-                    response_info = self._read_virtual_compute(
-                            pathentry.key00.event_id
-                            )
+                    response_info = self._read_virtual_compute(event_id)
                 except Exception as e:
                     self._log.error(
                             "VDU state monitoring: Received exception %s "
@@ -335,7 +333,7 @@ class ResourceMgrMock(object):
                     request_msg.request_info,
                     )
             if response_info.resource_state == 'pending':
-                asyncio.ensure_future(monitor_vdu_state(response_xpath, pathentry),
+                asyncio.ensure_future(monitor_vdu_state(response_xpath, pathentry.key00.event_id),
                                       loop = self._loop)
 
         elif action == rwdts.QueryAction.DELETE:

@@ -22,6 +22,7 @@ require_version('RwCal', '1.0')
 require_version('RwcalYang', '1.0')
 require_version('RwTypes', '1.0')
 require_version('RwCloudYang', '1.0')
+require_version('RwCal', '1.0')
 
 from gi.repository import (
         RwTypes,

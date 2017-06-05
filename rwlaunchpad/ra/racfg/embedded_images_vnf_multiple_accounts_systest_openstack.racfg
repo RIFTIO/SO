@@ -1,0 +1,18 @@
+{
+  "test_name":"TC_EMBEDDED_IMAGES_VNF_MULTIPLE_VIM_ACCOUNTS",
+  "commandline":"./accounts_creation_onboard_systest --test-name 'TC_EMBEDDED_IMAGES_VNF_MULTIPLE_VIM_ACCOUNTS' --cloud-type 'openstack' --cloud-host={cloud_host} --sysinfo  --user={user} {tenants} --netconf --upload-images-multiple-accounts",
+  "test_description":"System test to check whether images embedded in VNF package get uploaded to all VIM accounts(Openstack)",
+  "run_as_root": true,
+  "status":"working",
+  "keywords":["nightly","smoke","MANO","openstack"],
+  "timelimit": 2600,
+  "networks":[],
+  "vms":[
+    {
+      "name": "rift_auto_launchpad",
+      "memory": 4096,
+      "cpus": 2
+    }
+  ]
+}
+

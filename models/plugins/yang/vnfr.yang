@@ -133,6 +133,32 @@ module vnfr
     }
   }
 
+  grouping associated-virtual-cps {
+    list virtual-cps {
+      key "name";
+      uses vnfd:common-connection-point;
+
+      leaf ip-address {
+        description
+            "IP address assigned to the virtual connection point";
+        type inet:ip-address;
+      }
+
+      leaf mac-address {
+        description
+            "MAC address assigned to the virtual connection point";
+        type string;
+      }
+
+      leaf connection-point-id {
+        description "VIM identifier for connection point";
+        type string;
+      }
+    }
+  }
+  
+  
+  
   container vnfr-catalog {
     config false;
     list vnfr {
@@ -191,7 +217,7 @@ module vnfr
       }
 
       leaf create-time {
-        description 
+        description
           "Creation timestamp of this Virtual Network 
           Function.  The timestamp is expressed as 
           seconds since unix epoch - 1970-01-01T00:00:00Z";
@@ -199,6 +225,18 @@ module vnfr
         type uint32;
       }
 
+      leaf uptime {
+        description
+          "Active period of this Virtual Network Function.
+          Uptime is expressed in seconds";
+
+        type uint32;
+      }
+
+      container vnfd {
+        description "VNF descriptor used to instantiate this VNF";
+        uses vnfd:vnfd-descriptor;
+      }
       leaf vnfd-ref {
         description "Reference to VNFD";
         type leafref {
@@ -216,6 +254,18 @@ module vnfr
         }
         leaf port {
           type inet:port-number;
+        }
+
+        container ssh-key {
+          description "SSH key pair used for this VNF";
+          leaf public-key {
+            description "Public key configured on this VNF";
+            type string;
+          }
+          leaf private-key-file {
+            description "Path to the private key file";
+            type string;
+          }
         }
       }
 
@@ -252,7 +302,7 @@ module vnfr
         uses vnfd:common-connection-point;
 
         leaf vlr-ref {
-          description 
+          description
               "Reference to the VLR associated with this connection point";
           type  leafref {
             path "/vlr:vlr-catalog/vlr:vlr/vlr:id";
@@ -260,15 +310,22 @@ module vnfr
         }
 
         leaf ip-address {
-          description 
+          description
               "IP address assigned to the external connection point";
           type inet:ip-address;
         }
-        leaf connection-point-id {
-          rwpb:field-inline "true";
-          rwpb:field-string-max 64;
+        leaf mac-address {
+          description
+              "MAC address assigned to the external connection point";
+          // type inet:mac-address;
           type string;
         }
+
+        leaf connection-point-id {
+          type string;
+        }
+
+        uses associated-virtual-cps;
       }
 
       list vdur {
@@ -286,11 +343,18 @@ module vnfr
           type string;
         }
 
+        leaf unique-short-name {
+          description "Short Unique name of the VDU
+                This will be of the format NSR name-ShortnedString-VDUname
+                NSR name and VDU name shall be constrained to 10 characters";
+          rwpb:field-inline "true";
+          rwpb:field-string-max 64;
+          type string;
+        }
+
         leaf vdu-id-ref {
           type leafref {
-            path "/vnfd:vnfd-catalog/vnfd:vnfd" 
-               + "[vnfd:id = current()/../../vnfr:vnfd-ref]"
-               + "/vnfd:vdu/vnfd:id";
+            path "../../vnfd/vdu/id";
           }
         }
 
@@ -330,6 +394,8 @@ module vnfr
         uses manotypes:hypervisor-epa;
         uses manotypes:host-epa;
 
+        uses manotypes:supplemental-boot-data;
+
         list volumes {
           key "name";
 
@@ -367,10 +433,22 @@ module vnfr
           uses vnfd:common-connection-point;
 
           leaf ip-address {
-            description 
-                "IP address assigned to the external connection point";
+            description
+                "IP address assigned to the internal connection point";
             type inet:ip-address;
           }
+          leaf mac-address {
+            description
+                "MAC address assigned to the internal connection point";
+            // type inet:mac-address;
+            type string;
+          }
+
+          leaf connection-point-id {
+            type string;
+          }
+
+          uses associated-virtual-cps;
         }
 
         list internal-interface {

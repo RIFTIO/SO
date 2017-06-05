@@ -432,7 +432,10 @@ class ConfigAgentJobMonitor(object):
                            format(process, rc, err))
 
             if len(err):
-                errs += "<error>{}</error>".format(err)
+                if rc == 0:
+                    errs += "<success>{}</success>".format(err)
+                else:
+                    errs += "<error>{}</error>".format(err)
             result |= rc
 
         if result == 0:

@@ -56,6 +56,15 @@ class YangVdu(ToscaResource):
         'storage_gb': ' GB',
     }
 
+    TOSCA_MEM_SIZE = {
+        'LARGE': 'huge',
+        'SMALL': 'normal',
+        'SIZE_2MB': 'size_2MB',
+        'SIZE_1GB': 'size_1GB',
+        'PREFER_LARGE': 'prefer_huge'
+
+    }
+
     def __init__(self,
                  log,
                  name,
@@ -69,8 +78,16 @@ class YangVdu(ToscaResource):
         self.props = {}
         self.ext_cp = []
         self.int_cp = []
-        self.image = None
+        self.image           = None
         self.cloud_init_file = None
+        self.host_epa        = None
+        self.vswitch_epa     = None
+        self.hypervisor_epa  = None
+        self.guest_epa       = None
+        self.cp_name_to_cp_node = {}
+        self.pinning_epa_prop   = {}
+        self.mem_page_guest_epa = None
+        self.conn_point_to_conection_node = {}
 
     def process_vdu(self):
         self.log.debug(_("Process VDU desc {0}: {1}").format(self.name,
@@ -88,9 +105,9 @@ class YangVdu(ToscaResource):
         self.id = vdu[self.ID]
 
         if self.VM_FLAVOR in vdu_dic:
-            vdu[self.HOST] = {}
+            vdu[self.NFV_COMPUTE] = {}
             for key, value in vdu_dic.pop(self.VM_FLAVOR).items():
-                vdu[self.HOST][self.VM_FLAVOR_MAP[key]] = "{}{}". \
+                vdu[self.NFV_COMPUTE][self.VM_FLAVOR_MAP[key]] = "{}{}". \
                             format(value, self.VM_SIZE_UNITS_MAP[key])
 
         if self.EXT_INTF in vdu_dic:
@@ -103,7 +120,115 @@ class YangVdu(ToscaResource):
                                format(self, cp, ext_intf))
                 self.ext_cp.append(cp)
 
+        if self.HOST_EPA in vdu_dic:
+            host_epa = vdu_dic.pop(self.HOST_EPA)
+            host_epa_prop = {}
+            self.host_epa = host_epa
+            '''
+            if 'cpu_model' in host_epa:
+                host_epa_prop['cpu_model'] = host_epa['cpu_model'].lower()
+            if 'cpu_arch' in host_epa:
+                host_epa_prop['cpu_arch'] = host_epa['cpu_arch'].lower()
+            if 'cpu_vendor' in host_epa:
+                host_epa_prop['cpu_vendor'] = host_epa['cpu_vendor'].lower()
+            if 'cpu_socket_count' in host_epa:
+                host_epa_prop['cpu_socket_count'] = host_epa['cpu_socket_count']
+            if 'cpu_core_count' in host_epa:
+                host_epa_prop['cpu_core_count'] = host_epa['cpu_core_count']
+            if 'cpu_core_thread_count' in host_epa:
+                host_epa_prop['cpu_core_thread_count'] = host_epa['cpu_core_thread_count']
+            if 'om_cpu_model_string' in host_epa:
+                host_epa_prop['om_cpu_model_string'] = host_epa['om_cpu_model_string']
+            if 'cpu_feature' in host_epa:
+                host_epa_prop['cpu_feature'] = []
+                for cpu_feature in host_epa['cpu_feature']:
+                    cpu_feature_prop = {}
+                    cpu_feature_prop['feature'] = cpu_feature['feature'].lower()
+                    host_epa_prop['cpu_feature'] .append(cpu_feature_prop)
+
+            if 'om_cpu_feature' in host_epa:
+                host_epa_prop['om_cpu_feature'] = []
+                for cpu_feature in host_epa['om_cpu_feature']:
+                    om_cpu_feature_prop = {}
+                    om_cpu_feature_prop['feature'] = cpu_feature
+                    host_epa_prop['om_cpu_feature'].append(om_cpu_feature_prop)
+            self.host_epa = host_epa
+            '''
+        # We might have to re write this piece of code, there are mismatch in 
+        # enum names. Its all capital in RIFT yang and TOSCA
+        if self.VSWITCH_EPA in vdu_dic:
+            vswitch_epa = vdu_dic.pop(self.VSWITCH_EPA)
+            self.vswitch_epa = vswitch_epa
+        if self.HYPERVISOR_EPA in vdu_dic:
+            hypervisor_epa = vdu_dic.pop(self.HYPERVISOR_EPA)
+            hypervisor_epa_prop = {}
+
+            if 'type_yang' in hypervisor_epa:
+                hypervisor_epa_prop['type'] = hypervisor_epa['type_yang']
+            if 'version' in hypervisor_epa:
+                hypervisor_epa_prop['version'] = str(hypervisor_epa['version'])
+            else:
+                hypervisor_epa_prop['version'] = '1'
+            self.hypervisor_epa = hypervisor_epa_prop
+
+        if self.GUEST_EPA in vdu_dic:
+            guest_epa = vdu_dic[self.GUEST_EPA]
+            guest_epa_prop = {}
+
+            # This is a hack. I have to rewrite this. I have got this quick to working
+            # 'ANY' check should be added in riftio common file. Its not working for some reason. Will fix.
+
+            if 'cpu_pinning_policy' in guest_epa and guest_epa['cpu_pinning_policy'] != 'ANY':
+                self.pinning_epa_prop['cpu_affinity'] = guest_epa['cpu_pinning_policy'].lower()
+            if 'cpu_thread_pinning_policy' in guest_epa:
+                 self.pinning_epa_prop['thread_allocation'] = guest_epa['cpu_thread_pinning_policy'].lower()
+            if 'mempage_size'  in guest_epa:
+                self.mem_page_guest_epa = self.TOSCA_MEM_SIZE[guest_epa['mempage_size']]
+
+            if 'numa_node_policy' in guest_epa:
+                num_node_policy = guest_epa['numa_node_policy']
+                if 'node_cnt' in num_node_policy:
+                    guest_epa_prop['node_cnt'] = num_node_policy['node_cnt']
+                if 'mem_policy' in num_node_policy:
+                    guest_epa_prop['mem_policy'] = num_node_policy['mem_policy']
+                if 'node' in num_node_policy:
+                    nodes = []
+                    for node in num_node_policy['node']:
+                        node_prop = {}
+                        if 'id' in node:
+                            node_prop['id'] = node['id']
+                        if 'vcpu' in node:
+                            vc =[]
+                            for vcp in node['vcpu']:
+                                vc.append(vcp['id'])
+
+                            node_prop['vcpus'] = vc
+                        if 'memory_mb' in  node:
+                            node_prop['mem_size'] = "{} MB".format(node['memory_mb'])
+                        # om_numa_type generation
+
+                        if 'num_cores' in node:
+                            node_prop['om_numa_type'] = 'num_cores'
+                            node_prop['num_cores'] = node['num_cores']
+                        elif 'paired_threads' in node:
+                            node_prop['om_numa_type'] = 'paired-threads'
+                            node_prop['paired_threads'] = node['paired_threads']
+                        elif 'threads]' in node:
+                            node_prop['om_numa_type'] = 'threads]'
+                            node_prop['num_thread]'] = node['threads]']
+
+                        nodes.append(node_prop)
+                    guest_epa_prop['node'] = nodes
+
+            self.guest_epa = guest_epa_prop
+
         self.remove_ignored_fields(vdu_dic)
+
+        for cp in self.ext_cp:
+            cp_name = cp[self.NAME].replace('/', '_')
+            self.conn_point_to_conection_node[cp[self.NAME]] = cp_name
+
+
         if len(vdu_dic):
             self.log.warn(_("{0}, Did not process the following in "
                             "VDU: {1}").
@@ -151,6 +276,7 @@ class YangVdu(ToscaResource):
         # Create a unique name incase multiple VNFs use same
         # name for the vdu
         return "{}_{}".format(vnf_name, self.name)
+        #return self.name
 
     def generate_tosca_type(self, tosca):
         self.log.debug(_("{0} Generate tosa types").
@@ -165,13 +291,6 @@ class YangVdu(ToscaResource):
                 self.IMAGE_CHKSUM:
                 {self.TYPE: self.STRING,
                  self.REQUIRED: self.NO},
-            }
-
-        if self.T_CLOUD_INIT not in tosca[self.ARTIFACT_TYPES]:
-            tosca[self.ARTIFACT_TYPES][self.T_CLOUD_INIT] = {
-                self.DERIVED_FROM: 'tosca.artifacts.Deployment',
-                self.FILE:
-                {self.TYPE: self.STRING,}
             }
 
         if self.T_VDU1 not in tosca[self.NODE_TYPES]:
@@ -225,14 +344,35 @@ class YangVdu(ToscaResource):
 
         node = {}
         node[self.TYPE] = self.T_VDU1
+        node[self.CAPABILITIES] = {}
 
-        if self.HOST in self.props:
-            node[self.CAPABILITIES] = {
-                self.HOST: {self.PROPERTIES: self.props.pop(self.HOST)}
-            }
+        if self.NFV_COMPUTE in self.props:
+            node[self.CAPABILITIES][self.NFV_COMPUTE] = {self.PROPERTIES: self.props.pop(self.NFV_COMPUTE)}
         else:
             self.log.warn(_("{0}, Does not have host requirements defined").
                           format(self))
+        if self.host_epa:
+            node[self.CAPABILITIES][self.HOST_EPA] = {
+                self.PROPERTIES: self.host_epa
+            }
+        if self.vswitch_epa:
+            node[self.CAPABILITIES][self.VSWITCH_EPA] = {
+                self.PROPERTIES: self.vswitch_epa
+            }
+        if self.hypervisor_epa:
+            node[self.CAPABILITIES][self.HYPERVISOR_EPA] = {
+                self.PROPERTIES: self.hypervisor_epa
+            }
+        if self.guest_epa:
+            node[self.CAPABILITIES]['numa_extension'] = {
+                self.PROPERTIES: self.guest_epa
+            }
+        if len(self.pinning_epa_prop) > 0:
+            if node[self.CAPABILITIES][self.NFV_COMPUTE] and node[self.CAPABILITIES][self.NFV_COMPUTE][self.PROPERTIES]:
+                node[self.CAPABILITIES][self.NFV_COMPUTE][self.PROPERTIES]['cpu_allocation'] = self.pinning_epa_prop
+        if self.mem_page_guest_epa:
+            if node[self.CAPABILITIES][self.NFV_COMPUTE] and node[self.CAPABILITIES][self.NFV_COMPUTE][self.PROPERTIES]:
+                node[self.CAPABILITIES][self.NFV_COMPUTE][self.PROPERTIES]['mem_page_size'] = self.mem_page_guest_epa
 
         if self.IMAGE in self.props:
             img_name = "{}_{}_vm_image".format(vnf_name, self.name)
@@ -248,23 +388,22 @@ class YangVdu(ToscaResource):
             node[self.INTERFACES] = {'Standard': {
                 'create': img_name
             }}
-
         # Add cloud init script if available
         if self.CLOUD_INIT_FILE in self.props:
-            ci_name = "{}_{}_cloud_init".format(vnf_name, self.name)
-            ci_file = self.props.pop(self.CLOUD_INIT_FILE)
-            ci_path = "../{}/{}".format(self.CLOUD_INIT_DIR,
-                                        ci_file)
-            self.cloud_init_file = ci_file
-            if self.ARTIFACTS not in node:
-                node[self.ARTIFACTS] = {}
-            node[self.ARTIFACTS][ci_name] = {
-                self.FILE: ci_path,
-                self.TYPE: self.T_CLOUD_INIT,
-            }
-            if 'Standard' not in node[self.INTERFACES]:
-                node[self.INTERFACES]['Standard'] = {}
-            node[self.INTERFACES]['Standard']['configure'] = ci_name
+            cloud_name = "{}_{}_cloud_init".format(vnf_name, self.name)
+            self.cloud_init_file = self.props[self.CLOUD_INIT_FILE]
+            cloud_init_file = "../{}/{}".format(self.CLOUD_INIT_DIR, self.props.pop(self.CLOUD_INIT_FILE))
+            if self.ARTIFACTS in node:
+               node[self.ARTIFACTS][cloud_name] = {
+               self.FILE: cloud_init_file,
+               self.TYPE: self.T_ARTF_CLOUD_INIT,
+               }
+            else:
+                node[self.ARTIFACTS] = {
+                cloud_name: {
+                self.FILE: cloud_init_file,
+                self.TYPE: self.T_ARTF_CLOUD_INIT,
+                }}
 
         # Remove
         self.props.pop(self.ID)
@@ -289,6 +428,7 @@ class YangVdu(ToscaResource):
 
             cpt[self.PROPERTIES] = cp
             cp_name = cp[self.NAME].replace('/', '_')
+            self.cp_name_to_cp_node[cp[self.NAME]] = cp_name
 
             self.log.debug(_("{0}, CP node {1}: {2}").
                            format(self, cp_name, cpt))
@@ -316,7 +456,5 @@ class YangVdu(ToscaResource):
             })
 
         self.log.debug(_("Supporting files for {} : {}").format(self, files))
-        if not len(files):
-            shutil.rmtree(out_dir)
 
         return files

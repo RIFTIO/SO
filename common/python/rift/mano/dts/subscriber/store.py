@@ -38,12 +38,7 @@ class SubscriberStore(core.SubscriberDtsHandler):
 
         params = (self.log, self.dts, self.loop)
 
-        self._nsr_sub = ns_subscriber.NsrCatalogSubscriber(*params, callback=self.on_nsr_change)
-        self._nsrs = {}
         self._nsd_sub = ns_subscriber.NsdCatalogSubscriber(*params)
-
-        self._vnfr_sub = vnf_subscriber.VnfrCatalogSubscriber(*params, callback=self.on_vnfr_change)
-        self._vnfrs = {}
         self._vnfd_sub = vnf_subscriber.VnfdCatalogSubscriber(*params)
 
     @property
@@ -54,14 +49,6 @@ class SubscriberStore(core.SubscriberDtsHandler):
     def nsd(self):
         return list(self._nsd_sub.reg.get_xact_elements())
 
-    @property
-    def vnfr(self):
-        return list(self._vnfrs.values())
-
-    @property
-    def nsr(self):
-        return list(self._nsrs.values())
-
     def _unwrap(self, values, id_name):
         try:
             return values[0]
@@ -69,17 +56,9 @@ class SubscriberStore(core.SubscriberDtsHandler):
             self.log.exception("Unable to find the object with the given "
                 "ID {}".format(id_name))
 
-    def get_nsr(self, nsr_id):
-        values = [nsr for nsr in self.nsr if nsr.ns_instance_config_ref == nsr_id]
-        return self._unwrap(values, nsr_id)
-
     def get_nsd(self, nsd_id):
         values = [nsd for nsd in self.nsd if nsd.id == nsd_id]
         return self._unwrap(values, nsd_id)
-
-    def get_vnfr(self, vnfr_id):
-        values = [vnfr for vnfr in self.vnfr if vnfr.id == vnfr_id]
-        return self._unwrap(values, vnfr_id)
 
     def get_vnfd(self, vnfd_id):
         values = [vnfd for vnfd in self.vnfd if vnfd.id == vnfd_id]
@@ -89,34 +68,3 @@ class SubscriberStore(core.SubscriberDtsHandler):
     def register(self):
         yield from self._vnfd_sub.register()
         yield from self._nsd_sub.register()
-        yield from self._vnfr_sub.register()
-        yield from self._nsr_sub.register()
-
-    @asyncio.coroutine
-    def refresh_store(self, subsriber, store):
-        itr = yield from self.dts.query_read(subsriber.get_xpath())
-
-        new_data = {}
-        for res in itr:
-            result = yield from res
-            result = result.result
-            new_data[getattr(result, subsriber.key_name())] = result
-
-        store.clear()
-        store.update(new_data)
-
-    def on_nsr_change(self, msg, action):
-        if action == rwdts.QueryAction.DELETE:
-            if msg.ns_instance_config_ref in self._nsrs:
-                del self._nsrs[msg.ns_instance_config_ref]
-            return
-
-        self.loop.create_task(self.refresh_store(self._nsr_sub, self._nsrs))
-
-    def on_vnfr_change(self, msg, action):
-        if action == rwdts.QueryAction.DELETE:
-            if msg.id in self._vnfrs:
-                del self._vnfrs[msg.id]
-            return
-
-        self.loop.create_task(self.refresh_store(self._vnfr_sub, self._vnfrs))

@@ -27,7 +27,7 @@ from gi.repository import (
     RwSdn, # Vala package
     RwTypes,
     RwTopologyYang as RwTl,
-    RwsdnYang
+    RwsdnalYang
     )
 
 import rw_status
@@ -144,7 +144,7 @@ class MockPlugin(GObject.Object, RwSdn.Topology):
                 )
             )
 
-        account = RwsdnYang.SDNAccount()
+        account = RwsdnalYang.SDNAccount()
         account.name = 'mock'
         account.account_type = 'mock'
         account.mock.username = 'rift'

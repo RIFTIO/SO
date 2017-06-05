@@ -32,7 +32,7 @@ from gi.repository import (
     GObject,
     RwSdn, # Vala package
     RwTypes,
-    RwsdnYang,
+    RwsdnalYang,
     #IetfL2TopologyYang as l2Tl,
     RwTopologyYang as RwTl,
     )
@@ -91,7 +91,7 @@ class SdnSimPlugin(GObject.Object, RwSdn.Topology):
         Returns:
             Validation Code and Details String
         """
-        status = RwsdnYang.SdnConnectionStatus()
+        status = RwsdnalYang.SdnConnectionStatus()
         print("SDN Successfully connected")
         status.status = "success"
         status.details = "Connection was successful"

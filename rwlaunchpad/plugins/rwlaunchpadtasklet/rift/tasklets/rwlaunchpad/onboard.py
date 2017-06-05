@@ -51,7 +51,7 @@ class DescriptorOnboarder(object):
             }
 
     HEADERS = {"content-type": "application/vnd.yang.data+json"}
-    TIMEOUT_SECS = 5
+    TIMEOUT_SECS = 60
     AUTH = ('admin', 'admin')
 
     def __init__(self, log, host="127.0.0.1", port=8008, use_ssl=False, ssl_cert=None, ssl_key=None):
@@ -161,4 +161,58 @@ class DescriptorOnboarder(object):
             msg = "Timed out connecting to restconf endpoint: %s", str(e)
             self._log.error(msg)
             raise OnboardError(msg) from e
+
+    def get_updated_descriptor(self, descriptor_msg, auth=None): 
+        """ Get updated descriptor file 
+
+        Arguments:
+            descriptor_msg - A descriptor proto-gi msg
+            auth - the authorization header
+
+        Raises:
+            OnboardError - The descriptor retrieval failed
+        """
+
+        if type(descriptor_msg) not in DescriptorOnboarder.DESC_SERIALIZER_MAP:
+            raise TypeError("Invalid descriptor message type")
+
+        endpoint = DescriptorOnboarder.DESC_ENDPOINT_MAP[type(descriptor_msg)]
+
+        url = "{}://{}:{}/api/config/{}/{}".format(
+                "https" if self._use_ssl else "http",
+                self._host,
+                self.port,
+                endpoint,
+                descriptor_msg.id
+                )
+
+        hdrs = self._get_headers(auth)
+        hdrs.update({'Accept': 'application/json'})
+        request_args = dict(
+            url=url,
+            headers=hdrs,
+            auth=DescriptorOnboarder.AUTH,
+            verify=False,
+            cert=(self._ssl_cert, self._ssl_key) if self._use_ssl else None,
+            timeout=self.timeout,
+        )
+
+        response = None
+        try:
+            response = requests.get(**request_args)
+            response.raise_for_status()
+        except requests.exceptions.ConnectionError as e:
+            msg = "Could not connect to restconf endpoint: %s" % str(e)
+            self._log.error(msg)
+            raise OnboardError(msg) from e
+        except requests.exceptions.HTTPError as e:
+            msg = "GET request to %s error: %s" % (request_args["url"], response.text)
+            self._log.error(msg)
+            raise OnboardError(msg) from e
+        except requests.exceptions.Timeout as e:
+            msg = "Timed out connecting to restconf endpoint: %s", str(e)
+            self._log.error(msg)
+            raise OnboardError(msg) from e
+
+        return response.json()
 

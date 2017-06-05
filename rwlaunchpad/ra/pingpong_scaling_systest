@@ -37,6 +37,9 @@ test_cmd=""
 # Parse commonline argument and set test variables
 parse_args "${@}"
 
+# We want to run in expanded mode
+collapsed_mode=false
+
 # Construct the test command based on the test variables
 construct_test_command
 

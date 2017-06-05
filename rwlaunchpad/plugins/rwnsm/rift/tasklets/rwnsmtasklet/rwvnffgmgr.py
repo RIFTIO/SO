@@ -19,7 +19,7 @@ import asyncio
 
 from gi.repository import (
     RwDts as rwdts,
-    RwsdnYang,
+    RwsdnalYang,
     RwTypes,
     ProtobufC,
 )
@@ -61,12 +61,13 @@ class VnffgrUpdateFailed(Exception):
 
 class VnffgMgr(object):
     """ Implements the interface to backend plugins to fetch topology """
-    def __init__(self, dts, log, log_hdl, loop):
+    def __init__(self, dts, log, log_hdl, loop,cloud_account_handler):
         self._account = {}
         self._dts = dts
         self._log = log
         self._log_hdl = log_hdl
         self._loop = loop
+        self._cloud_account_handler = cloud_account_handler
         self._sdn = {}
         self._sdn_handler = SDNAccountDtsHandler(self._dts,self._log,self)
         self._vnffgr_list = {}
@@ -79,7 +80,7 @@ class VnffgMgr(object):
         if (account.name in self._account):
             self._log.error("SDN Account is already set")
         else:
-            sdn_account           = RwsdnYang.SDNAccount()
+            sdn_account           = RwsdnalYang.SDNAccount()
             sdn_account.from_dict(account.as_dict())
             sdn_account.name = account.name
             self._account[account.name] = sdn_account
@@ -102,7 +103,7 @@ class VnffgMgr(object):
 
     def get_sdn_account(self, name):
         """
-        Creates an object for class RwsdnYang.SdnAccount()
+        Creates an object for class RwsdnalYang.SdnAccount()
         """
         if (name in self._account):
             return self._account[name]
@@ -137,7 +138,10 @@ class VnffgMgr(object):
             self._log.error("VNFFGR with id %s not present in VNFFGMgr", vnffgr_id)
             msg = "VNFFGR with id {} not present in VNFFGMgr".format(vnffgr_id)
             raise VnffgrDoesNotExist(msg)
-        self.update_vnffgrs(self._vnffgr_list[vnffgr_id].sdn_account)
+        sdn_acct = self.get_sdn_account(self._vnffgr_list[vnffgr_id].sdn_account)
+        self._log.debug("SDN account received during vnffg update is %s",sdn_acct)
+        if sdn_acct.account_type != 'openstack':
+            self.update_vnffgrs(self._vnffgr_list[vnffgr_id].sdn_account)
         vnffgr = self._vnffgr_list[vnffgr_id].deep_copy()
         self._log.debug("VNFFGR for id %s is %s",vnffgr_id,vnffgr)
         return vnffgr
@@ -172,7 +176,7 @@ class VnffgMgr(object):
         sdn_plugin = self.get_sdn_plugin(sdn_acct_name)
 
         for rsp in vnffgr.rsp:
-            vnffg = RwsdnYang.VNFFGChain()
+            vnffg = RwsdnalYang.VNFFGChain()
             vnffg.name = rsp.name
             vnffg.classifier_name = rsp.classifier_name
 
@@ -212,7 +216,7 @@ class VnffgMgr(object):
                 vnffgr.operational_status = 'failed'
                 msg = "Instantiation of VNFFGR with id {} failed".format(vnffgr.id)
                 raise VnffgrCreationFailed(msg)
-
+            rsp.rsp_id = rs
             self._log.info("VNFFG chain created successfully for rsp with id %s",rsp.id)
 
 
@@ -227,12 +231,15 @@ class VnffgMgr(object):
             vnffgr_cl = [_classifier  for _classifier in vnffgr.classifier if classifier.id == _classifier.id]
             if len(vnffgr_cl) > 0:
                 cl_rsp_name = vnffgr_cl[0].rsp_name
+                rsp_ids =  [rsp.rsp_id for rsp in vnffgr.rsp if rsp.name == cl_rsp_name]
+                self._log.debug("Received RSP id for Cl is %s",rsp_ids)
             else:
                 self._log.error("No RSP wiht name %s found; Skipping classifier %s creation",classifier.rsp_id_ref,classifier.name)
                 continue
-            vnffgcl = RwsdnYang.VNFFGClassifier()
+            vnffgcl = RwsdnalYang.VNFFGClassifier()
             vnffgcl.name = classifier.name
             vnffgcl.rsp_name = cl_rsp_name
+            vnffgcl.rsp_id = rsp_ids[0]
             vnffgcl.port_id = vnffgr_cl[0].port_id
             vnffgcl.vm_id = vnffgr_cl[0].vm_id
             # Get the symmetric classifier endpoint ip and set it in nsh ctx1
@@ -248,9 +255,11 @@ class VnffgMgr(object):
                 #acl.name = vnffgcl.name + str(index)
                 acl.name = match_rule.id
                 acl.ip_proto  = match_rule.ip_proto
-                acl.source_ip_address = match_rule.source_ip_address + '/32'
+                if match_rule.source_ip_address:
+                    acl.source_ip_address = match_rule.source_ip_address + '/32'
                 acl.source_port = match_rule.source_port
-                acl.destination_ip_address = match_rule.destination_ip_address + '/32'
+                if match_rule.destination_ip_address:
+                    acl.destination_ip_address = match_rule.destination_ip_address + '/32'
                 acl.destination_port = match_rule.destination_port
 
             self._log.debug(" Creating VNFFG Classifier Classifier %s for RSP: %s",vnffgcl.name,vnffgcl.rsp_name)
@@ -260,9 +269,14 @@ class VnffgMgr(object):
                 #vnffgr.operational_status = 'failed'
                 #msg = "Instantiation of VNFFGR with id {} failed".format(vnffgr.id)
                 #raise VnffgrCreationFailed(msg)
+            else:
+                vnffgr_cl[0].classifier_id = rs
 
         vnffgr.operational_status = 'running'
-        self.update_vnffgrs(vnffgr.sdn_account)
+        sdn_acct = self.get_sdn_account(vnffgr.sdn_account)
+        self._log.debug("SDN account received during vnffg update is %s",sdn_acct)
+        if sdn_acct.account_type != 'openstack':
+            self.update_vnffgrs(vnffgr.sdn_account)
         return vnffgr
 
     def update_vnffgrs(self,sdn_acct_name):
@@ -318,8 +332,17 @@ class VnffgMgr(object):
             sdn_account = [sdn_account.name for _,sdn_account in self._account.items()]
             sdn_account_name = sdn_account[0]
         sdn_plugin = self.get_sdn_plugin(sdn_account_name)
-        sdn_plugin.terminate_vnffg_chain(self._account[sdn_account_name],vnffgr_id)
-        sdn_plugin.terminate_vnffg_classifier(self._account[sdn_account_name],vnffgr_id)
+        vnffgr = self._vnffgr_list[vnffgr_id]
+        sdn_acct = self.get_sdn_account(vnffgr.sdn_account)
+        self._log.debug("SDN account received during vnffg update is %s",sdn_acct)
+        if sdn_acct.account_type == 'openstack':
+            for rsp in vnffgr.rsp:
+                sdn_plugin.terminate_vnffg_chain(self._account[sdn_account_name],rsp.rsp_id)
+            for classifier in vnffgr.classifier:
+                sdn_plugin.terminate_vnffg_classifier(self._account[sdn_account_name],classifier.classifier_id)
+        else:
+            sdn_plugin.terminate_vnffg_chain(self._account[sdn_account_name],vnffgr_id)
+            sdn_plugin.terminate_vnffg_classifier(self._account[sdn_account_name],vnffgr_id)
         del self._vnffgr_list[vnffgr_id]
 
 class SDNAccountDtsHandler(object):

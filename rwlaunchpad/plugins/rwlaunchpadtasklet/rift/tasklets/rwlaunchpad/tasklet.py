@@ -1,5 +1,5 @@
 
-# 
+#
 #   Copyright 2016 RIFT.IO Inc
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -371,7 +371,8 @@ class LaunchpadTasklet(rift.tasklets.Tasklet):
     @asyncio.coroutine
     def init(self):
         io_loop = rift.tasklets.tornado.TaskletAsyncIOLoop(asyncio_loop=self.loop)
-        self.app = uploader.UploaderApplication(self)
+        self.app = uploader.UploaderApplication.from_tasklet(self)
+        yield from self.app.register()
 
         manifest = self.tasklet_info.get_pb_manifest()
         ssl_cert = manifest.bootstrap_phase.rwsecurity.cert

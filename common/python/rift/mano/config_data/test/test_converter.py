@@ -222,14 +222,14 @@ def test_vnfd_config_prim(vnfd, convertor):
             ],
         })
 
-    vnf_config.service_primitive.add().from_dict({
+    vnf_config.config_primitive.add().from_dict({
         "name": "PE1",
         "parameter": [
                 {"name": "Foo", "default_value": "Bar"}
         ]
         })
 
-    expected_yaml = """service_primitive:
+    expected_yaml = """config_primitive:
   PE1:
     parameter:
       Foo: Bar
@@ -267,12 +267,12 @@ def test_vnfd_merge(vnfd, convertor):
             "parameter": [{"name": "cidr"}],
         })
 
-    vnf_config.service_primitive.add().from_dict({
+    vnf_config.config_primitive.add().from_dict({
         "name": "PE1",
         "parameter": [{"name": "Foo",}]
         })
 
-    ip_yaml = """service_primitive:
+    ip_yaml = """config_primitive:
   PE1:
     parameter:
       Foo: Bar
@@ -311,7 +311,7 @@ initial_config_primitive:
             ],
         })
 
-    vnf_config.service_primitive.add().from_dict({
+    vnf_config.config_primitive.add().from_dict({
         "name": "PE1",
         "parameter": [
                 {"name": "Foo", "default_value": "Bar"}

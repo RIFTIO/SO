@@ -33,7 +33,17 @@ class YangVnfd(ToscaResource):
 
     OTHER_KEYS = (MGMT_INTF, HTTP_EP, MON_PARAM) = \
                  ('mgmt_interface', 'http_endpoint', 'monitoring_param')
+    vnf_prefix_type = 'tosca.nodes.nfv.riftio.'
 
+    VALUE_TYPE_CONVERSION_MAP =  {
+    'INTEGER' : 'integer',
+    'INT' : 'integer',
+    'STRING' : 'string',
+    'DECIMAL' : 'float',
+    'INTEGER': 'INTEGER',
+    'DECIMAL' : 'float'
+
+    }
 
     def __init__(self,
                  log,
@@ -49,6 +59,13 @@ class YangVnfd(ToscaResource):
         self.mgmt_intf = {}
         self.mon_param = []
         self.http_ep = []
+        self.vnf_configuration = None
+        self.monitor_param = {}
+        self.monitor_param_1 = {}
+        self.vnf_type = None
+        self.tosca = None
+        self.script_files = []
+        self.service_function_type = None
 
     def handle_yang(self):
         self.log.debug(_("Process VNFD desc {0}: {1}").format(self.name,
@@ -56,28 +73,45 @@ class YangVnfd(ToscaResource):
 
         def process_vnf_config(conf):
             vnf_conf = {}
-            if self.CONFIG_ATTR in conf:
-                for key, value in conf.pop(self.CONFIG_ATTR).items():
-                    vnf_conf[key] = value
+            config = {}
 
-            if self.CONFIG_TMPL in conf:
-                vnf_conf[self.CONFIG_TMPL] = conf.pop(self.CONFIG_TMPL)
+            init_primitive_config = {}
+            if 'config_template' in conf:
+                config['config_template'] = conf['config_template']
+            if 'config_attributes' in conf:
+                if 'config_delay' in conf['config_attributes']:
+                    config['config_delay'] = conf['config_attributes']['config_delay']
+                if 'config_priority' in conf['config_attributes']:
+                    config['config_priority'] = conf['config_attributes']['config_priority']
+            if 'config_type' in conf:
+                config['config_type'] = conf['config_type']
+            if 'script' in conf:
+                config['config_details'] = conf['script']
+            for conf_type in self.CONFIG_TYPES:
+                if conf_type in conf:
+                    config['config_type'] = conf_type
+            if len(config) > 0:
+                vnf_conf['config'] = config
 
-            def copy_config_details(conf_type, conf_details):
-                vnf_conf[self.CONFIG_TYPE] = conf_type
-                vnf_conf[self.CONFIG_DETAILS] = conf_details
+            if 'initial_config_primitive' in conf:
+                init_config_prims = []
+                for init_conf_prim in conf['initial_config_primitive']:
+                    init_conf = {}
+                    if 'name' in init_conf_prim:
+                        init_conf['name'] = init_conf_prim['name']
+                    if 'seq' in init_conf_prim:
+                        init_conf['seq'] = init_conf_prim['seq']
+                    if 'user_defined_script' in init_conf_prim:
+                        init_conf['user_defined_script'] = init_conf_prim['user_defined_script']
+                        self.script_files.append(init_conf_prim['user_defined_script'])
+                    if 'parameter' in init_conf_prim:
+                        init_conf['parameter'] = []
+                        for parameter in init_conf_prim['parameter']:
+                            init_conf['parameter'].append({parameter['name']: parameter['value']})
+                    init_config_prims.append(init_conf)
+                vnf_conf['initial_config'] = init_config_prims
 
-            for key in self.CONFIG_TYPES:
-                if key in conf:
-                    copy_config_details(key, conf.pop(key))
-                    break
-
-            if len(conf):
-                self.log.warn(_("{0}, Did not process all in VNF "
-                                "configuration {1}").
-                              format(self, conf))
-            self.log.debug(_("{0}, vnf config: {1}").format(self, vnf_conf))
-            self.props[self.VNF_CONFIG] = vnf_conf
+            self.vnf_configuration = vnf_conf
 
         def process_mgmt_intf(intf):
             if len(self.mgmt_intf) > 0:
@@ -117,7 +151,8 @@ class YangVnfd(ToscaResource):
                 http_ep = {'protocol': 'http'}  # Required for TOSCA
                 http_ep[self.PATH] = ep.pop(self.PATH)
                 http_ep[self.PORT] = ep.pop(self.PORT)
-                http_ep[self.POLL_INTVL] = ep.pop(self.POLL_INTVL_SECS)
+                if self.POLL_INTVL in http_ep:
+                    http_ep[self.POLL_INTVL] = ep.pop(self.POLL_INTVL_SECS)
                 if len(ep):
                     self.log.warn(_("{0}, Did not process the following for "
                                     "http ep {1}").format(self, ep))
@@ -130,16 +165,37 @@ class YangVnfd(ToscaResource):
                 fields = [self.NAME, self.ID, 'value_type', 'units', 'group_tag',
                           'json_query_method', 'http_endpoint_ref', 'widget_type',
                           self.DESC]
-                for key in fields:
-                    if key in param:
-                        monp[key] = param.pop(key)
+                mon_param = {}
+                ui_param = {}
+                if 'name' in param:
+                    mon_param['name'] = param['name']
+                if 'description' in param:
+                    mon_param['description'] = param['description']
+                if 'polling_interval' in param:
+                    mon_param['polling_interval'] = param['polling_interval']
+                if 'http_endpoint_ref' in param:
+                    mon_param['url_path'] = param['http_endpoint_ref']
+                if 'json_query_method' in param:
+                    mon_param['json_query_method'] = param['json_query_method'].lower()
+                #if 'value_type' in param:
+                #    mon_param['constraints'] = {}
+                #    mon_param['constraints']['value_type'] = YangVnfd.VALUE_TYPE_CONVERSION_MAP[param['value_type'].upper()]
+                if 'group_tag' in param:
+                    ui_param['group_tag'] = param['group_tag']
+                if 'widget_type' in param:
+                    ui_param['widget_type'] = param['widget_type'].lower()
+                if 'units'  in param:
+                    ui_param['units'] = param['units']
+                mon_param['ui_data'] = ui_param
+
+                self.mon_param.append(mon_param)
 
                 if len(param):
                     self.log.warn(_("{0}, Did not process the following for "
                                     "monitporing-param {1}").
                                   format(self, param))
                     self.log.debug(_("{0}, Monitoring param: {1}").format(self, monp))
-                self.mon_param.append(monp)
+                #self.mon_param.append(monp)
 
         def process_cp(cps):
             for cp_dic in cps:
@@ -154,17 +210,20 @@ class YangVnfd(ToscaResource):
                                     "connection-point {1}: {2}").
                                   format(self, name, cp_dic))
 
+        def process_service_type(dic):
+            self.service_function_type = dic['service_function_type']
+
         ENDPOINTS_MAP = {
             self.MGMT_INTF: process_mgmt_intf,
             self.HTTP_EP:  process_http_ep,
             self.MON_PARAM: process_mon_param,
             'connection_point': process_cp
         }
-
         dic = deepcopy(self.yang)
         try:
             for key in self.REQUIRED_FIELDS:
-                self.props[key] = dic.pop(key)
+                if key in dic:
+                    self.props[key] = dic.pop(key)
 
             self.id = self.props[self.ID]
 
@@ -176,13 +235,14 @@ class YangVnfd(ToscaResource):
                                   self.VDU, vdu_dic)
                     vdu.process_vdu()
                     self.vdus.append(vdu)
-
             for key in ENDPOINTS_MAP.keys():
                 if key in dic:
                     ENDPOINTS_MAP[key](dic.pop(key))
-
             if self.VNF_CONFIG in dic:
                 process_vnf_config(dic.pop(self.VNF_CONFIG))
+
+            if 'service_function_type' in dic:
+                process_service_type(dic)
 
             self.remove_ignored_fields(dic)
             if len(dic):
@@ -202,135 +262,56 @@ class YangVnfd(ToscaResource):
             if cp:
                 vdu.set_vld(cp_name, vld_name)
                 break
+    def _generate_vnf_type(self, tosca):
+        name = self.name.replace("_","")
+        name = name.split('_', 1)[0]
+        self.vnf_type = "{0}{1}{2}".format(self.vnf_prefix_type, name, 'VNF')
+        if self.NODE_TYPES not in tosca and self.vnf_type:
+            tosca[self.NODE_TYPES] = {}
+            tosca[self.NODE_TYPES][self.vnf_type] = {
+            self.DERIVED_FROM : self.T_VNF1
+            }
 
-    def generate_tosca_type(self, tosca):
-        self.log.debug(_("{0} Generate tosa types").
-                       format(self))
+    def generate_tosca_template(self, tosca):
+        self.tosca = tosca
+        tosca['tosca_definitions_version'] = 'tosca_simple_profile_for_nfv_1_0'
+        tosca[self.IMPORT] = []
+        tosca[self.IMPORT].append("riftiotypes.yaml")
+        tosca[self.DESC] = self.props[self.DESC]
+        tosca[self.METADATA] = {
+            'ID': self.name,
+            self.VENDOR: self.props[self.VENDOR],
+            self.VERSION: self.props[self.VERSION],
+        }
+        if self.name:
+            self._generate_vnf_type(tosca);
+
+
+        tosca[self.TOPOLOGY_TMPL] = {}
+        tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL] = {}
+        tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING] = {}
+        tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING]['node_type'] = self.vnf_type
 
         for vdu in self.vdus:
-            tosca = vdu.generate_tosca_type(tosca)
-
-        # Add data_types
-        if self.T_VNF_CONFIG not in tosca[self.DATA_TYPES]:
-            tosca[self.DATA_TYPES][self.T_VNF_CONFIG] = {
-                self.PROPERTIES:
-                {self.CONFIG_TYPE:
-                 {self.TYPE: self.STRING},
-                 'config_delay':
-                 {self.TYPE: self.INTEGER,
-                  self.DEFAULT: 0,
-                  self.REQUIRED: self.NO,
-                  self.CONSTRAINTS:
-                  [{'greater_or_equal': 0}]},
-                 'config_priority':
-                 {self.TYPE: self.INTEGER,
-                  self.CONSTRAINTS:
-                  [{'greater_than': 0}]},
-                 self.CONFIG_DETAILS:
-                 {self.TYPE: self.MAP},
-                 self.CONFIG_TMPL:
-                 {self.TYPE: self.STRING,
-                  self.REQUIRED: self.NO},
-                }
-            }
-
-        # Add capability types
-        if self.CAPABILITY_TYPES not in tosca:
-            tosca[self.CAPABILITY_TYPES] = {}
-        if self.T_HTTP_EP not in tosca[self.CAPABILITY_TYPES]:
-            tosca[self.CAPABILITY_TYPES][self.T_HTTP_EP] = {
-                self.DERIVED_FROM: 'tosca.capabilities.Endpoint',
-                self.PROPERTIES: {
-                    'polling_interval':
-                    {self.TYPE: self.INTEGER},
-                    'path':
-                    {self.TYPE: self.STRING},
-                },
-            }
-
-        if self.T_MGMT_INTF not in tosca[self.CAPABILITY_TYPES]:
-            tosca[self.CAPABILITY_TYPES][self.T_MGMT_INTF] = {
-                self.DERIVED_FROM: 'tosca.capabilities.Endpoint',
-                self.PROPERTIES: {
-                    self.DASHBOARD_PARAMS:
-                    {self.TYPE: self.MAP},
-                    self.VDU:
-                    {self.TYPE: self.STRING},
-                },
-            }
-
-        if self.T_MON_PARAM not in tosca[self.CAPABILITY_TYPES]:
-            tosca[self.CAPABILITY_TYPES][self.T_MON_PARAM] = {
-                self.DERIVED_FROM: 'tosca.capabilities.nfv.Metric',
-                self.PROPERTIES: {
-                    'id':
-                    {self.TYPE: self.INTEGER},
-                    'name':
-                    {self.TYPE: self.STRING},
-                    'value_type':
-                    {self.TYPE: self.STRING,
-                     self.DEFAULT: 'INT'},
-                    'group_tag':
-                    {self.TYPE: self.STRING,
-                     self.DEFAULT: 'Group1'},
-                    'units':
-                    {self.TYPE: self.STRING},
-                    'description':
-                    {self.TYPE: self.STRING},
-                    'json_query_method':
-                    {self.TYPE: self.STRING,
-                     self.DEFAULT: 'NAMEKEY'},
-                    'http_endpoint_ref':
-                    {self.TYPE: self.STRING},
-                    'widget_type':
-                    {self.TYPE: self.STRING,
-                     self.DEFAULT: 'COUNTER'},
-                }
-            }
-
-        # Define the VNF type
-        if self.T_VNF1 not in tosca[self.NODE_TYPES]:
-            tosca[self.NODE_TYPES][self.T_VNF1] = {
-                self.DERIVED_FROM: 'tosca.nodes.nfv.VNF',
-                self.PROPERTIES: {
-                    'vnf_configuration':
-                    {self.TYPE: self.T_VNF_CONFIG},
-                    'port':
-                    {self.TYPE: self.INTEGER,
-                     self.CONSTRAINTS:
-                     [{'in_range': '[1, 65535]'}]},
-                    self.START_BY_DFLT:
-                    {self.TYPE: self.BOOL,
-                     self.DEFAULT: self.TRUE},
-                },
-                self.CAPABILITIES: {
-                    'mgmt_interface':
-                    {self.TYPE: self.T_MGMT_INTF},
-                    'http_endpoint':
-                    {self.TYPE: self.T_HTTP_EP},
-                    'monitoring_param_0':
-                    {self.TYPE: self.T_MON_PARAM},
-                    'monitoring_param_1':
-                    {self.TYPE: self.T_MON_PARAM},
-                },
-                self.REQUIREMENTS: [
-                    {'vdus':
-                     {self.TYPE: 'tosca.capabilities.nfv.VirtualLinkable',
-                      self.RELATIONSHIP:
-                      'tosca.relationships.nfv.VirtualLinksTo',
-                      self.NODE: self.T_VDU1,
-                      self.OCCURENCES: '[1, UNBOUND]'}}
-                ],
-            }
-
-        return tosca
-
-    def generate_vnf_template(self, tosca, index):
-        self.log.debug(_("{0}, Generate tosca template for VNF {1}").
-                       format(self, index, tosca))
-
-        for vdu in self.vdus:
-            tosca = vdu.generate_vdu_template(tosca, self.name)
+            vdu.generate_vdu_template(tosca, self.name)
+            if 'vdu' in self.mgmt_intf and self.mgmt_intf['vdu'] == vdu.get_name(self.name): #TEST
+                mgmt_interface = {}
+                mgmt_interface[self.PROPERTIES] = self.mgmt_intf
+                self.mgmt_intf.pop('vdu')
+                caps = []
+                tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL][vdu.get_name(self.name)][self.CAPABILITIES]['mgmt_interface'] = mgmt_interface #TEST
+                if len(self.mon_param) > 0:
+                    mon_param = {}
+                    mon_param = {}
+                    mon_param['properties'] = self.mon_param[0]
+                    tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL][vdu.get_name(self.name)][self.CAPABILITIES]['monitoring_param'] = mon_param #TEST
+                if len(self.mon_param) > 1:
+                    for idx in range(1, len(self.mon_param)):
+                        monitor_param_name = "monitoring_param_{}".format(idx)
+                        mon_param = {}
+                        mon_param = {}
+                        mon_param['properties'] = self.mon_param[idx]
+                        tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL][vdu.get_name(self.name)][self.CAPABILITIES][monitor_param_name] = mon_param
 
         node = {}
         node[self.TYPE] = self.T_VNF1
@@ -339,7 +320,9 @@ class YangVnfd(ToscaResource):
         self.props.pop(self.DESC)
 
         # Update index to the member-vnf-index
-        self.props[self.ID] = index
+
+        # For now I am putting index as 1. This needs to be revisted
+        self.props[self.ID] = 1
         node[self.PROPERTIES] = self.props
 
         caps = {}
@@ -378,16 +361,92 @@ class YangVnfd(ToscaResource):
 
         self.log.debug(_("{0}, VNF node: {1}").format(self, node))
 
-        tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL][self.name] = node
+        #tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL][self.name] = node
+        self.get_vnf_configuration_policy(tosca)
 
         return tosca
 
-    def get_supporting_files(self):
-        files = []
+    def generate_vld_link(self, virtualLink, conn_point):
+        if self.REQUIREMENTS not in self.tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING]:
+            self.tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING] = {}
+            self.tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING]['node_type'] = self.vnf_type
+            #self.tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING]['node_type'] = []
+            #self.tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING]['node_type'].\
+            #append(['node_type', self.vnf_type])
+            self.tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING][self.REQUIREMENTS] = []
 
         for vdu in self.vdus:
-            f = vdu.get_supporting_files()
-            if f and len(f):
-                files.extend(f)
+            if conn_point in vdu.cp_name_to_cp_node:
+                conn_point_node_name = vdu.cp_name_to_cp_node[conn_point]
+                if {virtualLink : "[{0}, {1}]".format(conn_point_node_name, "virtualLink")} not in \
+                 self.tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING][self.REQUIREMENTS]:
+                    self.tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING][self.REQUIREMENTS].\
+                        append({virtualLink : "[{0}, {1}]".format(conn_point_node_name, "virtualLink")})
+
+        if self.REQUIREMENTS not in self.tosca[self.NODE_TYPES][self.vnf_type]:
+            self.tosca[self.NODE_TYPES][self.vnf_type][self.REQUIREMENTS] = []
+        if {virtualLink : {"type": "tosca.nodes.nfv.VL"}} not in self.tosca[self.NODE_TYPES][self.vnf_type][self.REQUIREMENTS]:
+            self.tosca[self.NODE_TYPES][self.vnf_type][self.REQUIREMENTS].append({virtualLink : {
+                                                                            "type": "tosca.nodes.nfv.VL"}})
+
+    def generate_forwarder_sub_mapping(self, sub_link):
+        if self.CAPABILITIES not in self.tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING]:
+            self.tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING][self.CAPABILITIES] = {}
+            self.tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING][self.CAPABILITIES]
+
+        self.tosca[self.TOPOLOGY_TMPL][self.SUBSTITUTION_MAPPING][self.CAPABILITIES][sub_link[1]] = \
+                            "[{}, forwarder]".format(sub_link[2])
+
+    def generate_sfc_link(self, sfs_conn_point_name):
+        for vdu in self.vdus:
+            if sfs_conn_point_name in vdu.cp_name_to_cp_node:
+                 conn_point_node_name = vdu.cp_name_to_cp_node[sfs_conn_point_name]
+                 if conn_point_node_name in self.tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL]:
+                    if self.CAPABILITIES not in  self.tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL]:
+                        self.tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL][conn_point_node_name][self.CAPABILITIES] = {}
+                    self.tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL][conn_point_node_name][self.CAPABILITIES]['sfc'] =  {self.PROPERTIES: {}}
+                    self.tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL][conn_point_node_name] \
+                            [self.CAPABILITIES]['sfc'][self.PROPERTIES]['sfc_type'] = 'sf'
+
+                    if self.service_function_type:
+                        self.tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL][conn_point_node_name] \
+                                [self.CAPABILITIES]['sfc'][self.PROPERTIES]['sf_type'] = self.service_function_type
+
+    def generate_tosca(self):
+        tosca = {}
+        return tosca
+
+    def get_vnf_configuration_policy(self, tosca):
+        if self.vnf_configuration:
+            if self.POLICIES in tosca:
+                tosca[self.TOPOLOGY_TMPL][self.POLICIES]['configuration'] ={
+                'type' : self.T_VNF_CONFIG,
+                 self.PROPERTIES: self.vnf_configuration
+                }
+            else:
+                tosca[self.TOPOLOGY_TMPL][self.POLICIES] = []
+            # This is bad hack. TOSCA Openstack does not return policies without target
+            if len(tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL]) > 0:
+                node_name = list(tosca[self.TOPOLOGY_TMPL][self.NODE_TMPL].keys())[0]
+                tosca[self.TOPOLOGY_TMPL][self.POLICIES].append({'configuration' :{
+                 'type' : self.T_VNF_CONFIG,
+                 self.PROPERTIES: self.vnf_configuration,
+                 self.TARGETS : "[{0}]".format(node_name)
+                }})
+
+    def get_supporting_files(self):
+        files = []
+        for file in self.script_files:
+            files.append({
+                        self.TYPE: 'script',
+                        self.NAME: file,
+                        self.DEST: "{}/{}".format(self.SCRIPT_DIR, file),
+                    })
+
+
+        for vdu in self.vdus:
+            vdu_files = vdu.get_supporting_files()
+            for vdu_file in vdu_files:
+                files.append(vdu_file)
 
         return files

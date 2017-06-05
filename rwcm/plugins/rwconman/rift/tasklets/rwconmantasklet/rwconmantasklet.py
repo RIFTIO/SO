@@ -242,8 +242,8 @@ class ConfigurationManager(object):
                     ids.append(nsr_id)
                     e = task.exception()
                     if e:
-                        self._log.error("Exception in configuring nsr {}: {}".
-                                        format(nsr_id, e))
+                        self._log.exception("Exception in configuring nsr {}: {}".
+                                            format(nsr_id, e))
                         nsr_obj = self.get_nsr_obj(nsr_id)
                         if nsr_obj:
                             yield from nsr_obj.update_ns_cm_state(conmanY.RecordState.CFG_FAILED, str(e))

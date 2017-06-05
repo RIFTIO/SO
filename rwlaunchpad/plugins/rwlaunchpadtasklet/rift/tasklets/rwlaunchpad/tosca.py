@@ -61,6 +61,7 @@ class ExportTosca(object):
             self.log = log
         self.nsds = {}
         self.csars = list()
+        self.vnfds = {}
 
     def add_image(self, nsd_id, image, chksum=None):
         if image.name not in self.images:
@@ -72,6 +73,14 @@ class ExportTosca(object):
         self.nsds[nsd_id]['vlds'].append(vld)
         if pkg:
             self.nsds[nsd_id]['pkgs'].append(pkg)
+
+    def add_single_vnfd(self, vnfd_id, vnfd, pkg=None):
+        if vnfd is not None:
+            self.vnfds['vnfds'] = []
+            self.vnfds['pkgs'] = []
+        self.vnfds['vnfds'].append(vnfd)
+        if pkg:
+            self.vnfds['pkgs'].append(pkg)
 
     def add_vnfd(self, nsd_id, vnfd, pkg=None):
         if not 'vnfds' in self.nsds[nsd_id]:
@@ -112,8 +121,25 @@ class ExportTosca(object):
                                                   archive=True))
         self.log.debug("Created CSAR archive {}".format(self.csars[-1]))
 
+    def create_vnfd_csar(self, dest=None):
+        if dest is None:
+            dest = tempfile.mkdtemp()
+        yangs = {}
+        yangs['vnfd'] = []
+        for vnfd in self.vnfds['vnfds']:
+            yangs['vnfd'].append(vnfd.as_dict())
+        translator = YangTranslator(self.log,
+                                    yangs=yangs,
+                                    packages=self.vnfds['pkgs'])
+        output = translator.translate()
+        self.csars.extend(translator.write_output(output,
+                                                  output_dir=dest,
+                                                  archive=True))
+        self.log.debug("Created CSAR archive {}".format(self.csars[-1]))
+
+
     def create_archive(self, archive_name, dest=None):
-        if not len(self.nsds):
+        if not len(self.nsds) and len(self.vnfds) == 0:
             self.log.error("Did not find any NSDs to export")
             return
 
@@ -127,13 +153,16 @@ class ExportTosca(object):
 
         try:
             # Convert each NSD to a TOSCA template
-            for nsd_id in self.nsds:
-                # Not passing the dest dir to prevent clash in case
-                # multiple export of the same desc happens
-                self.create_csar(nsd_id)
+            if len(self.nsds) > 0:
+                for nsd_id in self.nsds:
+                    # Not passing the dest dir to prevent clash in case
+                    # multiple export of the same desc happens
+                    self.create_csar(nsd_id)
+            elif len(self.vnfds) > 0:
+                self.create_vnfd_csar()
 
         except Exception as e:
-            msg = "Exception converting NSD {}: {}".format(nsd_id, e)
+            msg = "Exception converting NSD/VNFD {}".format(e)
             self.log.exception(e)
             raise YangTranslateNsdError(msg)
 

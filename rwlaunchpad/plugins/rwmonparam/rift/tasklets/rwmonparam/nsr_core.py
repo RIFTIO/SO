@@ -20,11 +20,11 @@
 @date 09-Jul-2016
 
 """
-
 import asyncio
 import collections
 import functools
 import uuid
+import rift.tasklets
 
 from gi.repository import (RwDts as rwdts, NsrYang)
 import rift.mano.dts as mano_dts
@@ -83,23 +83,25 @@ class NsrMonitoringParam():
         for mon_param_msg in nsd.monitoring_param:
             mon_params.append(NsrMonitoringParam(
                     mon_param_msg,
-                    constituent_vnfrs
+                    constituent_vnfrs,
+                    mon_param_name=mon_param_msg.name
                     ))
 
         # Legacy Handling.
         # This indicates that the NSD had no mon-param config.
         if not nsd.monitoring_param:
             for vnfr in constituent_vnfrs:
-                vnfd = store.get_vnfd(vnfr.vnfd_ref)
+                vnfd = store.get_vnfd(vnfr.vnfd.id)
                 for monp in vnfd.monitoring_param:
                     mon_params.append(NsrMonitoringParam(
                         monp,
                         [vnfr],
-                        is_legacy=True))
+                        is_legacy=True,
+                        mon_param_name=monp.name))
 
         return mon_params
 
-    def __init__(self, monp_config, constituent_vnfrs, is_legacy=False):
+    def __init__(self, monp_config, constituent_vnfrs, is_legacy=False, mon_param_name=None):
         """
         Args:
             monp_config (GiObject): Config data to create the NSR mon-param msg
@@ -114,6 +116,11 @@ class NsrMonitoringParam():
         # Key => (vnfr_id, monp_id)
         # value => (value_type, value)
         self.vnfr_monparams = {}
+
+        # create_nsr_mon_params() is already validating for 'is_legacy' by checking if
+        # nsd is having 'monitoring_param'. So removing 'self.aggregation_type is None' check for is_legacy.
+        self.is_legacy = is_legacy
+        self.mon_param_name = mon_param_name
 
         if not is_legacy:
             self._msg = self._convert_nsd_msg()
@@ -175,9 +182,9 @@ class NsrMonitoringParam():
         """Aggregation type"""
         return self.nsr_mon_param_msg.aggregation_type
 
-    @property
-    def is_legacy(self):
-        return (self.aggregation_type is None)
+    # @property
+    # def is_legacy(self):
+    #     return (self.aggregation_type is None)
 
     @classmethod
     def extract_value(cls, monp):
@@ -202,14 +209,6 @@ class NsrMonitoringParam():
 
         return None
 
-    def _constituent_vnfrs(self, constituent_vnfr_ids):
-        # Fetch the VNFRs
-        vnfr_map = {}
-        for constituent_vnfr in constituent_vnfr_ids:
-            vnfr_id = constituent_vnfr.vnfr_id
-            vnfr_map[vnfr_id] = self._store.get_vnfr(vnfr_id)
-
-        return vnfr_map
 
     def _extract_ui_elements(self, monp):
         ui_fields = ["group_tag", "description", "widget_type", "units", "value_type"]
@@ -224,7 +223,7 @@ class NsrMonitoringParam():
         # For a single VNFD there might be multiple vnfrs
         vnfd_to_vnfr = collections.defaultdict(list)
         for vnfr_id, vnfr in self._constituent_vnfr_map.items():
-            vnfd_to_vnfr[vnfr.vnfd_ref].append(vnfr_id)
+            vnfd_to_vnfr[vnfr.vnfd.id].append(vnfr_id)
 
         # First, convert the monp param ref from vnfd to vnfr terms.
         vnfr_mon_param_ref = []
@@ -344,7 +343,6 @@ class NsrMonitoringParamPoller(mano_dts.DtsHandler):
         """
         key = (vnfr_id, monp.id)
         value = NsrMonitoringParam.extract_value(monp)
-
         if not value:
             return
 
@@ -371,30 +369,31 @@ class NsrMonitoringParamPoller(mano_dts.DtsHandler):
             self.callback(self.monp.nsr_mon_param_msg)
 
     @asyncio.coroutine
-    def create_pollers(self, register=False):
-        for vnfr_id, monp_id in self.monp.vnfr_ids:
-            key = (vnfr_id, monp_id)
-            callback = functools.partial(self.update_value, vnfr_id=vnfr_id)
-
-            # if the poller is already created, ignore
-            if key in self.subscribers:
-                continue
-
-            self.subscribers[key] = VnfrMonitoringParamSubscriber(
+    def create_pollers(self, create=False, register=False):
+        if (create):
+            for vnfr_id, monp_id in self.monp.vnfr_ids:
+                key = (vnfr_id, monp_id)
+                callback = functools.partial(self.update_value, vnfr_id=vnfr_id)
+                
+                # if the poller is already created, ignore
+                if key in self.subscribers:
+                    continue
+                
+                self.subscribers[key] = VnfrMonitoringParamSubscriber(
                     self.loop,
                     self.dts,
                     self.loop,
                     vnfr_id,
                     monp_id,
                     callback=callback)
-
-            if register:
-                yield from self.subscribers[key].register()
-
+                
+                if register:
+                    yield from self.subscribers[key].register()
+        
     @asyncio.coroutine
     def update(self, vnfr):
         self.monp.add_vnfr(vnfr)
-        yield from self.create_pollers(register=True)
+        yield from self.create_pollers(create=False, register=True)
 
     @asyncio.coroutine
     def delete(self, vnfr):
@@ -420,7 +419,9 @@ class NsrMonitoringParamPoller(mano_dts.DtsHandler):
     def stop(self):
         for sub in self.subscribers.values():
             sub.deregister()
-
+    
+    def retrieve_data(self):
+        return self.monp.nsr_mon_param_msg
 
 class NsrMonitorDtsHandler(mano_dts.DtsHandler):
     """ NSR monitoring class """
@@ -437,30 +438,91 @@ class NsrMonitorDtsHandler(mano_dts.DtsHandler):
         self.nsr = nsr
         self.store = store
         self.constituent_vnfrs = constituent_vnfrs
-
+        self.dts_updates = dict()
+        self.dts_update_task = None
         self.mon_params_pollers = []
-
+        
+    def nsr_xpath(self):
+        return ("D,/nsr:ns-instance-opdata/nsr:nsr" +
+                "[nsr:ns-instance-config-ref='{}']".format(self.nsr.ns_instance_config_ref))
+    
     def xpath(self, param_id=None):
         return ("D,/nsr:ns-instance-opdata/nsr:nsr" +
             "[nsr:ns-instance-config-ref='{}']".format(self.nsr.ns_instance_config_ref) +
             "/nsr:monitoring-param" +
             ("[nsr:id='{}']".format(param_id) if param_id else ""))
-
+        
     @asyncio.coroutine
     def register(self):
+        @asyncio.coroutine
+        def on_prepare(xact_info, query_action, ks_path, msg):
+            nsrmsg =None
+            xpath=None
+            if (self.reg_ready):
+                if (query_action ==  rwdts.QueryAction.READ):
+                    if (len(self.mon_params_pollers)):
+                        nsr_dict = {"ns_instance_config_ref": self.nsr.ns_instance_config_ref}
+                        nsrmsg = NsrYang.YangData_Nsr_NsInstanceOpdata_Nsr.from_dict(nsr_dict)
+                        xpath = self.nsr_xpath()
+                        
+                        for poller in self.mon_params_pollers:
+                            mp_dict = NsrYang.YangData_Nsr_NsInstanceOpdata_Nsr_MonitoringParam.from_dict(poller.retrieve_data().as_dict())
+                            nsrmsg.monitoring_param.append(mp_dict)
+                            
+            xact_info.respond_xpath(rsp_code=rwdts.XactRspCode.ACK,
+                                    xpath=self.nsr_xpath(),
+                                    msg=nsrmsg)
+        
+        @asyncio.coroutine
+        def on_ready(regh, status):
+            self.reg_ready = 1
+            
+        handler = rift.tasklets.DTS.RegistrationHandler(on_prepare=on_prepare, on_ready=on_ready)
+        self.reg_ready = 0
+        
         self.reg = yield from self.dts.register(xpath=self.xpath(),
-                  flags=rwdts.Flag.PUBLISHER|rwdts.Flag.CACHE|rwdts.Flag.NO_PREP_READ)
+                                                flags=rwdts.Flag.PUBLISHER,
+                                                handler=handler)
 
         assert self.reg is not None
+        
+    @asyncio.coroutine
+    def nsr_monparam_update(self):
+        #check if the earlier xact is done or there is an xact
+        try:
+            if (len(self.dts_updates) == 0):
+                self.dts_update_task = None
+                return
+            nsr_dict = {"ns_instance_config_ref": self.nsr.ns_instance_config_ref}
+            nsrmsg = NsrYang.YangData_Nsr_NsInstanceOpdata_Nsr.from_dict(nsr_dict)
+                        
+            for k,v in self.dts_updates.items():
+                mp_dict = NsrYang.YangData_Nsr_NsInstanceOpdata_Nsr_MonitoringParam.from_dict(v.as_dict())
+                nsrmsg.monitoring_param.append(mp_dict)
+            self.dts_updates.clear()
 
+            yield from self.dts.query_update(self.nsr_xpath(), rwdts.XactFlag.ADVISE,
+                                             nsrmsg)
+
+            self.dts_update_task = None
+            if (len(self.dts_updates) == 0):
+                #schedule a DTS task to update the NSR again
+                self.add_dtsupdate_task()
+            
+        except Exception as e:
+            self.log.exception("Exception updating NSR mon-param: %s", str(e))
+
+    def add_dtsupdate_task(self):
+        if (self.dts_update_task is None): 
+            self.dts_update_task = asyncio.ensure_future(self.nsr_monparam_update(), loop=self.loop)
+        
     def callback(self, nsr_mon_param_msg):
         """Callback that triggers update.
         """
-        self.reg.update_element(
-                self.xpath(param_id=nsr_mon_param_msg.id),
-                nsr_mon_param_msg,
-                rwdts.XactFlag.REPLACE)
-
+        self.dts_updates[nsr_mon_param_msg.id] = nsr_mon_param_msg
+        #schedule a DTS task to update the NSR if one does not exist
+        self.add_dtsupdate_task()
+    
     @asyncio.coroutine
     def start(self):
         nsd = self.store.get_nsd(self.nsr.nsd_ref)
@@ -503,3 +565,8 @@ class NsrMonitorDtsHandler(mano_dts.DtsHandler):
             self.reg.deregister()
             self.reg = None
 
+    def apply_vnfr_mon(self, msg, vnfr_id):
+        """ Change in vnfr mon to ne applied"""
+        for poller in self.mon_params_pollers:
+            if (poller.monp.mon_param_name == msg.name):
+                poller.update_value(msg, rwdts.QueryAction.UPDATE, vnfr_id)

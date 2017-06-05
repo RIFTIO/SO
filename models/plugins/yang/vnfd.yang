@@ -1,6 +1,6 @@
 
 /*
- * 
+ *
  *   Copyright 2016 RIFT.IO Inc
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,13 +59,22 @@ module vnfd
     }
 
     leaf short-name {
-      description "Short name of the connection point";
+      description "Short name to appear as label in the UI";
       type string;
     }
 
     leaf type {
       description "Type of the connection point.";
       type manotypes:connection-point-type;
+    }
+    leaf port-security-enabled {
+      description "Enables the port security for the port";
+      type boolean;
+    }
+
+    leaf static-ip-address {
+      description "Static IP address for the connection point";
+      type inet:ip-address;
     }
   }
 
@@ -115,14 +124,144 @@ module vnfd
     }
   }
 
-  container vnfd-catalog {
+  grouping config-parameter {
+    container config-parameter {
+      rwpb:msg-new ConfigParams;
+      description
+        "List of VNF config parameter requests and sources";
+      list config-parameter-source {
+        description "The list of parameters exposed by this VNF";
+        key "name";
 
-    description
-        "Virtual Network Function Descriptor (VNFD).";
+        leaf name {
+          description "Name of the source";
+          type string {
+            length "1..128";
+          }
+        }
 
-    list vnfd {
-      key "id";
+        leaf description {
+          description " Description of the source";
+          type string;
+        }
 
+        choice source {
+          case descriptor {
+            leaf descriptor {
+              description
+                "Location of this source as an xpath.
+                 For example:
+                   ../../../mgmt-interface/port";
+              type string;
+            }
+          }
+
+          case attribute {
+            leaf attribute {
+              description
+                "Location of this source as runtime attribute.
+                 The value is <xpath>, <attribute_name>
+                 For example:
+                   ../../../mgmt-interface, ip-address
+                   which retruns the ip-address assigned to the
+                   mgmt-interface after VNF instantiation.";
+              type string;
+            }
+          }
+
+          case primitive-ref {
+            leaf config-primitive-name-ref {
+              description
+                "A leafref to configuration primitive.
+                 This refers to a config parameter whose
+                 output parameter is referred in out-parameter.";
+              type leafref {
+                path "../../../vnf-configuration/config-primitive/name";
+              }
+            }
+
+            leaf parameter-ref {
+              description
+                "Name of the output parameter in the config primitiive";
+              type leafref {
+                path
+                  "../../../vnf-configuration/config-primitive[name=current()/../config-primitive-name-ref]/parameter/name";
+              }
+            }
+          }
+
+          case value {
+            leaf value {
+              description
+                "Pre-defined value to be used for this source";
+              type string;
+            }
+          }
+        }
+
+        list parameter {
+          key "config-primitive-name-ref";
+
+          leaf config-primitive-name-ref {
+            description
+              "Name of the configuration primitive where this
+             request will used";
+            type leafref {
+              path "../../../../vnf-configuration/config-primitive/name";
+            }
+          }
+
+          leaf config-primitive-parameter-ref {
+            description
+              "Parameter name of the config primitive";
+            type leafref {
+              path "../../../../vnf-configuration/config-primitive[name=current()/../config-primitive-name-ref]/parameter/name";
+            }
+          }
+        }
+      }
+
+      list config-parameter-request {
+        description "The list of requests for this VNF";
+        key "name";
+
+        leaf name {
+          description "Name of this parameter request";
+          type string {
+            length "1..128";
+          }
+        }
+
+        leaf description {
+          description "Description of this request";
+          type string;
+        }
+
+        list parameter {
+          key "config-primitive-name-ref";
+
+          leaf config-primitive-name-ref {
+            description
+              "Name of the configuration primitive where this
+             request will used";
+            type leafref {
+              path "../../../../vnf-configuration/config-primitive/name";
+            }
+          }
+
+          leaf config-primitive-parameter-ref {
+            description
+              "Parameter name of the config primitive";
+            type leafref {
+              path "../../../../vnf-configuration/config-primitive[name=current()/../config-primitive-name-ref]/parameter/name";
+            }
+          }
+        }
+      }
+    }
+  }
+
+  grouping vnfd-descriptor {
       leaf id {
         description "Identifier for the VNFD.";
         type string;
@@ -135,7 +274,7 @@ module vnfd
       }
 
       leaf short-name {
-        description "VNFD short name.";
+        description "Short name to appear as label in the UI";
         type string;
       }
 
@@ -162,6 +301,8 @@ module vnfd
 
       uses manotypes:vnf-configuration;
 
+      uses config-parameter;
+
       container mgmt-interface {
         description
             "Interface over which the VNF is managed.";
@@ -183,7 +324,7 @@ module vnfd
                 "Use the default management interface on this VDU.";
             leaf vdu-id {
               type leafref {
-                path "/vnfd:vnfd-catalog/vnfd:vnfd/vnfd:vdu/vnfd:id";
+                path "../../vdu/id";
               }
             }
           }
@@ -193,7 +334,7 @@ module vnfd
                 "Use the ip address associated with this connection point.";
             leaf cp {
               type leafref {
-                path "/vnfd:vnfd-catalog/vnfd:vnfd/vnfd:connection-point/vnfd:name";
+                path "../../connection-point/name";
               }
             }
           }
@@ -230,7 +371,7 @@ module vnfd
         description
             "List of Internal Virtual Link Descriptors (VLD).
             The internal VLD describes the basic topology of
-            the connectivity (e.g. E-LAN, E-Line, E-Tree)
+            the connectivity such as E-LAN, E-Line, E-Tree.
             between internal VNF components of the system.";
 
         leaf id {
@@ -244,11 +385,12 @@ module vnfd
         }
 
         leaf short-name {
-          description "Short name of the internal VLD";
+          description "Short name to appear as label in the UI";
           type string;
         }
 
         leaf description {
+          description "Description of internal VLD.";
           type string;
         }
 
@@ -278,21 +420,59 @@ module vnfd
             }
           }
         }
+
+        list virtual-connection-points {
+          description
+              "A list of virtual-connection points associated with Virtual Link.
+             These connection points are not directly associated with any VDUs";
+          key name;
+          uses common-connection-point;
+        
+          leaf-list associated-cps {
+            description
+                "A List of connection points associated with virtual connection point";
+            type leafref {
+              path "../../internal-connection-point/id-ref";
+            }
+          }
+        }
+
         uses manotypes:provider-network;
+        choice init-params {
+          description "Extra parameters for VLD instantiation";
+
+          case vim-network-ref {
+            leaf vim-network-name {
+              description
+                  "Name of network in VIM account. This is used to indicate
+                    pre-provisioned network name in cloud account.";
+              type string;
+            }
+          }
+
+          case vim-network-profile {
+            leaf ip-profile-ref {
+              description "Named reference to IP-profile object";
+              type leafref {
+                path "../../ip-profiles/name";
+              }
+            }
+          }
+        }
       }
+
+      uses manotypes:ip-profile-list;
 
       list connection-point {
         key "name";
         description
             "List for external connection points. Each VNF has one
-            or more external connection points. As the name
-            implies that external connection points are used for
-            connecting the VNF to other VNFs or to external networks.
-            Each VNF exposes these connection points to the
-            orchestrator. The orchestrator can construct network
-            services by connecting the connection points between
-            different VNFs. The NFVO will use VLDs and VNFFGs at
-            the network service level to construct network services.";
+            or more external connection points that connect the VNF
+            to other VNFs or to external networks. Each VNF exposes
+            connection points to the orchestrator, which can construct
+            network services by connecting the connection points
+            between different VNFs. The NFVO will use VLDs and VNFFGs
+            at the network service level to construct network services.";
 
         uses common-connection-point;
       }
@@ -346,13 +526,13 @@ module vnfd
 
         choice cloud-init-input {
           description
-            "Indicates how the contents of cloud-init script are provided.
-             There are 2 choices - inline or in a file";
+              "Indicates how the contents of cloud-init script are provided.
+              There are 2 choices - inline or in a file";
 
           case inline {
             leaf cloud-init {
               description
-                "Contents of cloud-init script, provided inline, in cloud-config format";
+                  "Contents of cloud-init script, provided inline, in cloud-config format";
               type string;
             }
           }
@@ -360,11 +540,13 @@ module vnfd
           case filename {
             leaf cloud-init-file {
               description
-                "Name of file with contents of cloud-init script in cloud-config format";
-                type string;
+                  "Name of file with contents of cloud-init script in cloud-config format";
+              type string;
             }
           }
         }
+
+        uses manotypes:supplemental-boot-data;
 
         list internal-connection-point {
           key "id";
@@ -372,17 +554,11 @@ module vnfd
               "List for internal connection points. Each VNFC
               has zero or more internal connection points.
               Internal connection points are used for connecting
-              the VNF components internal to the VNF. If a VNF
+              the VNF with components internal to the VNF. If a VNF
               has only one VNFC, it may not have any internal
               connection points.";
 
           uses common-connection-point;
-
-          leaf internal-vld-ref {
-            type leafref {
-              path "../../../internal-vld/id";
-            }
-          }
         }
 
         list internal-interface {
@@ -415,7 +591,8 @@ module vnfd
           leaf name {
             description
                 "Name of the external interface. Note that
-                this name has only local significance.";
+                this name has only local significance to
+                the VDU.";
             type string;
           }
 
@@ -438,7 +615,7 @@ module vnfd
           }
 
           uses manotypes:volume-info;
-        }  
+        }
       }
 
       list vdu-dependency {
@@ -454,8 +631,8 @@ module vnfd
 
         leaf vdu-depends-on-ref {
           description
-              "Reference to the VDU that
-              source VDU depends.";
+              "Reference to the VDU on which
+              the source VDU depends.";
           type leafref {
             path "../../vdu/id";
           }
@@ -478,7 +655,7 @@ module vnfd
         description
             "Type of Service Function.
              NOTE: This needs to map with Service Function Type in ODL to
-             support VNFFG. Service Function Type is manadatory param in ODL
+             support VNFFG. Service Function Type is mandatory param in ODL
              SFC. This is temporarily set to string for ease of use";
             type string;
       }
@@ -490,7 +667,7 @@ module vnfd
 
         key "name";
         uses manotypes:placement-group-info;
-        
+
         list member-vdus {
 
           description
@@ -504,6 +681,16 @@ module vnfd
           }
         }
       }
+  }
+
+  container vnfd-catalog {
+    description
+        "Virtual Network Function Descriptor (VNFD).";
+
+    list vnfd {
+      key "id";
+
+      uses vnfd-descriptor;
     }
   }
 }

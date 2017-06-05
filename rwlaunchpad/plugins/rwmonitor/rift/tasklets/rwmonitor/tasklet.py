@@ -628,13 +628,15 @@ class MonitorTasklet(rift.tasklets.Tasklet):
             self.dts.handle.set_state(next_state)
 
     def on_vnfr_create(self, vnfr):
-        # skip updates from Mon params
-        if not hasattr(vnfr, 'cloud_account'):
+        try:
+            acc = vnfr.cloud_account
+        except AttributeError as e:
+            self.log.warning("NFVI metrics not supported")
             return
 
-        if not self.monitor.nfvi_metrics_available(vnfr.cloud_account):
+        if not self.monitor.nfvi_metrics_available(acc):
             msg = "NFVI metrics unavailable for {}"
-            self.log.warning(msg.format(vnfr.cloud_account))
+            self.log.warning(msg.format(acc))
             return
 
         self.monitor.add_vnfr(vnfr)
@@ -646,8 +648,10 @@ class MonitorTasklet(rift.tasklets.Tasklet):
                 self.loop.create_task(coro)
 
     def on_vnfr_update(self, vnfr):
-        # skip updates from Mon params
-        if not hasattr(vnfr, 'cloud_account'):
+        try:
+            acc = vnfr.cloud_account
+        except AttributeError as e:
+            self.log.warning("NFVI metrics not supported")
             return
 
         if not self.monitor.nfvi_metrics_available(vnfr.cloud_account):
